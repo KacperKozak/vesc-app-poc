@@ -11,6 +11,7 @@ import {
 } from 'vesc-ble';
 import { encode } from '../vesc/packet';
 import { Reassembler } from '../vesc/reassembler';
+import { Comm, buildFwVersion, buildPingCan, parsePingCan } from '../vesc/commands';
 import { NUS_SERVICE, VESC_NAME_PREFIXES } from './nus';
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,8 @@ class VescBle {
   private _connected = false;
   private _onPacket: ((payload: Uint8Array) => void) | null = null;
   private reassembler = new Reassembler();
+  /** CAN ID of the main VESC motor controller discovered via PING_CAN, or undefined */
+  canId: number | undefined = undefined;
 
   private scanSub: Subscription | null = null;
   private notifSub: Subscription | null = null;
@@ -133,10 +136,17 @@ class VescBle {
     // Give the peripheral a moment to activate CCCD
     await new Promise<void>((r) => setTimeout(r, 500));
 
-    // COMM_FW_VERSION (0x00) — first command the Floatwheel app sends; triggers a
-    // response that confirms the BLE notification path is working end-to-end.
+    // Step 1: COMM_FW_VERSION — handled locally by the ESP32 BLE bridge.
+    // Confirms the notification path is alive and wakes up the bridge.
     console.log('[BLE] sending COMM_FW_VERSION');
-    await this.send(new Uint8Array([0x00]));
+    await this.send(buildFwVersion());
+
+    // Step 2: COMM_PING_CAN — discover the CAN device ID of the main VESC.
+    // The ADV2's ESP32 forwards all VESC commands over CAN; GET_VALUES must
+    // be wrapped as [COMM_FORWARD_CAN, canId, COMM_GET_VALUES].
+    await new Promise<void>((r) => setTimeout(r, 300));
+    console.log('[BLE] sending COMM_PING_CAN to discover motor controller CAN ID');
+    await this.send(buildPingCan());
   }
 
   // -------------------------------------------------------------------------

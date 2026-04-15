@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { vescBle } from '../ble/manager';
-import { buildGetValues } from '../vesc/commands';
+import { buildGetValues, parsePingCan, Comm } from '../vesc/commands';
 import { parseGetValues } from '../vesc/parser';
-import { Comm } from '../vesc/commands';
 import type { VescValues } from '../vesc/types';
 
 export type BleStatus = 'idle' | 'scanning' | 'connecting' | 'connected' | 'error';
@@ -44,9 +43,9 @@ function stopPolling(): void {
 
 function startPolling(): void {
   stopPolling();
-  // 2 Hz — writeWithResponse is slower than withoutResponse, 500 ms is safe
+  // 2 Hz — poll with CAN forwarding if a motor controller was discovered
   pollInterval = setInterval(() => {
-    vescBle.send(buildGetValues()).catch((err) => {
+    vescBle.send(buildGetValues(vescBle.canId)).catch((err) => {
       console.warn('[BLE] send failed:', err?.message ?? err);
     });
   }, 500);
@@ -113,6 +112,15 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
           } catch (err) {
             console.warn('[BLE] parseGetValues failed:', err);
           }
+        } else if (cmd === Comm.PING_CAN) {
+          const ids = parsePingCan(payload);
+          console.log('[BLE] PING_CAN response — CAN devices found:', ids);
+          if (ids.length > 0) {
+            vescBle.canId = ids[0];
+            console.log(`[BLE] using CAN ID ${ids[0]} for motor controller commands`);
+          } else {
+            console.warn('[BLE] PING_CAN: no CAN devices found — GET_VALUES may not respond');
+          }
         } else {
           // Log unexpected command bytes to help spot firmware differences
           const hex = Array.from(payload.slice(0, 8))
@@ -135,6 +143,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   async disconnect() {
     stopPolling();
     await vescBle.disconnect();
+    vescBle.canId = undefined;
     set({
       status: 'idle',
       connectedId: null,
