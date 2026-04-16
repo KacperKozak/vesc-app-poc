@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 export type PermissionStatus = 'unknown' | 'granted' | 'denied';
@@ -36,11 +36,6 @@ export function usePermissions(): {
       setStatus('denied');
     }
   }, []);
-
-  // Auto-request on mount
-  useEffect(() => {
-    void request();
-  }, [request]);
 
   return { status, request };
 }

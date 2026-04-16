@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { useBleStore } from '@/src/store/bleStore';
@@ -19,7 +19,6 @@ export default function ScanScreen() {
   const { status, request } = usePermissions();
   const { status: bleStatus, devices, startScan, stopScan } = useBleStore();
 
-  // Request permissions on mount, then auto-start scan once granted
   useEffect(() => {
     void request();
   }, [request]);
@@ -30,7 +29,6 @@ export default function ScanScreen() {
     }
   }, [status, bleStatus, startScan]);
 
-  // Clean up scan on unmount
   useEffect(() => {
     return () => stopScan();
   }, [stopScan]);
@@ -52,7 +50,6 @@ export default function ScanScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Permission denied banner */}
       {status === 'denied' && (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
@@ -64,7 +61,6 @@ export default function ScanScreen() {
         </View>
       )}
 
-      {/* Scan toggle button */}
       <TouchableOpacity
         style={[styles.scanButton, isScanning && styles.scanButtonActive]}
         onPress={handleToggleScan}
@@ -81,14 +77,12 @@ export default function ScanScreen() {
         )}
       </TouchableOpacity>
 
-      {/* Device list */}
       <FlatList<ScannedDevice>
         data={devices}
         keyExtractor={(d) => d.id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <DeviceRow
-            id={item.id}
             name={item.name}
             rssi={item.rssi}
             onPress={() => handleDevicePress(item)}

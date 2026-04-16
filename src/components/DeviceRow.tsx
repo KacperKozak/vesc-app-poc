@@ -1,12 +1,11 @@
 import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 
-type Props = {
-  id: string;
+interface Props {
   name: string;
   rssi: number;
   onPress: () => void;
-};
+}
 
 /** A single row in the device scan list. */
 export function DeviceRow({ name, rssi, onPress }: Props) {

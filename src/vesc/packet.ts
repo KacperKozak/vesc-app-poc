@@ -42,12 +42,12 @@ export function encode(payload: Uint8Array): Uint8Array {
   return frame;
 }
 
-export type DecodeResult = {
+export interface DecodeResult {
   /** Decoded payload (not including framing or CRC) */
   payload: Uint8Array;
   /** Number of bytes consumed from the input buffer */
   consumed: number;
-};
+}
 
 /**
  * Attempt to decode one VESC frame from the front of `buf`.

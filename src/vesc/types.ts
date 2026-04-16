@@ -2,7 +2,7 @@
  * Telemetry values returned by COMM_GET_VALUES (command 0x04).
  * Field order matches commands.c in vedderb/bldc firmware.
  */
-export type VescValues = {
+export interface VescValues {
   /** MOSFET temperature in °C */
   tempMosfet: number;
   /** Motor temperature in °C */
@@ -35,7 +35,7 @@ export type VescValues = {
   tachometerAbs: number;
   /** Fault code — 0 = FAULT_CODE_NONE */
   faultCode: number;
-};
+}
 
 /** Human-readable fault code names matching mc_fault_code enum in datatypes.h */
 export const FAULT_NAMES: Record<number, string> = {
@@ -72,18 +72,18 @@ export const FAULT_NAMES: Record<number, string> = {
 };
 
 /** Firmware version returned by COMM_FW_VERSION (stubbed for PoC) */
-export type FwVersion = {
+export interface FwVersion {
   major: number;
   minor: number;
   hwName: string;
-};
+}
 
 /**
  * Rich telemetry values from the Refloat VESC package (COMMAND_GET_ALLDATA).
  * Provides balance-specific data — pitch, roll, speed, state — in addition
  * to the standard motor metrics.
  */
-export type RefloatValues = {
+export interface RefloatValues {
   /** True if the motor controller reported an active fault. */
   hasFault: boolean;
   /** mc_fault_code value (0 = FAULT_CODE_NONE). Only meaningful when hasFault=true. */
@@ -132,4 +132,4 @@ export type RefloatValues = {
   tempMosfet: number | null;
   /** Motor temperature in °C (null if mode < 2 packet) */
   tempMotor: number | null;
-};
+}

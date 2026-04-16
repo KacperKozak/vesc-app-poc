@@ -1,36 +1,48 @@
-import { requireNativeModule, EventEmitter, type Subscription } from 'expo-modules-core';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const native = requireNativeModule<any>('VescBle');
-const emitter = new EventEmitter(native);
+import { requireNativeModule, EventEmitter, type EventSubscription } from 'expo-modules-core';
 
 // ---------------------------------------------------------------------------
 // Event payloads
 // ---------------------------------------------------------------------------
 
-export type DeviceFoundEvent = {
+export interface DeviceFoundEvent {
   id: string;
   name: string;
   rssi: number;
   serviceUUIDs: string[];
-};
+}
 
-export type NotificationEvent = {
+export interface NotificationEvent {
   /** Base64-encoded raw bytes from the NUS RX characteristic */
   value: string;
-};
+}
 
-export type ConnectedEvent = {
+export interface ConnectedEvent {
   mtu: number;
-};
+}
 
-export type DisconnectedEvent = {
+export interface DisconnectedEvent {
   status: number;
+}
+
+export interface ErrorEvent {
+  message: string;
+}
+
+// ---------------------------------------------------------------------------
+// Typed emitter
+// ---------------------------------------------------------------------------
+
+type VescBleEvents = {
+  onDevice:       (event: DeviceFoundEvent)   => void;
+  onNotification: (event: NotificationEvent)  => void;
+  onConnected:    (event: ConnectedEvent)     => void;
+  onDisconnected: (event: DisconnectedEvent)  => void;
+  onError:        (event: ErrorEvent)         => void;
 };
 
-export type ErrorEvent = {
-  message: string;
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const native = requireNativeModule<any>('VescBle');
+const emitter = new EventEmitter<VescBleEvents>(native);
 
 // ---------------------------------------------------------------------------
 // API
@@ -73,30 +85,30 @@ export async function disconnect(): Promise<void> {
 
 export function addDeviceListener(
   cb: (event: DeviceFoundEvent) => void,
-): Subscription {
+): EventSubscription {
   return emitter.addListener('onDevice', cb);
 }
 
 export function addNotificationListener(
   cb: (event: NotificationEvent) => void,
-): Subscription {
+): EventSubscription {
   return emitter.addListener('onNotification', cb);
 }
 
 export function addConnectedListener(
   cb: (event: ConnectedEvent) => void,
-): Subscription {
+): EventSubscription {
   return emitter.addListener('onConnected', cb);
 }
 
 export function addDisconnectedListener(
   cb: (event: DisconnectedEvent) => void,
-): Subscription {
+): EventSubscription {
   return emitter.addListener('onDisconnected', cb);
 }
 
 export function addErrorListener(
   cb: (event: ErrorEvent) => void,
-): Subscription {
+): EventSubscription {
   return emitter.addListener('onError', cb);
 }

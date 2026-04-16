@@ -5,45 +5,25 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 
 import { useBleStore } from '@/src/store/bleStore';
 import { TelemetryCard } from '@/src/components/TelemetryCard';
 import { FAULT_NAMES } from '@/src/vesc/types';
 import { REFLOAT_STATE_NAMES } from '@/src/vesc/refloat';
+import { fmt, fmtSpeed, fmtKm } from '@/src/helpers/format';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function fmt(value: number, decimals = 1): string {
-  return value.toFixed(decimals);
-}
-
-function fmtSpeed(kmh: number): string {
-  return Math.abs(kmh).toFixed(1);
-}
-
-function fmtKm(metres: number | null | undefined): string {
-  if (metres == null) return '—';
-  return (metres / 1000).toFixed(2);
-}
-
-// ---------------------------------------------------------------------------
-// Status pill
-// ---------------------------------------------------------------------------
-
-type StatusPillProps = { status: string };
+interface StatusPillProps { status: string }
 
 function StatusPill({ status }: StatusPillProps) {
   const colors: Record<string, { bg: string; text: string }> = {
-    connected:    { bg: '#14532d', text: '#4ade80' },
-    connecting:   { bg: '#1e3a5f', text: '#60a5fa' },
-    error:        { bg: '#7f1d1d', text: '#f87171' },
-    idle:         { bg: '#1f2937', text: '#9ca3af' },
+    connected:  { bg: '#14532d', text: '#4ade80' },
+    connecting: { bg: '#1e3a5f', text: '#60a5fa' },
+    error:      { bg: '#7f1d1d', text: '#f87171' },
+    idle:       { bg: '#1f2937', text: '#9ca3af' },
   };
   const c = colors[status] ?? colors.idle!;
 
@@ -57,17 +37,12 @@ function StatusPill({ status }: StatusPillProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
-
 export default function TelemetryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
 
   const { status, refloatValues, error, rxCount, connect, disconnect } = useBleStore();
 
-  // Connect on mount, disconnect when leaving
   useEffect(() => {
     if (id) {
       void connect(id);
@@ -79,7 +54,6 @@ export default function TelemetryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Update header title once we have a connection
   useEffect(() => {
     navigation.setOptions({
       title: status === 'connected' ? 'Live Telemetry' : 'Connecting…',
@@ -101,13 +75,11 @@ export default function TelemetryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Status pill */}
       <View style={styles.header}>
         <StatusPill status={status} />
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
 
-      {/* Retry / back button on error */}
       {status === 'error' && (
         <View style={styles.centerContent}>
           <Text style={styles.disconnectedIcon}>
@@ -125,7 +97,6 @@ export default function TelemetryScreen() {
         </View>
       )}
 
-      {/* Connecting placeholder */}
       {status === 'connecting' && (
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color="#3b82f6" />
@@ -133,7 +104,6 @@ export default function TelemetryScreen() {
         </View>
       )}
 
-      {/* Connected but waiting for first Refloat packet */}
       {isConnected && !v && (
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color="#4ade80" />
@@ -142,14 +112,11 @@ export default function TelemetryScreen() {
         </View>
       )}
 
-      {/* Telemetry grid */}
       {isConnected && v && (
         <ScrollView contentContainerStyle={styles.grid}>
 
-          {/* ── Primary riding metrics ── */}
           <Text style={styles.sectionLabel}>RIDING</Text>
 
-          {/* Big speed card spans full width */}
           <View style={styles.row}>
             <View style={[styles.cardWide, { backgroundColor: '#1f2937' }]}>
               <Text style={styles.label}>Speed</Text>
@@ -187,7 +154,6 @@ export default function TelemetryScreen() {
             />
           </View>
 
-          {/* ── Electrical ── */}
           <Text style={styles.sectionLabel}>ELECTRICAL</Text>
 
           <View style={styles.row}>
@@ -229,7 +195,6 @@ export default function TelemetryScreen() {
             />
           </View>
 
-          {/* ── Thermal ── */}
           {(v.tempMosfet != null || v.tempMotor != null) && (
             <>
               <Text style={styles.sectionLabel}>THERMAL</Text>
@@ -250,7 +215,6 @@ export default function TelemetryScreen() {
             </>
           )}
 
-          {/* ── Trip ── */}
           {v.odometer != null && (
             <>
               <Text style={styles.sectionLabel}>ODOMETER</Text>
@@ -360,7 +324,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 4,
   },
-  // Wide card (spans full row)
   cardWide: {
     borderRadius: 10,
     padding: 14,

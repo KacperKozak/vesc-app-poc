@@ -2,10 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "types": ["bun-types"],
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"],
+      "vesc-ble": ["./modules/vesc-ble/src/index.ts"]
     }
   },
   "include": [

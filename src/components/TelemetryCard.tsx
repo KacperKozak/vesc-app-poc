@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-type Props = {
+interface Props {
   label: string;
   value: string;
   unit?: string;
-  /** Highlight the card (e.g. for fault codes) */
+  /** Highlight the card when value warrants attention (fault, over-limit, etc.) */
   alert?: boolean;
-};
+}
 
 /** A single telemetry value tile. */
 export function TelemetryCard({ label, value, unit, alert = false }: Props) {

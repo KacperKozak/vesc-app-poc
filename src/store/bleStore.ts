@@ -4,15 +4,12 @@ import { parsePingCan, Comm } from '../vesc/commands';
 import { buildGetAllData, parseGetAllData, REFLOAT_MAGIC, RefloatCmd } from '../vesc/refloat';
 import type { RefloatValues } from '../vesc/types';
 
+import type { ScannedDevice } from '../ble/manager';
+export type { ScannedDevice };
+
 export type BleStatus = 'idle' | 'scanning' | 'connecting' | 'connected' | 'error';
 
-export type ScannedDevice = {
-  id: string;
-  name: string;
-  rssi: number;
-};
-
-type BleState = {
+interface BleState {
   status: BleStatus;
   devices: ScannedDevice[];
   connectedId: string | null;
@@ -20,14 +17,14 @@ type BleState = {
   error: string | undefined;
   /** Total BLE notification packets received — useful for diagnosing no-data issues */
   rxCount: number;
-};
+}
 
-type BleActions = {
+interface BleActions {
   startScan: () => void;
   stopScan: () => void;
   connect: (id: string) => Promise<void>;
   disconnect: () => Promise<void>;
-};
+}
 
 // ---------------------------------------------------------------------------
 // Internal polling interval handle

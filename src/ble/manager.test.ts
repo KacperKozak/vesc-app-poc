@@ -23,12 +23,10 @@ const fakeListeners: Record<string, Set<EventCallback>> = {
   onError:         new Set(),
 };
 
-/** Fire a fake native event at all registered listeners. */
 function emitNative(event: string, data: Record<string, unknown> = {}): void {
   fakeListeners[event]?.forEach((cb) => cb(data));
 }
 
-// Resolve/reject handle for the in-progress connect() call
 let connectResolve: (() => void) | null = null;
 let connectReject: ((e: Error) => void) | null = null;
 
@@ -54,81 +52,22 @@ mock.module('vesc-ble', () => ({
   addErrorListener:         (cb: EventCallback) => makeSub('onError',         cb),
 }));
 
-// ---------------------------------------------------------------------------
-// Imports — after mock.module so the mock is in place when manager.ts loads
-// ---------------------------------------------------------------------------
-
+// Imports must come after mock.module so the mock is in place when manager.ts loads
+// eslint-disable-next-line import/first
 import { vescBle }      from './manager';
+// eslint-disable-next-line import/first
 import { encode }       from '../vesc/packet';
+// eslint-disable-next-line import/first
 import { Comm }         from '../vesc/commands';
+// eslint-disable-next-line import/first
 import { REFLOAT_MAGIC, RefloatCmd } from '../vesc/refloat';
+// eslint-disable-next-line import/first
+import { buildRefloatPayload } from '../vesc/__tests__/helpers';
 
 // ---------------------------------------------------------------------------
-// Helpers — build wire bytes exactly as the board would produce them
+// Helpers
 // ---------------------------------------------------------------------------
 
-function i16x10(val: number): [number, number] {
-  const raw = Math.round(val * 10);
-  const u = raw < 0 ? raw + 65536 : raw;
-  return [(u >> 8) & 0xff, u & 0xff];
-}
-
-function i16(val: number): [number, number] {
-  const u = val < 0 ? val + 65536 : val;
-  return [(u >> 8) & 0xff, u & 0xff];
-}
-
-function float32Auto(value: number): [number, number, number, number] {
-  if (value === 0) return [0, 0, 0, 0];
-  const neg = value < 0 ? 1 : 0;
-  const abs = Math.abs(value);
-  const e = Math.floor(Math.log2(abs)) + 1;
-  const sig = abs / Math.pow(2, e);
-  const sigI = Math.round((sig - 0.5) * 2.0 * 8388608);
-  const eRaw = e + 126;
-  const res = ((neg << 31) >>> 0) | ((eRaw << 23) >>> 0) | (sigI >>> 0);
-  return [(res >>> 24) & 0xff, (res >>> 16) & 0xff, (res >>> 8) & 0xff, res & 0xff];
-}
-
-interface PayloadOpts {
-  pitch?: number; roll?: number; speed?: number;
-  batteryVoltage?: number; erpm?: number;
-  state?: number; odometer?: number;
-  tempMosfet?: number; tempMotor?: number;
-  mode?: number;
-}
-
-function boardRefloatPayload(opts: PayloadOpts = {}): Uint8Array {
-  const {
-    pitch = 0, roll = 0, speed = 0, batteryVoltage = 50,
-    erpm = 0, state = 1, odometer = 0,
-    tempMosfet = 25, tempMotor = 30, mode = 2,
-  } = opts;
-
-  const b = new Uint8Array(42);
-  b[0] = 0x24; b[1] = 101; b[2] = 10; b[3] = mode;
-  [b[4],  b[5]]  = i16x10(0);           // balanceCurrent
-  [b[6],  b[7]]  = i16x10(0);           // balancePitch
-  [b[8],  b[9]]  = i16x10(roll);
-  b[10] = state; b[11] = 0;
-  b[12] = 0; b[13] = 0;                 // adc1, adc2
-  b[14] = b[15] = b[16] = b[17] = b[18] = b[19] = 128; // setpoints
-  [b[20], b[21]] = i16x10(pitch);
-  b[22] = 128;                           // booster
-  [b[23], b[24]] = i16x10(batteryVoltage);
-  [b[25], b[26]] = i16(erpm);
-  [b[27], b[28]] = i16x10(speed / 3.6);
-  [b[29], b[30]] = i16x10(0);           // motorCurrent
-  [b[31], b[32]] = i16x10(0);           // batteryCurrent
-  b[33] = 128; b[34] = 222;             // dutyCycle=0, foc_id unavailable
-  [b[35], b[36], b[37], b[38]] = float32Auto(odometer);
-  b[39] = Math.round(tempMosfet * 2);
-  b[40] = Math.round(tempMotor  * 2);
-  b[41] = 0;
-  return b;
-}
-
-/** Encode a payload as a VESC frame, base64 it — exactly what the native module delivers. */
 function boardNotification(payload: Uint8Array): string {
   const framed = encode(payload);
   let binary = '';
@@ -136,22 +75,15 @@ function boardNotification(payload: Uint8Array): string {
   return btoa(binary);
 }
 
-/** Build a PING_CAN response payload (board → phone). */
 function pingCanResponse(canIds: number[]): Uint8Array {
   return new Uint8Array([Comm.PING_CAN, ...canIds]);
 }
 
-// ---------------------------------------------------------------------------
-// Helpers — drive the fake connect handshake
-// ---------------------------------------------------------------------------
-
-/** Resolve the pending nativeConnect() promise (simulates GATT connected + CCCDs written). */
 function resolveConnect() {
   connectResolve?.();
   connectResolve = null;
 }
 
-/** Reject the pending nativeConnect() promise with a given status code. */
 function rejectConnect(status: number) {
   connectReject?.(new Error(`Device disconnected during connect (status=${status})`));
   connectReject = null;
@@ -162,7 +94,6 @@ function rejectConnect(status: number) {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-  // Clear all listeners between tests
   for (const key of Object.keys(fakeListeners)) {
     fakeListeners[key]?.clear();
   }
@@ -187,7 +118,6 @@ describe('connect sequence', () => {
     resolveConnect();
     await connectPromise;
 
-    // Board sends a PING_CAN response notification
     const pkt = pingCanResponse([115]);
     emitNative('onNotification', { value: boardNotification(pkt) });
 
@@ -205,7 +135,7 @@ describe('connect sequence', () => {
     resolveConnect();
     await connectPromise;
 
-    const refloat = boardRefloatPayload({ pitch: 4.5, batteryVoltage: 62.1 });
+    const refloat = buildRefloatPayload({ pitch: 4.5, batteryVoltage: 62.1 });
     emitNative('onNotification', { value: boardNotification(refloat) });
 
     expect(received.length).toBe(1);
@@ -229,7 +159,7 @@ describe('Refloat telemetry pipeline', () => {
   test('pitch and speed decoded correctly from notification', async () => {
     const { packets } = await connectAndCollect();
     emitNative('onNotification', {
-      value: boardNotification(boardRefloatPayload({ pitch: 6.5, speed: 18.0 })),
+      value: boardNotification(buildRefloatPayload({ pitch: 6.5, speed: 18.0 })),
     });
 
     expect(packets.length).toBe(1);
@@ -244,7 +174,7 @@ describe('Refloat telemetry pipeline', () => {
   test('chunked BLE notification (20-byte MTU) reassembles correctly', async () => {
     const { packets } = await connectAndCollect();
 
-    const framed = encode(boardRefloatPayload({ pitch: 3.3 }));
+    const framed = encode(buildRefloatPayload({ pitch: 3.3 }));
     for (let i = 0; i < framed.length; i += 20) {
       let binary = '';
       const chunk = framed.slice(i, i + 20);
@@ -261,7 +191,7 @@ describe('Refloat telemetry pipeline', () => {
 
     for (let i = 0; i < 3; i++) {
       emitNative('onNotification', {
-        value: boardNotification(boardRefloatPayload({ pitch: i * 1.0 })),
+        value: boardNotification(buildRefloatPayload({ pitch: i * 1.0 })),
       });
     }
 
@@ -287,7 +217,6 @@ describe('disconnect handling', () => {
   test('onDisconnect does NOT fire for status=133 during connect phase', async () => {
     let disconnected = false;
 
-    // Start connect — do NOT resolve yet
     const p = vescBle.connect('AA:BB:CC:DD:EE:FF', () => {}, () => {
       disconnected = true;
     });

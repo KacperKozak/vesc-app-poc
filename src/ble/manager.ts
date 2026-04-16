@@ -1,4 +1,4 @@
-import type { Subscription } from 'expo-modules-core';
+import type { EventSubscription } from 'expo-modules-core';
 import {
   scan as nativeScan,
   stopScan as nativeStopScan,
@@ -11,43 +11,9 @@ import {
 } from 'vesc-ble';
 import { encode } from '../vesc/packet';
 import { Reassembler } from '../vesc/reassembler';
-import { Comm, buildFwVersion, buildPingCan, parsePingCan } from '../vesc/commands';
+import { buildFwVersion, buildPingCan } from '../vesc/commands';
 import { NUS_SERVICE, VESC_NAME_PREFIXES } from './nus';
-
-// ---------------------------------------------------------------------------
-// Base64 helpers (uses global atob/btoa available in RN 0.71+)
-// ---------------------------------------------------------------------------
-
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
-}
-
-// ---------------------------------------------------------------------------
-// Chunk helper — split a Uint8Array into MTU-sized pieces
-// ---------------------------------------------------------------------------
-
-function* chunks(data: Uint8Array, size: number): Generator<Uint8Array> {
-  for (let i = 0; i < data.length; i += size) {
-    yield data.slice(i, i + size);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Minimal type for devices surfaced to callers
-// ---------------------------------------------------------------------------
+import { base64ToBytes, bytesToBase64 } from '../helpers/base64';
 
 export interface ScannedDevice {
   id: string;
@@ -55,11 +21,13 @@ export interface ScannedDevice {
   rssi: number;
 }
 
-// ---------------------------------------------------------------------------
-// VescBle — singleton BLE manager backed by the native vesc-ble module
-// ---------------------------------------------------------------------------
-
 const WRITE_CHUNK_SIZE = 180;
+
+function* chunks(data: Uint8Array, size: number): Generator<Uint8Array> {
+  for (let i = 0; i < data.length; i += size) {
+    yield data.slice(i, i + size);
+  }
+}
 
 class VescBle {
   private _connected = false;
@@ -68,13 +36,9 @@ class VescBle {
   /** CAN ID of the main VESC motor controller discovered via PING_CAN, or undefined */
   canId: number | undefined = undefined;
 
-  private scanSub: Subscription | null = null;
-  private notifSub: Subscription | null = null;
-  private disconnSub: Subscription | null = null;
-
-  // -------------------------------------------------------------------------
-  // Scanning
-  // -------------------------------------------------------------------------
+  private scanSub: EventSubscription | null = null;
+  private notifSub: EventSubscription | null = null;
+  private disconnSub: EventSubscription | null = null;
 
   scan(onFound: (d: ScannedDevice) => void): void {
     this.scanSub?.remove();
@@ -96,10 +60,6 @@ class VescBle {
     this.scanSub?.remove();
     this.scanSub = null;
   }
-
-  // -------------------------------------------------------------------------
-  // Connection
-  // -------------------------------------------------------------------------
 
   async connect(
     deviceId: string,
@@ -159,10 +119,6 @@ class VescBle {
     await this.send(buildPingCan());
   }
 
-  // -------------------------------------------------------------------------
-  // Sending
-  // -------------------------------------------------------------------------
-
   private lastSendLog = 0;
 
   async send(payload: Uint8Array): Promise<void> {
@@ -180,10 +136,6 @@ class VescBle {
       await nativeSend(bytesToBase64(chunk));
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Disconnection
-  // -------------------------------------------------------------------------
 
   async disconnect(): Promise<void> {
     this._connected = false;
