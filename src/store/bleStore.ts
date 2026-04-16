@@ -100,52 +100,73 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     stopScan();
     set({ status: 'connecting', connectedId: null, refloatValues: null, error: undefined });
 
-    try {
-      await vescBle.connect(id, (payload) => {
-        set((s) => ({ rxCount: s.rxCount + 1 }));
+    const onPacket = (payload: Uint8Array) => {
+      set((s) => ({ rxCount: s.rxCount + 1 }));
 
-        const cmd = payload[0];
-        console.log(`[BLE] packet cmd=0x${cmd?.toString(16).padStart(2, '0')} len=${payload.length}`);
+      const cmd = payload[0];
+      console.log(`[BLE] packet cmd=0x${cmd?.toString(16).padStart(2, '0')} len=${payload.length}`);
 
-        if (cmd === Comm.CUSTOM_APP_DATA) {
-          // Refloat COMMAND_GET_ALLDATA response
-          if (payload[1] === REFLOAT_MAGIC && payload[2] === RefloatCmd.GET_ALLDATA) {
-            try {
-              const refloatValues = parseGetAllData(payload);
-              set({ refloatValues });
-            } catch (err) {
-              console.warn('[BLE] parseGetAllData failed:', err);
-            }
-          } else {
-            console.log(
-              `[BLE] CUSTOM_APP_DATA: magic=${payload[1]} cmd=${payload[2]} (not Refloat GET_ALLDATA)`,
-            );
-          }
-        } else if (cmd === Comm.PING_CAN) {
-          const ids = parsePingCan(payload);
-          console.log('[BLE] PING_CAN response — CAN devices found:', ids);
-          if (ids.length > 0) {
-            vescBle.canId = ids[0];
-            console.log(`[BLE] using CAN ID ${ids[0]} for motor controller commands`);
-          } else {
-            console.warn('[BLE] PING_CAN: no CAN devices found — GET_ALLDATA may not respond');
+      if (cmd === Comm.CUSTOM_APP_DATA) {
+        // Refloat COMMAND_GET_ALLDATA response
+        if (payload[1] === REFLOAT_MAGIC && payload[2] === RefloatCmd.GET_ALLDATA) {
+          try {
+            const refloatValues = parseGetAllData(payload);
+            set({ refloatValues });
+          } catch (err) {
+            console.warn('[BLE] parseGetAllData failed:', err);
           }
         } else {
-          // Log unexpected command bytes to help spot firmware differences
-          const hex = Array.from(payload.slice(0, 8))
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join(' ');
-          console.log(`[BLE] unhandled cmd=0x${cmd?.toString(16)} first bytes: ${hex}`);
+          console.log(
+            `[BLE] CUSTOM_APP_DATA: magic=${payload[1]} cmd=${payload[2]} (not Refloat GET_ALLDATA)`,
+          );
         }
-      });
+      } else if (cmd === Comm.PING_CAN) {
+        const ids = parsePingCan(payload);
+        console.log('[BLE] PING_CAN response — CAN devices found:', ids);
+        if (ids.length > 0) {
+          vescBle.canId = ids[0];
+          console.log(`[BLE] using CAN ID ${ids[0]} for motor controller commands`);
+        } else {
+          console.warn('[BLE] PING_CAN: no CAN devices found — GET_ALLDATA may not respond');
+        }
+      } else {
+        // Log unexpected command bytes to help spot firmware differences
+        const hex = Array.from(payload.slice(0, 8))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        console.log(`[BLE] unhandled cmd=0x${cmd?.toString(16)} first bytes: ${hex}`);
+      }
+    };
 
-      set({ status: 'connected', connectedId: id });
-      startPolling();
-    } catch (err) {
+    const onDisconnect = () => {
+      console.warn('[BLE] remote disconnect detected');
+      stopPolling();
+      vescBle.canId = undefined;
       set({
         status: 'error',
-        error: err instanceof Error ? err.message : String(err),
+        connectedId: null,
+        refloatValues: null,
+        error: 'Board disconnected',
       });
+    };
+
+    // Retry loop — status=133 is a common Android GATT_ERROR on the first
+    // reconnect attempt to a bonded device. One immediate retry fixes it.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await vescBle.connect(id, onPacket, onDisconnect);
+        set({ status: 'connected', connectedId: id });
+        startPolling();
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (attempt === 1 && msg.includes('133')) {
+          console.warn('[BLE] status=133 (bonded device quirk) — retrying once');
+          continue;
+        }
+        set({ status: 'error', error: msg });
+        return;
+      }
     }
   },
 

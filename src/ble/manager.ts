@@ -104,6 +104,7 @@ class VescBle {
   async connect(
     deviceId: string,
     onPacket: (payload: Uint8Array) => void,
+    onDisconnect?: () => void,
   ): Promise<void> {
     nativeStopScan();
     this.scanSub?.remove();
@@ -122,16 +123,25 @@ class VescBle {
       }
     });
 
-    this.disconnSub?.remove();
-    this.disconnSub = addDisconnectedListener((event) => {
-      console.log('[BLE] disconnected status=', event.status);
-      this._connected = false;
-    });
+    // NOTE: disconnSub is registered AFTER nativeConnect resolves (see below).
+    // Registering it here would cause old-GATT cleanup inside doConnect() to
+    // fire onDisconnect for the new session before it even starts.
 
     console.log('[BLE] connecting to', deviceId);
     await nativeConnect(deviceId);
     this._connected = true;
     console.log('[BLE] connected:', deviceId);
+
+    // Register disconnect listener only after connection is established.
+    // Any onDisconnected events emitted during the connect phase (e.g. status=133
+    // bonded-device GATT_ERROR, or old-GATT teardown) will have no JS listener
+    // and are safely ignored — the connect promise rejection handles those cases.
+    this.disconnSub?.remove();
+    this.disconnSub = addDisconnectedListener((event) => {
+      console.log('[BLE] disconnected status=', event.status);
+      this._connected = false;
+      onDisconnect?.();
+    });
 
     // Give the peripheral a moment to activate CCCD
     await new Promise<void>((r) => setTimeout(r, 500));
