@@ -12,7 +12,8 @@ interface Props {
 /** A single telemetry value tile. */
 export function TelemetryCard({ label, value, unit, alert = false }: Props) {
   return (
-    <View style={[styles.card, alert && styles.cardAlert]}>
+    <View style={styles.card}>
+      {alert && <View style={styles.alertDot} />}
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
         {value}
@@ -34,10 +35,14 @@ const styles = StyleSheet.create({
     margin: 4,
     gap: 6,
   },
-  cardAlert: {
-    backgroundColor: '#7f1d1d',
-    borderColor: '#ef4444',
-    borderWidth: 1,
+  alertDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
   },
   label: {
     color: '#9ca3af',
