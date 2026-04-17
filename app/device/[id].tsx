@@ -77,7 +77,7 @@ function StatusPill({ status }: StatusPillProps) {
 }
 
 export default function TelemetryScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const navigation = useNavigation();
 
   const { status, refloatValues, error, rxCount, connect, disconnect } = useBleStore();
@@ -93,12 +93,14 @@ export default function TelemetryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const boardName = name ? decodeURIComponent(name) : id;
+
   useEffect(() => {
     navigation.setOptions({
-      title: status === 'connected' ? 'Live Telemetry' : 'Connecting…',
+      title: status === 'connected' ? boardName : 'Connecting…',
       headerRight: () => <StatusPill status={status} />,
     });
-  }, [status, navigation]);
+  }, [status, navigation, boardName]);
 
   const isConnected = status === 'connected';
   const v = refloatValues;

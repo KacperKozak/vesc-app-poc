@@ -45,7 +45,7 @@ export default function ScanScreen() {
 
   const handleDevicePress = (device: ScannedDevice) => {
     stopScan();
-    router.push(`/device/${device.id}`);
+    router.push(`/device/${device.id}?name=${encodeURIComponent(device.name)}`);
   };
 
   return (

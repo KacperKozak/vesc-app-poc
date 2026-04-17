@@ -3,9 +3,12 @@ import { vescBle } from '../ble/manager';
 import { parsePingCan, Comm } from '../vesc/commands';
 import { buildGetAllData, parseGetAllData, REFLOAT_MAGIC, RefloatCmd } from '../vesc/refloat';
 import type { RefloatValues } from '../vesc/types';
+import { startVirtualSimulation, VIRTUAL_BOARD_NAME } from '../simulator/virtualBoard';
 
 import type { ScannedDevice } from '../ble/manager';
 export type { ScannedDevice };
+
+export const VIRTUAL_BOARD_ID = '__virtual__';
 
 export type BleStatus = 'idle' | 'scanning' | 'connecting' | 'connected' | 'error';
 
@@ -34,6 +37,7 @@ interface BleActions {
 // Internal polling interval handle + RTT tracking
 // ---------------------------------------------------------------------------
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+let virtualCleanup: (() => void) | null = null;
 let lastPollAt = 0;
 let rttHistory: number[] = [];
 const RTT_HISTORY_SIZE = 5;
@@ -76,7 +80,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   // ---- actions ----
 
   startScan() {
-    set({ status: 'scanning', devices: [], error: undefined });
+    const virtualDevice: ScannedDevice = { id: VIRTUAL_BOARD_ID, name: VIRTUAL_BOARD_NAME, rssi: -45 };
+    set({ status: 'scanning', devices: [virtualDevice], error: undefined });
 
     vescBle.scan((device) => {
       const name = device.name || device.id;
@@ -103,6 +108,23 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   async connect(id: string) {
+    if (id === VIRTUAL_BOARD_ID) {
+      set({
+        status: 'connected', connectedId: VIRTUAL_BOARD_ID,
+        refloatValues: null, error: undefined, rxCount: 0,
+        lastPacketAt: null, avgLatency: null,
+      });
+      virtualCleanup = startVirtualSimulation((values, latency) => {
+        set((s) => ({
+          refloatValues: values,
+          lastPacketAt: Date.now(),
+          avgLatency: latency,
+          rxCount: s.rxCount + 1,
+        }));
+      });
+      return;
+    }
+
     const { stopScan } = get();
     stopScan();
     rttHistory = [];
@@ -189,6 +211,10 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   async disconnect() {
+    if (virtualCleanup !== null) {
+      virtualCleanup();
+      virtualCleanup = null;
+    }
     stopPolling();
     rttHistory = [];
     lastPollAt = 0;
