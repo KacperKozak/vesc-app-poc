@@ -53,6 +53,7 @@ override fun onCharacteristicChanged(
 **Cause**: ADV2 firmware notifies on `6e400002` (the write characteristic), not `6e400003` (standard NUS RX). Initial code subscribed to `6e400003` only.
 
 **Fix**:
+
 1. `setCharacteristicNotification()` called on **both** characteristics
 2. CCCD descriptor written on **both** (sequentially — GATT only allows one descriptor write in flight at a time; use `onDescriptorWrite` callback to chain the second write)
 3. `onCharacteristicChanged` accepts packets from either UUID

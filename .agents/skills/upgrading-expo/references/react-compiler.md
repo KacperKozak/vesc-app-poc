@@ -29,13 +29,13 @@ Once React Compiler is enabled, you can remove manual memoization:
 
 ```tsx
 // Before (manual memoization)
-const memoizedValue = useMemo(() => computeExpensive(a, b), [a, b]);
-const memoizedCallback = useCallback(() => doSomething(a), [a]);
-const MemoizedComponent = React.memo(MyComponent);
+const memoizedValue = useMemo(() => computeExpensive(a, b), [a, b])
+const memoizedCallback = useCallback(() => doSomething(a), [a])
+const MemoizedComponent = React.memo(MyComponent)
 
 // After (React Compiler handles it)
-const value = computeExpensive(a, b);
-const callback = () => doSomething(a);
+const value = computeExpensive(a, b)
+const callback = () => doSomething(a)
 // Just use MyComponent directly
 ```
 

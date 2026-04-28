@@ -5,9 +5,9 @@
 Use `expo-blur` for blur effects. Prefer systemMaterial tints as they adapt to dark mode.
 
 ```tsx
-import { BlurView } from "expo-blur";
+import { BlurView } from 'expo-blur'
 
-<BlurView tint="systemMaterial" intensity={100} />;
+;<BlurView tint="systemMaterial" intensity={100} />
 ```
 
 ### Tint Options
@@ -84,9 +84,9 @@ Common pattern for overlaying blur on content:
 Use `expo-glass-effect` for liquid glass backdrops on iOS 26+.
 
 ```tsx
-import { GlassView } from "expo-glass-effect";
+import { GlassView } from 'expo-glass-effect'
 
-<GlassView style={{ borderRadius: 16, padding: 16 }}>
+;<GlassView style={{ borderRadius: 16, padding: 16 }}>
   <Text>Content inside glass</Text>
 </GlassView>
 ```
@@ -96,13 +96,13 @@ import { GlassView } from "expo-glass-effect";
 Add `isInteractive` for buttons and pressable glass:
 
 ```tsx
-import { GlassView } from "expo-glass-effect";
-import { SymbolView } from "expo-symbols";
-import { PlatformColor } from "react-native";
+import { GlassView } from 'expo-glass-effect'
+import { SymbolView } from 'expo-symbols'
+import { PlatformColor } from 'react-native'
 
-<GlassView isInteractive style={{ borderRadius: 50 }}>
+;<GlassView isInteractive style={{ borderRadius: 50 }}>
   <Pressable style={{ padding: 12 }} onPress={handlePress}>
-    <SymbolView name="plus" tintColor={PlatformColor("label")} size={36} />
+    <SymbolView name="plus" tintColor={PlatformColor('label')} size={36} />
   </Pressable>
 </GlassView>
 ```
@@ -131,10 +131,8 @@ function GlassButton({ icon, onPress }) {
 
 ```tsx
 <GlassView style={{ borderRadius: 20, padding: 20 }}>
-  <Text style={{ fontSize: 18, fontWeight: '600', color: PlatformColor("label") }}>
-    Card Title
-  </Text>
-  <Text style={{ color: PlatformColor("secondaryLabel"), marginTop: 8 }}>
+  <Text style={{ fontSize: 18, fontWeight: '600', color: PlatformColor('label') }}>Card Title</Text>
+  <Text style={{ color: PlatformColor('secondaryLabel'), marginTop: 8 }}>
     Card content goes here
   </Text>
 </GlassView>
@@ -143,7 +141,7 @@ function GlassButton({ icon, onPress }) {
 ### Checking Availability
 
 ```tsx
-import { isLiquidGlassAvailable } from "expo-glass-effect";
+import { isLiquidGlassAvailable } from 'expo-glass-effect'
 
 if (isLiquidGlassAvailable()) {
   // Use GlassView
@@ -155,19 +153,19 @@ if (isLiquidGlassAvailable()) {
 ### Fallback Pattern
 
 ```tsx
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { BlurView } from "expo-blur";
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect'
+import { BlurView } from 'expo-blur'
 
 function AdaptiveGlass({ children, style }) {
   if (isLiquidGlassAvailable()) {
-    return <GlassView style={style}>{children}</GlassView>;
+    return <GlassView style={style}>{children}</GlassView>
   }
 
   return (
     <BlurView tint="systemMaterial" intensity={80} style={style}>
       {children}
     </BlurView>
-  );
+  )
 }
 ```
 
@@ -179,10 +177,10 @@ Make sheet backgrounds liquid glass on iOS 26+:
 <Stack.Screen
   name="sheet"
   options={{
-    presentation: "formSheet",
+    presentation: 'formSheet',
     sheetGrabberVisible: true,
     sheetAllowedDetents: [0.5, 1.0],
-    contentStyle: { backgroundColor: "transparent" },
+    contentStyle: { backgroundColor: 'transparent' },
   }}
 />
 ```

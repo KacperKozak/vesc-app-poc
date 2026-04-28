@@ -1,94 +1,94 @@
-import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
+import { requireNativeModule, type EventSubscription } from 'expo-modules-core'
 
 // ---------------------------------------------------------------------------
 // Event payloads
 // ---------------------------------------------------------------------------
 
 export interface DeviceFoundEvent {
-  id: string;
-  name: string;
-  rssi: number;
-  serviceUUIDs: string[];
+  id: string
+  name: string
+  rssi: number
+  serviceUUIDs: string[]
 }
 
 export interface NotificationEvent {
   /** Base64-encoded raw bytes from the NUS RX characteristic */
-  value: string;
+  value: string
 }
 
 export interface ConnectedEvent {
-  mtu: number;
+  mtu: number
 }
 
 export interface DisconnectedEvent {
-  status: number;
+  status: number
 }
 
 export interface ErrorEvent {
-  message: string;
+  message: string
 }
 
-export type SessionStatus = 'idle' | 'connecting' | 'connected' | 'error';
-export type SessionMode = 'ble' | 'replay';
+export type SessionStatus = 'idle' | 'connecting' | 'connected' | 'error'
+export type SessionMode = 'ble' | 'replay'
 
 export interface TelemetryEvent {
-  hasFault: boolean;
-  faultCode: number;
-  pitch: number;
-  roll: number;
-  balancePitch: number;
-  balanceCurrent: number;
-  speed: number;
-  batteryVoltage: number;
-  motorCurrent: number;
-  batteryCurrent: number;
-  erpm: number;
-  dutyCycle: number;
-  state: number;
-  stateName: string;
-  switchState: number;
-  adc1: number;
-  adc2: number;
-  odometer: number | null;
-  tempMosfet: number | null;
-  tempMotor: number | null;
-  avgLatency: number | null;
-  lastPacketAt: number;
+  hasFault: boolean
+  faultCode: number
+  pitch: number
+  roll: number
+  balancePitch: number
+  balanceCurrent: number
+  speed: number
+  batteryVoltage: number
+  motorCurrent: number
+  batteryCurrent: number
+  erpm: number
+  dutyCycle: number
+  state: number
+  stateName: string
+  switchState: number
+  adc1: number
+  adc2: number
+  odometer: number | null
+  tempMosfet: number | null
+  tempMotor: number | null
+  avgLatency: number | null
+  lastPacketAt: number
 }
 
 export interface SessionStateEvent {
-  status: SessionStatus;
-  mode: SessionMode | null;
-  deviceId: string | null;
-  deviceName: string | null;
-  canId: number | null;
-  telemetry: TelemetryEvent | null;
-  error: string | null;
+  status: SessionStatus
+  mode: SessionMode | null
+  deviceId: string | null
+  deviceName: string | null
+  canId: number | null
+  telemetry: TelemetryEvent | null
+  error: string | null
 }
 
 export type StartSessionOptions =
   | {
-      mode: 'ble';
-      deviceId: string;
-      deviceName: string;
-      canId?: number;
-      pollIntervalMs?: number;
-      recordingEnabled?: boolean;
+      mode: 'ble'
+      deviceId: string
+      deviceName: string
+      canId?: number
+      pollIntervalMs?: number
+      recordingEnabled?: boolean
     }
   | {
-      mode: 'replay';
-      deviceName?: string;
-      recordingPath: string;
-      pollIntervalMs?: number;
-    };
+      mode: 'replay'
+      deviceName?: string
+      recordingPath: string
+      pollIntervalMs?: number
+    }
 
 export interface RecordingInfo {
-  id: string;
-  path: string;
-  fileName: string;
-  deviceName: string;
-  startedAt: number;
-  sizeBytes: number;
+  id: string
+  path: string
+  fileName: string
+  deviceName: string
+  startedAt: number
+  sizeBytes: number
 }
 
 // ---------------------------------------------------------------------------
@@ -96,41 +96,41 @@ export interface RecordingInfo {
 // ---------------------------------------------------------------------------
 
 type VescBleEvents = {
-  onDevice:          (event: DeviceFoundEvent)   => void;
-  onNotification:    (event: NotificationEvent)  => void;
-  onConnected:       (event: ConnectedEvent)     => void;
-  onDisconnected:    (event: DisconnectedEvent)  => void;
-  onError:           (event: ErrorEvent)         => void;
-  onStopRequested:   (event: Record<never, never>) => void;
-  onSessionState:    (event: SessionStateEvent)  => void;
-  onTelemetry:       (event: TelemetryEvent)     => void;
-};
+  onDevice: (event: DeviceFoundEvent) => void
+  onNotification: (event: NotificationEvent) => void
+  onConnected: (event: ConnectedEvent) => void
+  onDisconnected: (event: DisconnectedEvent) => void
+  onError: (event: ErrorEvent) => void
+  onStopRequested: (event: Record<never, never>) => void
+  onSessionState: (event: SessionStateEvent) => void
+  onTelemetry: (event: TelemetryEvent) => void
+}
 
 interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
   addListener<EventName extends keyof TEvents>(
     eventName: EventName,
     listener: TEvents[EventName],
-  ): EventSubscription;
+  ): EventSubscription
   removeListener<EventName extends keyof TEvents>(
     eventName: EventName,
     listener: TEvents[EventName],
-  ): void;
-  removeAllListeners(eventName: keyof TEvents): void;
+  ): void
+  removeAllListeners(eventName: keyof TEvents): void
 }
 
 type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
-  scan(): void;
-  stopScan(): void;
-  startSession(options: StartSessionOptions): Promise<void>;
-  stopSession(): Promise<void>;
-  getSessionState(): SessionStateEvent;
-  listRecordings(): Promise<RecordingInfo[]>;
-  deleteRecording(path: string): Promise<boolean>;
-  exportRecording(path: string): Promise<string>;
-};
+  scan(): void
+  stopScan(): void
+  startSession(options: StartSessionOptions): Promise<void>
+  stopSession(): Promise<void>
+  getSessionState(): SessionStateEvent
+  listRecordings(): Promise<RecordingInfo[]>
+  deleteRecording(path: string): Promise<boolean>
+  exportRecording(path: string): Promise<string>
+}
 
-const native = requireNativeModule<VescBleNativeModule>('VescBle');
-const emitter = native;
+const native = requireNativeModule<VescBleNativeModule>('VescBle')
+const emitter = native
 
 // ---------------------------------------------------------------------------
 // API
@@ -138,93 +138,77 @@ const emitter = native;
 
 /** Start BLE scan — emits onDevice events for every advertisement received. */
 export function scan(): void {
-  native.scan();
+  native.scan()
 }
 
 /** Stop ongoing BLE scan. */
 export function stopScan(): void {
-  native.stopScan();
+  native.stopScan()
 }
 
 /** Start a native Android BLE/replay session. The service owns polling and notification updates. */
 export async function startSession(options: StartSessionOptions): Promise<void> {
-  return native.startSession(options);
+  return native.startSession(options)
 }
 
 /** Stop the native Android BLE/replay session. */
 export async function stopSession(): Promise<void> {
-  return native.stopSession();
+  return native.stopSession()
 }
 
 /** Read the current native Android session state snapshot. */
 export function getSessionState(): SessionStateEvent {
-  return native.getSessionState();
+  return native.getSessionState()
 }
 
 export async function listRecordings(): Promise<RecordingInfo[]> {
-  return native.listRecordings();
+  return native.listRecordings()
 }
 
 export async function deleteRecording(path: string): Promise<boolean> {
-  return native.deleteRecording(path);
+  return native.deleteRecording(path)
 }
 
 export async function exportRecording(path: string): Promise<string> {
-  return native.exportRecording(path);
+  return native.exportRecording(path)
 }
 
 /**
  * Listen for the user tapping "Disconnect" in the foreground service
  * notification. Fires on Android only.
  */
-export function addStopRequestedListener(
-  cb: () => void,
-): EventSubscription {
-  return emitter.addListener('onStopRequested', cb);
+export function addStopRequestedListener(cb: () => void): EventSubscription {
+  return emitter.addListener('onStopRequested', cb)
 }
 
 // ---------------------------------------------------------------------------
 // Event listeners
 // ---------------------------------------------------------------------------
 
-export function addDeviceListener(
-  cb: (event: DeviceFoundEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onDevice', cb);
+export function addDeviceListener(cb: (event: DeviceFoundEvent) => void): EventSubscription {
+  return emitter.addListener('onDevice', cb)
 }
 
-export function addNotificationListener(
-  cb: (event: NotificationEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onNotification', cb);
+export function addNotificationListener(cb: (event: NotificationEvent) => void): EventSubscription {
+  return emitter.addListener('onNotification', cb)
 }
 
-export function addConnectedListener(
-  cb: (event: ConnectedEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onConnected', cb);
+export function addConnectedListener(cb: (event: ConnectedEvent) => void): EventSubscription {
+  return emitter.addListener('onConnected', cb)
 }
 
-export function addDisconnectedListener(
-  cb: (event: DisconnectedEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onDisconnected', cb);
+export function addDisconnectedListener(cb: (event: DisconnectedEvent) => void): EventSubscription {
+  return emitter.addListener('onDisconnected', cb)
 }
 
-export function addErrorListener(
-  cb: (event: ErrorEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onError', cb);
+export function addErrorListener(cb: (event: ErrorEvent) => void): EventSubscription {
+  return emitter.addListener('onError', cb)
 }
 
-export function addSessionStateListener(
-  cb: (event: SessionStateEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onSessionState', cb);
+export function addSessionStateListener(cb: (event: SessionStateEvent) => void): EventSubscription {
+  return emitter.addListener('onSessionState', cb)
 }
 
-export function addTelemetryListener(
-  cb: (event: TelemetryEvent) => void,
-): EventSubscription {
-  return emitter.addListener('onTelemetry', cb);
+export function addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {
+  return emitter.addListener('onTelemetry', cb)
 }

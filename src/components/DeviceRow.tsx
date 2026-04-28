@@ -1,15 +1,15 @@
-import React from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import React from 'react'
+import { TouchableOpacity, View, Text, StyleSheet } from 'react-native'
 
 interface Props {
-  name: string;
-  rssi: number;
-  onPress: () => void;
+  name: string
+  rssi: number
+  onPress: () => void
 }
 
 /** A single row in the device scan list. */
 export function DeviceRow({ name, rssi, onPress }: Props) {
-  const signalColor = rssi > -60 ? '#4ade80' : rssi > -75 ? '#facc15' : '#f87171';
+  const signalColor = rssi > -60 ? '#4ade80' : rssi > -75 ? '#facc15' : '#f87171'
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
@@ -19,7 +19,7 @@ export function DeviceRow({ name, rssi, onPress }: Props) {
       </View>
       <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -50,4 +50,4 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '300',
   },
-});
+})

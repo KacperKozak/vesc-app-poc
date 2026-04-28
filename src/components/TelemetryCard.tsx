@@ -1,12 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React from 'react'
+import { View, Text, StyleSheet } from 'react-native'
 
 interface Props {
-  label: string;
-  value: string;
-  unit?: string;
+  label: string
+  value: string
+  unit?: string
   /** Highlight the card when value warrants attention (fault, over-limit, etc.) */
-  alert?: boolean;
+  alert?: boolean
 }
 
 /** A single telemetry value tile. */
@@ -17,12 +17,10 @@ export function TelemetryCard({ label, value, unit, alert = false }: Props) {
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
         {value}
-        {unit ? (
-          <Text style={styles.unit}> {unit}</Text>
-        ) : null}
+        {unit ? <Text style={styles.unit}> {unit}</Text> : null}
       </Text>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -62,4 +60,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '400',
   },
-});
+})

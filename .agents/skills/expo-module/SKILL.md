@@ -48,15 +48,15 @@ CI=1 npx create-expo-module@latest --local \
 
 Available flags:
 
-| Flag | Description | Example |
-|------|-------------|---------|
-| `--name` | Native module name (PascalCase) | `--name KeyValueStore` |
-| `--description` | Module description | `--description "Native key-value storage"` |
-| `--package` | Android package name | `--package expo.modules.keyvaluestore` |
-| `--author-name` | Author name | `--author-name "dev"` |
-| `--author-email` | Author email | `--author-email "dev@example.com"` |
-| `--author-url` | Author profile URL | `--author-url "https://github.com/dev"` |
-| `--repo` | Repository URL | `--repo "https://github.com/dev/repo"` |
+| Flag             | Description                     | Example                                    |
+| ---------------- | ------------------------------- | ------------------------------------------ |
+| `--name`         | Native module name (PascalCase) | `--name KeyValueStore`                     |
+| `--description`  | Module description              | `--description "Native key-value storage"` |
+| `--package`      | Android package name            | `--package expo.modules.keyvaluestore`     |
+| `--author-name`  | Author name                     | `--author-name "dev"`                      |
+| `--author-email` | Author email                    | `--author-email "dev@example.com"`         |
+| `--author-url`   | Author profile URL              | `--author-url "https://github.com/dev"`    |
+| `--repo`         | Repository URL                  | `--repo "https://github.com/dev/repo"`     |
 
 The scaffold generates both a **native module** (functions, events, constants) and a **native view component** (WebView example with props and events). After scaffolding:
 
@@ -150,12 +150,12 @@ class MyModule : Module() {
 **TypeScript:**
 
 ```typescript
-import { requireNativeModule } from "expo";
+import { requireNativeModule } from 'expo'
 
-const MyModule = requireNativeModule("MyModule");
+const MyModule = requireNativeModule('MyModule')
 
 export function hello(name: string): string {
-  return MyModule.hello(name);
+  return MyModule.hello(name)
 }
 ```
 

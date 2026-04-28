@@ -65,22 +65,22 @@ startSession({
   deviceName,
   pollIntervalMs: 500,
   recordingEnabled: false,
-});
+})
 
 startSession({
   mode: 'replay',
   deviceName: 'Recorded Session',
   recordingPath,
   pollIntervalMs: 500,
-});
+})
 
-stopSession();
-getSessionState();
-addSessionStateListener((state) => {});
-addTelemetryListener((telemetry) => {});
-listRecordings();
-deleteRecording(path);
-exportRecording(path);
+stopSession()
+getSessionState()
+addSessionStateListener((state) => {})
+addTelemetryListener((telemetry) => {})
+listRecordings()
+deleteRecording(path)
+exportRecording(path)
 ```
 
 `mode: 'ble'` connects to real hardware. When `recordingEnabled` is true, the

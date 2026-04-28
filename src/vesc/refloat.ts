@@ -4,40 +4,40 @@
  * Reference: https://github.com/lukash/refloat  src/main.c  cmd_send_all_data()
  */
 
-import { Comm } from './commands';
-import type { RefloatValues } from './types';
+import { Comm } from './commands'
+import type { RefloatValues } from './types'
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const REFLOAT_MAGIC = 101; // Package ID byte, first byte of every Refloat payload
+export const REFLOAT_MAGIC = 101 // Package ID byte, first byte of every Refloat payload
 
 export enum RefloatCmd {
   GET_ALLDATA = 10,
 }
 
 // Marker used by Refloat when a fault is active instead of normal mode byte
-const FAULT_MODE_MARKER = 69;
+const FAULT_MODE_MARKER = 69
 
 // Compat state values returned by state_compat()
 export const REFLOAT_STATE_NAMES: Record<number, string> = {
-  0:  'STARTUP',
-  1:  'RUNNING',
-  2:  'TILTBACK',
-  3:  'WHEELSLIP',
-  4:  'UPSIDEDOWN',
-  5:  'FLYWHEEL',
-  6:  'FAULT_PITCH',
-  7:  'FAULT_ROLL',
-  8:  'FAULT_SW_HALF',
-  9:  'FAULT_SW_FULL',
+  0: 'STARTUP',
+  1: 'RUNNING',
+  2: 'TILTBACK',
+  3: 'WHEELSLIP',
+  4: 'UPSIDEDOWN',
+  5: 'FLYWHEEL',
+  6: 'FAULT_PITCH',
+  7: 'FAULT_ROLL',
+  8: 'FAULT_SW_HALF',
+  9: 'FAULT_SW_FULL',
   11: 'FAULT_STARTUP',
   12: 'FAULT_REVERSE',
   13: 'FAULT_QUICKSTOP',
   14: 'CHARGING',
   15: 'DISABLED',
-};
+}
 
 // ---------------------------------------------------------------------------
 // Command builder
@@ -58,7 +58,7 @@ export function buildGetAllData(canId: number, mode = 2): Uint8Array {
     REFLOAT_MAGIC,
     RefloatCmd.GET_ALLDATA,
     mode,
-  ]);
+  ])
 }
 
 // ---------------------------------------------------------------------------
@@ -76,16 +76,16 @@ export function buildGetAllData(canId: number, mode = 2): Uint8Array {
  * Reference: buffer_get_float32_auto() in lukash/refloat src/conf/buffer.c
  */
 function getFloat32Auto(view: DataView, offset: number): number {
-  const res = view.getUint32(offset, false); // always big-endian
-  const eRaw = (res >>> 23) & 0xFF;
-  const sigI = res & 0x7FFFFF;
-  const neg = (res >>> 31) !== 0;
+  const res = view.getUint32(offset, false) // always big-endian
+  const eRaw = (res >>> 23) & 0xff
+  const sigI = res & 0x7fffff
+  const neg = res >>> 31 !== 0
 
-  if (eRaw === 0 && sigI === 0) return 0.0;
+  if (eRaw === 0 && sigI === 0) return 0.0
 
-  const sig = sigI / (8388608.0 * 2.0) + 0.5;
-  const result = sig * Math.pow(2, eRaw - 126);
-  return neg ? -result : result;
+  const sig = sigI / (8388608.0 * 2.0) + 0.5
+  const result = sig * Math.pow(2, eRaw - 126)
+  return neg ? -result : result
 }
 
 // ---------------------------------------------------------------------------
@@ -133,71 +133,81 @@ export function parseGetAllData(payload: Uint8Array): RefloatValues {
   if (payload[0] !== Comm.CUSTOM_APP_DATA) {
     throw new Error(
       `parseGetAllData: expected CUSTOM_APP_DATA (0x24), got 0x${payload[0]?.toString(16)}`,
-    );
+    )
   }
   if (payload[1] !== REFLOAT_MAGIC) {
-    throw new Error(`parseGetAllData: expected magic ${REFLOAT_MAGIC}, got ${payload[1]}`);
+    throw new Error(`parseGetAllData: expected magic ${REFLOAT_MAGIC}, got ${payload[1]}`)
   }
   if (payload[2] !== RefloatCmd.GET_ALLDATA) {
-    throw new Error(`parseGetAllData: expected cmd ${RefloatCmd.GET_ALLDATA}, got ${payload[2]}`);
+    throw new Error(`parseGetAllData: expected cmd ${RefloatCmd.GET_ALLDATA}, got ${payload[2]}`)
   }
 
-  const modeByte = payload[3];
+  const modeByte = payload[3]
 
   // Fault case — motor has an active mc_fault_code
   if (modeByte === FAULT_MODE_MARKER) {
-    const faultCode = payload[4] ?? 0;
+    const faultCode = payload[4] ?? 0
     return {
       hasFault: true,
       faultCode,
-      pitch: 0, roll: 0, balancePitch: 0,
-      balanceCurrent: 0, speed: 0,
-      batteryVoltage: 0, motorCurrent: 0, batteryCurrent: 0,
-      erpm: 0, dutyCycle: 0,
-      state: 0, switchState: 0,
-      adc1: 0, adc2: 0,
-      odometer: null, tempMosfet: null, tempMotor: null,
-    };
+      pitch: 0,
+      roll: 0,
+      balancePitch: 0,
+      balanceCurrent: 0,
+      speed: 0,
+      batteryVoltage: 0,
+      motorCurrent: 0,
+      batteryCurrent: 0,
+      erpm: 0,
+      dutyCycle: 0,
+      state: 0,
+      switchState: 0,
+      adc1: 0,
+      adc2: 0,
+      odometer: null,
+      tempMosfet: null,
+      tempMotor: null,
+    }
   }
 
-  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
 
   // --- Balance / IMU data ---
-  const balanceCurrent = view.getInt16(4, false) / 10;
-  const balancePitch   = view.getInt16(6, false) / 10;
-  const roll           = view.getInt16(8, false) / 10;
+  const balanceCurrent = view.getInt16(4, false) / 10
+  const balancePitch = view.getInt16(6, false) / 10
+  const roll = view.getInt16(8, false) / 10
 
   // --- State bytes ---
-  const stateByte   = payload[10] ?? 0;
-  const switchState = payload[11] ?? 0;
+  const stateByte = payload[10] ?? 0
+  const switchState = payload[11] ?? 0
 
   // --- Footpad ADCs ---
-  const adc1 = (payload[12] ?? 0) / 50;
-  const adc2 = (payload[13] ?? 0) / 50;
+  const adc1 = (payload[12] ?? 0) / 50
+  const adc2 = (payload[13] ?? 0) / 50
 
   // --- Pitch (primary IMU value used for display) ---
-  const pitch = view.getInt16(20, false) / 10;
+  const pitch = view.getInt16(20, false) / 10
 
   // --- Motor / battery ---
-  const batteryVoltage = view.getInt16(23, false) / 10;
-  const erpm           = view.getInt16(25, false);
+  const batteryVoltage = view.getInt16(23, false) / 10
+  const erpm = view.getInt16(25, false)
   // speed stored as (km/h / 3.6) * 10; decode → m/s / 10 * 3.6 = km/h
-  const speedRaw       = view.getInt16(27, false) / 10; // m/s
-  const speed          = speedRaw * 3.6;                // km/h
-  const motorCurrent   = view.getInt16(29, false) / 10;
-  const batteryCurrent = view.getInt16(31, false) / 10;
-  const dutyCycle      = ((payload[33] ?? 128) - 128) / 100;
+  const speedRaw = view.getInt16(27, false) / 10 // m/s
+  const speed = speedRaw * 3.6 // km/h
+  const motorCurrent = view.getInt16(29, false) / 10
+  const batteryCurrent = view.getInt16(31, false) / 10
+  const dutyCycle = ((payload[33] ?? 128) - 128) / 100
 
   // --- Mode ≥ 2 fields ---
-  let odometer:  number | null = null;
-  let tempMosfet: number | null = null;
-  let tempMotor:  number | null = null;
+  let odometer: number | null = null
+  let tempMosfet: number | null = null
+  let tempMotor: number | null = null
 
-  const mode = modeByte as number;
+  const mode = modeByte as number
   if (mode >= 2 && payload.length >= 42) {
-    odometer  = getFloat32Auto(view, 35); // absolute distance in metres
-    tempMosfet = (payload[39] ?? 0) / 2;
-    tempMotor  = (payload[40] ?? 0) / 2;
+    odometer = getFloat32Auto(view, 35) // absolute distance in metres
+    tempMosfet = (payload[39] ?? 0) / 2
+    tempMotor = (payload[40] ?? 0) / 2
   }
 
   return {
@@ -220,5 +230,5 @@ export function parseGetAllData(payload: Uint8Array): RefloatValues {
     odometer,
     tempMosfet,
     tempMotor,
-  };
+  }
 }

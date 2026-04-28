@@ -4,37 +4,37 @@
  */
 export interface VescValues {
   /** MOSFET temperature in °C */
-  tempMosfet: number;
+  tempMosfet: number
   /** Motor temperature in °C */
-  tempMotor: number;
+  tempMotor: number
   /** Motor current in A */
-  currentMotor: number;
+  currentMotor: number
   /** Input (battery) current in A */
-  currentInput: number;
+  currentInput: number
   /** D-axis current in A */
-  id: number;
+  id: number
   /** Q-axis current in A */
-  iq: number;
+  iq: number
   /** Duty cycle 0..1 */
-  dutyCycle: number;
+  dutyCycle: number
   /** Electrical RPM (ERPM) */
-  rpm: number;
+  rpm: number
   /** Input voltage in V */
-  voltage: number;
+  voltage: number
   /** Amp-hours drawn */
-  ampHours: number;
+  ampHours: number
   /** Amp-hours charged (regen) */
-  ampHoursCharged: number;
+  ampHoursCharged: number
   /** Watt-hours drawn */
-  wattHours: number;
+  wattHours: number
   /** Watt-hours charged (regen) */
-  wattHoursCharged: number;
+  wattHoursCharged: number
   /** Tachometer (motor steps since reset) */
-  tachometer: number;
+  tachometer: number
   /** Absolute tachometer (total motor steps) */
-  tachometerAbs: number;
+  tachometerAbs: number
   /** Fault code — 0 = FAULT_CODE_NONE */
-  faultCode: number;
+  faultCode: number
 }
 
 /** Human-readable fault code names matching mc_fault_code enum in datatypes.h */
@@ -69,13 +69,13 @@ export const FAULT_NAMES: Record<number, string> = {
   27: 'PHASE_FILTER',
   28: 'ENCODER_FAULT',
   29: 'LV_OUTPUT_FAULT',
-};
+}
 
 /** Firmware version returned by COMM_FW_VERSION (stubbed for PoC) */
 export interface FwVersion {
-  major: number;
-  minor: number;
-  hwName: string;
+  major: number
+  minor: number
+  hwName: string
 }
 
 /**
@@ -85,51 +85,51 @@ export interface FwVersion {
  */
 export interface RefloatValues {
   /** True if the motor controller reported an active fault. */
-  hasFault: boolean;
+  hasFault: boolean
   /** mc_fault_code value (0 = FAULT_CODE_NONE). Only meaningful when hasFault=true. */
-  faultCode: number;
+  faultCode: number
 
   // --- IMU / balance ---
   /** Board pitch angle in degrees (nose-up positive) */
-  pitch: number;
+  pitch: number
   /** Board roll angle in degrees */
-  roll: number;
+  roll: number
   /** Balance controller's filtered pitch setpoint in degrees */
-  balancePitch: number;
+  balancePitch: number
   /** Balance PID output current in A */
-  balanceCurrent: number;
+  balanceCurrent: number
 
   // --- Kinematics ---
   /** Ground speed in km/h (signed: positive = forward) */
-  speed: number;
+  speed: number
   /** Electrical RPM (signed) */
-  erpm: number;
+  erpm: number
   /** Duty cycle as a fraction, range -1..1 */
-  dutyCycle: number;
+  dutyCycle: number
 
   // --- Electrical ---
   /** Battery pack voltage in V */
-  batteryVoltage: number;
+  batteryVoltage: number
   /** Motor phase current in A */
-  motorCurrent: number;
+  motorCurrent: number
   /** Battery draw/regen current in A */
-  batteryCurrent: number;
+  batteryCurrent: number
 
   // --- Footpad / state ---
   /** Raw state byte: bits[3:0] = state_compat, bits[7:4] = sat_compat */
-  state: number;
+  state: number
   /** Raw switch byte: footpad sensor state + handtest/beep flags */
-  switchState: number;
+  switchState: number
   /** Front footpad ADC fraction, approx 0..1 */
-  adc1: number;
+  adc1: number
   /** Rear footpad ADC fraction, approx 0..1 */
-  adc2: number;
+  adc2: number
 
   // --- Mode ≥ 2 (present when mode=2 response is long enough) ---
   /** Total absolute odometer in metres (null if mode < 2 packet) */
-  odometer: number | null;
+  odometer: number | null
   /** MOSFET temperature in °C (null if mode < 2 packet) */
-  tempMosfet: number | null;
+  tempMosfet: number | null
   /** Motor temperature in °C (null if mode < 2 packet) */
-  tempMotor: number | null;
+  tempMotor: number | null
 }

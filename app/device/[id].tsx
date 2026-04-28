@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -7,47 +7,49 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Animated,
-} from 'react-native';
-import { useLocalSearchParams, router, useNavigation } from 'expo-router';
+} from 'react-native'
+import { useLocalSearchParams, router, useNavigation } from 'expo-router'
 
-import { useBleStore } from '@/src/store/bleStore';
-import { TelemetryCard } from '@/src/components/TelemetryCard';
-import { FAULT_NAMES } from '@/src/vesc/types';
-import { REFLOAT_STATE_NAMES } from '@/src/vesc/refloat';
-import { fmt, fmtSpeed, fmtKm } from '@/src/helpers/format';
+import { useBleStore } from '@/src/store/bleStore'
+import { TelemetryCard } from '@/src/components/TelemetryCard'
+import { FAULT_NAMES } from '@/src/vesc/types'
+import { REFLOAT_STATE_NAMES } from '@/src/vesc/refloat'
+import { fmt, fmtSpeed, fmtKm } from '@/src/helpers/format'
 
-interface StatusPillProps { status: string }
+interface StatusPillProps {
+  status: string
+}
 
 function StatusPill({ status }: StatusPillProps) {
-  const { lastPacketAt, avgLatency } = useBleStore();
+  const { lastPacketAt, avgLatency } = useBleStore()
 
   const colors: Record<string, { bg: string; text: string }> = {
-    connected:  { bg: '#14532d', text: '#4ade80' },
+    connected: { bg: '#14532d', text: '#4ade80' },
     connecting: { bg: '#1e3a5f', text: '#60a5fa' },
-    error:      { bg: '#7f1d1d', text: '#f87171' },
-    idle:       { bg: '#1f2937', text: '#9ca3af' },
-  };
-  const c = colors[status] ?? colors.idle!;
+    error: { bg: '#7f1d1d', text: '#f87171' },
+    idle: { bg: '#1f2937', text: '#9ca3af' },
+  }
+  const c = colors[status] ?? colors.idle!
 
   // Dot pulse animation — flashes bright on each incoming packet
-  const pulseOpacity = useRef(new Animated.Value(0.35)).current;
-  const [isStale, setIsStale] = useState(false);
+  const pulseOpacity = useRef(new Animated.Value(0.35)).current
+  const [isStale, setIsStale] = useState(false)
 
   useEffect(() => {
-    if (lastPacketAt == null) return;
-    setIsStale(false);
+    if (lastPacketAt == null) return
+    setIsStale(false)
 
-    pulseOpacity.setValue(1);
+    pulseOpacity.setValue(1)
     Animated.timing(pulseOpacity, {
       toValue: 0.35,
       duration: 600,
       useNativeDriver: true,
-    }).start();
+    }).start()
 
     // If no packet arrives within 2 s, consider the link stale
-    const staleTimer = setTimeout(() => setIsStale(true), 2000);
-    return () => clearTimeout(staleTimer);
-  }, [lastPacketAt]);
+    const staleTimer = setTimeout(() => setIsStale(true), 2000)
+    return () => clearTimeout(staleTimer)
+  }, [lastPacketAt])
 
   // Green < 150 ms · Amber 150–400 ms · Red > 400 ms or stale
   const dotColor = isStale
@@ -56,9 +58,9 @@ function StatusPill({ status }: StatusPillProps) {
       ? '#4ade80'
       : avgLatency < 400
         ? '#fbbf24'
-        : '#ef4444';
+        : '#ef4444'
 
-  const showDot = status === 'connected';
+  const showDot = status === 'connected'
 
   return (
     <View style={[styles.pill, { backgroundColor: c.bg }]}>
@@ -73,14 +75,19 @@ function StatusPill({ status }: StatusPillProps) {
       )}
       <Text style={[styles.pillText, { color: c.text }]}>{status.toUpperCase()}</Text>
     </View>
-  );
+  )
 }
 
 export default function TelemetryScreen() {
-  const { id, name, recordingPath } = useLocalSearchParams<{ id: string; name?: string; recordingPath?: string }>();
-  const navigation = useNavigation();
+  const { id, name, recordingPath } = useLocalSearchParams<{
+    id: string
+    name?: string
+    recordingPath?: string
+  }>()
+  const navigation = useNavigation()
 
-  const { status, refloatValues, error, rxCount, connect, replayRecording, disconnect } = useBleStore();
+  const { status, refloatValues, error, rxCount, connect, replayRecording, disconnect } =
+    useBleStore()
 
   useEffect(() => {
     if (recordingPath) {
@@ -91,52 +98,46 @@ export default function TelemetryScreen() {
         deviceName: name ? decodeURIComponent(name) : 'Recorded Session',
         startedAt: Date.now(),
         sizeBytes: 0,
-      });
+      })
     } else if (id) {
-      void connect(id, name ? decodeURIComponent(name) : undefined);
+      void connect(id, name ? decodeURIComponent(name) : undefined)
     }
     return () => {
-      void disconnect();
-    };
+      void disconnect()
+    }
     // Only run on mount/unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, name, recordingPath]);
+  }, [id, name, recordingPath])
 
-  const boardName = name ? decodeURIComponent(name) : id;
+  const boardName = name ? decodeURIComponent(name) : id
 
   useEffect(() => {
     navigation.setOptions({
       title: status === 'connected' ? boardName : 'Connecting…',
       headerRight: () => <StatusPill status={status} />,
-    });
-  }, [status, navigation, boardName]);
+    })
+  }, [status, navigation, boardName])
 
-  const isConnected = status === 'connected';
-  const v = refloatValues;
+  const isConnected = status === 'connected'
+  const v = refloatValues
 
   // State decoding: lower 4 bits = state_compat, upper 4 bits = sat_compat
-  const stateCompat = v ? (v.state & 0xF) : 0;
-  const stateName   = v ? (REFLOAT_STATE_NAMES[stateCompat] ?? `STATE_${stateCompat}`) : '—';
-  const hasFault    = v?.hasFault ?? false;
-  const faultName   = v?.hasFault
-    ? (FAULT_NAMES[v.faultCode] ?? `CODE_${v.faultCode}`)
-    : stateName;
+  const stateCompat = v ? v.state & 0xf : 0
+  const stateName = v ? (REFLOAT_STATE_NAMES[stateCompat] ?? `STATE_${stateCompat}`) : '—'
+  const hasFault = v?.hasFault ?? false
+  const faultName = v?.hasFault ? (FAULT_NAMES[v.faultCode] ?? `CODE_${v.faultCode}`) : stateName
 
-  const speedSign = v && v.erpm < 0 ? '-' : '';
+  const speedSign = v && v.erpm < 0 ? '-' : ''
 
   return (
     <View style={styles.container}>
       {status === 'error' && (
         <View style={styles.centerContent}>
-          <Text style={styles.disconnectedIcon}>
-            {error === 'Board disconnected' ? '⚡' : '✕'}
-          </Text>
+          <Text style={styles.disconnectedIcon}>{error === 'Board disconnected' ? '⚡' : '✕'}</Text>
           <Text style={styles.disconnectedTitle}>
             {error === 'Board disconnected' ? 'Board turned off' : 'Connection failed'}
           </Text>
-          {error && error !== 'Board disconnected' && (
-            <Text style={styles.errorText}>{error}</Text>
-          )}
+          {error && error !== 'Board disconnected' && <Text style={styles.errorText}>{error}</Text>}
           <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryText}>← Back to Scan</Text>
           </TouchableOpacity>
@@ -160,14 +161,14 @@ export default function TelemetryScreen() {
 
       {isConnected && v && (
         <ScrollView contentContainerStyle={styles.grid}>
-
           <Text style={styles.sectionLabel}>RIDING</Text>
 
           <View style={styles.row}>
             <View style={[styles.cardWide, { backgroundColor: '#1f2937' }]}>
               <Text style={styles.label}>Speed</Text>
               <Text style={styles.bigValue}>
-                {speedSign}{fmtSpeed(v.speed)}
+                {speedSign}
+                {fmtSpeed(v.speed)}
                 <Text style={styles.bigUnit}> km/h</Text>
               </Text>
             </View>
@@ -189,42 +190,20 @@ export default function TelemetryScreen() {
           </View>
 
           <View style={styles.row}>
-            <TelemetryCard
-              label="State"
-              value={faultName}
-              alert={hasFault || stateCompat >= 6}
-            />
-            <TelemetryCard
-              label="Footpad"
-              value={`${v.adc1.toFixed(2)} / ${v.adc2.toFixed(2)}`}
-            />
+            <TelemetryCard label="State" value={faultName} alert={hasFault || stateCompat >= 6} />
+            <TelemetryCard label="Footpad" value={`${v.adc1.toFixed(2)} / ${v.adc2.toFixed(2)}`} />
           </View>
 
           <Text style={styles.sectionLabel}>ELECTRICAL</Text>
 
           <View style={styles.row}>
-            <TelemetryCard
-              label="Voltage"
-              value={fmt(v.batteryVoltage)}
-              unit="V"
-            />
-            <TelemetryCard
-              label="Batt Current"
-              value={fmt(v.batteryCurrent)}
-              unit="A"
-            />
+            <TelemetryCard label="Voltage" value={fmt(v.batteryVoltage)} unit="V" />
+            <TelemetryCard label="Batt Current" value={fmt(v.batteryCurrent)} unit="A" />
           </View>
 
           <View style={styles.row}>
-            <TelemetryCard
-              label="Motor Current"
-              value={fmt(v.motorCurrent)}
-              unit="A"
-            />
-            <TelemetryCard
-              label="ERPM"
-              value={v.erpm.toFixed(0)}
-            />
+            <TelemetryCard label="Motor Current" value={fmt(v.motorCurrent)} unit="A" />
+            <TelemetryCard label="ERPM" value={v.erpm.toFixed(0)} />
           </View>
 
           <View style={styles.row}>
@@ -234,11 +213,7 @@ export default function TelemetryScreen() {
               unit="%"
               alert={Math.abs(v.dutyCycle) > 0.85}
             />
-            <TelemetryCard
-              label="Bal. Pitch"
-              value={fmt(v.balancePitch)}
-              unit="°"
-            />
+            <TelemetryCard label="Bal. Pitch" value={fmt(v.balancePitch)} unit="°" />
           </View>
 
           {(v.tempMosfet != null || v.tempMotor != null) && (
@@ -265,19 +240,14 @@ export default function TelemetryScreen() {
             <>
               <Text style={styles.sectionLabel}>ODOMETER</Text>
               <View style={styles.row}>
-                <TelemetryCard
-                  label="Total Distance"
-                  value={fmtKm(v.odometer)}
-                  unit="km"
-                />
+                <TelemetryCard label="Total Distance" value={fmtKm(v.odometer)} unit="km" />
               </View>
             </>
           )}
-
         </ScrollView>
       )}
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -398,4 +368,4 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '400',
   },
-});
+})

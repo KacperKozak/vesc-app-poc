@@ -21,10 +21,10 @@ Everything else must be wrapped with `COMM_FORWARD_CAN` so the ESP32 relays it o
 
 Service: `6e400001-b5a3-f393-e0a9-e50e24dcca9e` (Nordic UART)
 
-| Characteristic | UUID | Role |
-|---|---|---|
-| NUS TX | `6e400002` | Phone **writes** here; ADV2 also **notifies** here |
-| NUS RX | `6e400003` | Present in GATT but ADV2 does **not** notify on it |
+| Characteristic | UUID       | Role                                               |
+| -------------- | ---------- | -------------------------------------------------- |
+| NUS TX         | `6e400002` | Phone **writes** here; ADV2 also **notifies** here |
+| NUS RX         | `6e400003` | Present in GATT but ADV2 does **not** notify on it |
 
 **Key quirk**: ADV2 firmware (`comm_ble.c`) sets `notify_conn_id` inside the write handler for `6e400002`. So both writes and notifications travel on `6e400002` — non-standard NUS but that's what the firmware does.
 

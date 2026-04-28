@@ -7,20 +7,10 @@ Use Reanimated v4. Avoid React Native's built-in Animated API.
 Use Animated.View with entering and exiting animations. Layout animations can animate state changes.
 
 ```tsx
-import Animated, {
-  FadeIn,
-  FadeOut,
-  LinearTransition,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 
 function App() {
-  return (
-    <Animated.View
-      entering={FadeIn}
-      exiting={FadeOut}
-      layout={LinearTransition}
-    />
-  );
+  return <Animated.View entering={FadeIn} exiting={FadeOut} layout={LinearTransition} />
 }
 ```
 
@@ -34,21 +24,21 @@ import Animated, {
   useScrollViewOffset,
   useAnimatedStyle,
   interpolate,
-} from "react-native-reanimated";
+} from 'react-native-reanimated'
 
 function Page() {
-  const ref = useAnimatedRef();
-  const scroll = useScrollViewOffset(ref);
+  const ref = useAnimatedRef()
+  const scroll = useScrollViewOffset(ref)
 
   const style = useAnimatedStyle(() => ({
-    opacity: interpolate(scroll.value, [0, 30], [0, 1], "clamp"),
-  }));
+    opacity: interpolate(scroll.value, [0, 30], [0, 1], 'clamp'),
+  }))
 
   return (
     <Animated.ScrollView ref={ref}>
       <Animated.View style={style} />
     </Animated.ScrollView>
-  );
+  )
 }
 ```
 
@@ -77,30 +67,27 @@ function Page() {
 ## Customizing Animations
 
 ```tsx
-<Animated.View
-  entering={FadeInDown.duration(500).delay(200)}
-  exiting={FadeOut.duration(300)}
-/>
+<Animated.View entering={FadeInDown.duration(500).delay(200)} exiting={FadeOut.duration(300)} />
 ```
 
 ### Modifiers
 
 ```tsx
 // Duration in milliseconds
-FadeIn.duration(300);
+FadeIn.duration(300)
 
 // Delay before starting
-FadeIn.delay(100);
+FadeIn.delay(100)
 
 // Spring physics
-FadeIn.springify();
-FadeIn.springify().damping(15).stiffness(100);
+FadeIn.springify()
+FadeIn.springify().damping(15).stiffness(100)
 
 // Easing curves
-FadeIn.easing(Easing.bezier(0.25, 0.1, 0.25, 1));
+FadeIn.easing(Easing.bezier(0.25, 0.1, 0.25, 1))
 
 // Chaining
-FadeInDown.duration(400).delay(200).springify();
+FadeInDown.duration(400).delay(200).springify()
 ```
 
 ## Shared Value Animations
@@ -108,24 +95,20 @@ FadeInDown.duration(400).delay(200).springify();
 For imperative control over animations:
 
 ```tsx
-import {
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
+import { useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
-const offset = useSharedValue(0);
+const offset = useSharedValue(0)
 
 // Spring animation
-offset.value = withSpring(100);
+offset.value = withSpring(100)
 
 // Timing animation
-offset.value = withTiming(100, { duration: 300 });
+offset.value = withTiming(100, { duration: 300 })
 
 // Use in styles
 const style = useAnimatedStyle(() => ({
   transform: [{ translateX: offset.value }],
-}));
+}))
 ```
 
 ## Gesture Animations
@@ -133,39 +116,32 @@ const style = useAnimatedStyle(() => ({
 Combine with React Native Gesture Handler:
 
 ```tsx
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from "react-native-reanimated";
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated'
 
 function DraggableBox() {
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
+  const translateX = useSharedValue(0)
+  const translateY = useSharedValue(0)
 
   const gesture = Gesture.Pan()
     .onUpdate((e) => {
-      translateX.value = e.translationX;
-      translateY.value = e.translationY;
+      translateX.value = e.translationX
+      translateY.value = e.translationY
     })
     .onEnd(() => {
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
-    });
+      translateX.value = withSpring(0)
+      translateY.value = withSpring(0)
+    })
 
   const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
+    transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
+  }))
 
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View style={[styles.box, style]} />
     </GestureDetector>
-  );
+  )
 }
 ```
 
@@ -174,19 +150,16 @@ function DraggableBox() {
 Animate with keyboard height changes:
 
 ```tsx
-import Animated, {
-  useAnimatedKeyboard,
-  useAnimatedStyle,
-} from "react-native-reanimated";
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated'
 
 function KeyboardAwareView() {
-  const keyboard = useAnimatedKeyboard();
+  const keyboard = useAnimatedKeyboard()
 
   const style = useAnimatedStyle(() => ({
     paddingBottom: keyboard.height.value,
-  }));
+  }))
 
-  return <Animated.View style={style}>{/* content */}</Animated.View>;
+  return <Animated.View style={style}>{/* content */}</Animated.View>
 }
 ```
 
@@ -197,14 +170,10 @@ Animate list items with delays:
 ```tsx
 {
   items.map((item, index) => (
-    <Animated.View
-      key={item.id}
-      entering={FadeInUp.delay(index * 50)}
-      exiting={FadeOutUp}
-    >
+    <Animated.View key={item.id} entering={FadeInUp.delay(index * 50)} exiting={FadeOutUp}>
       <ListItem item={item} />
     </Animated.View>
-  ));
+  ))
 }
 ```
 

@@ -63,10 +63,10 @@ Some layout animations behave differently. Test thoroughly after upgrading.
 Check if New Architecture is active:
 
 ```tsx
-import { Platform } from "react-native";
+import { Platform } from 'react-native'
 
 // Returns true if Fabric is enabled
-const isNewArch = global._IS_FABRIC !== undefined;
+const isNewArch = global._IS_FABRIC !== undefined
 ```
 
 Verify from the command line if the currently running app uses the New Architecture: `bunx xcobra expo eval "_IS_FABRIC"` -> `true`

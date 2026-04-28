@@ -29,32 +29,32 @@ npm install react-native-wgpu@^0.4.1 three@0.172.0 @react-three/fiber@^9.4.0 wgp
 Create `metro.config.js` in project root:
 
 ```js
-const { getDefaultConfig } = require("expo/metro-config");
+const { getDefaultConfig } = require('expo/metro-config')
 
-const config = getDefaultConfig(__dirname);
+const config = getDefaultConfig(__dirname)
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   // Force 'three' to webgpu build
-  if (moduleName.startsWith("three")) {
-    moduleName = "three/webgpu";
+  if (moduleName.startsWith('three')) {
+    moduleName = 'three/webgpu'
   }
 
   // Use standard react-three/fiber instead of React Native version
-  if (platform !== "web" && moduleName.startsWith("@react-three/fiber")) {
+  if (platform !== 'web' && moduleName.startsWith('@react-three/fiber')) {
     return context.resolveRequest(
       {
         ...context,
-        unstable_conditionNames: ["module"],
-        mainFields: ["module"],
+        unstable_conditionNames: ['module'],
+        mainFields: ['module'],
       },
       moduleName,
-      platform
-    );
+      platform,
+    )
   }
-  return context.resolveRequest(context, moduleName, platform);
-};
+  return context.resolveRequest(context, moduleName, platform)
+}
 
-module.exports = config;
+module.exports = config
 ```
 
 ## Required Lib Files
@@ -64,35 +64,35 @@ Create these files in `src/lib/`:
 ### 1. make-webgpu-renderer.ts
 
 ```ts
-import type { NativeCanvas } from "react-native-wgpu";
-import * as THREE from "three/webgpu";
+import type { NativeCanvas } from 'react-native-wgpu'
+import * as THREE from 'three/webgpu'
 
 export class ReactNativeCanvas {
   constructor(private canvas: NativeCanvas) {}
 
   get width() {
-    return this.canvas.width;
+    return this.canvas.width
   }
   get height() {
-    return this.canvas.height;
+    return this.canvas.height
   }
   set width(width: number) {
-    this.canvas.width = width;
+    this.canvas.width = width
   }
   set height(height: number) {
-    this.canvas.height = height;
+    this.canvas.height = height
   }
   get clientWidth() {
-    return this.canvas.width;
+    return this.canvas.width
   }
   get clientHeight() {
-    return this.canvas.height;
+    return this.canvas.height
   }
   set clientWidth(width: number) {
-    this.canvas.width = width;
+    this.canvas.width = width
   }
   set clientHeight(height: number) {
-    this.canvas.height = height;
+    this.canvas.height = height
   }
 
   addEventListener(_type: string, _listener: EventListener) {}
@@ -104,36 +104,28 @@ export class ReactNativeCanvas {
 
 export const makeWebGPURenderer = (
   context: GPUCanvasContext,
-  { antialias = true }: { antialias?: boolean } = {}
+  { antialias = true }: { antialias?: boolean } = {},
 ) =>
   new THREE.WebGPURenderer({
     antialias,
     // @ts-expect-error
     canvas: new ReactNativeCanvas(context.canvas),
     context,
-  });
+  })
 ```
 
 ### 2. fiber-canvas.tsx
 
 ```tsx
-import * as THREE from "three/webgpu";
-import React, { useEffect, useRef } from "react";
-import type { ReconcilerRoot, RootState } from "@react-three/fiber";
-import {
-  extend,
-  createRoot,
-  unmountComponentAtNode,
-  events,
-} from "@react-three/fiber";
-import type { ViewProps } from "react-native";
-import { PixelRatio } from "react-native";
-import { Canvas, type CanvasRef } from "react-native-wgpu";
+import * as THREE from 'three/webgpu'
+import React, { useEffect, useRef } from 'react'
+import type { ReconcilerRoot, RootState } from '@react-three/fiber'
+import { extend, createRoot, unmountComponentAtNode, events } from '@react-three/fiber'
+import type { ViewProps } from 'react-native'
+import { PixelRatio } from 'react-native'
+import { Canvas, type CanvasRef } from 'react-native-wgpu'
 
-import {
-  makeWebGPURenderer,
-  ReactNativeCanvas,
-} from "@/lib/make-webgpu-renderer";
+import { makeWebGPURenderer, ReactNativeCanvas } from '@/lib/make-webgpu-renderer'
 
 // Extend THREE namespace for R3F - add all components you use
 extend({
@@ -156,41 +148,36 @@ extend({
   PointsMaterial: THREE.PointsMaterial,
   PerspectiveCamera: THREE.PerspectiveCamera,
   Scene: THREE.Scene,
-});
+})
 
 interface FiberCanvasProps {
-  children: React.ReactNode;
-  style?: ViewProps["style"];
-  camera?: THREE.PerspectiveCamera;
-  scene?: THREE.Scene;
+  children: React.ReactNode
+  style?: ViewProps['style']
+  camera?: THREE.PerspectiveCamera
+  scene?: THREE.Scene
 }
 
-export const FiberCanvas = ({
-  children,
-  style,
-  scene,
-  camera,
-}: FiberCanvasProps) => {
-  const root = useRef<ReconcilerRoot<OffscreenCanvas>>(null!);
-  const canvasRef = useRef<CanvasRef>(null);
+export const FiberCanvas = ({ children, style, scene, camera }: FiberCanvasProps) => {
+  const root = useRef<ReconcilerRoot<OffscreenCanvas>>(null!)
+  const canvasRef = useRef<CanvasRef>(null)
 
   useEffect(() => {
-    const context = canvasRef.current!.getContext("webgpu")!;
-    const renderer = makeWebGPURenderer(context);
+    const context = canvasRef.current!.getContext('webgpu')!
+    const renderer = makeWebGPURenderer(context)
 
     // @ts-expect-error - ReactNativeCanvas wraps native canvas
-    const canvas = new ReactNativeCanvas(context.canvas) as HTMLCanvasElement;
-    canvas.width = canvas.clientWidth * PixelRatio.get();
-    canvas.height = canvas.clientHeight * PixelRatio.get();
+    const canvas = new ReactNativeCanvas(context.canvas) as HTMLCanvasElement
+    canvas.width = canvas.clientWidth * PixelRatio.get()
+    canvas.height = canvas.clientHeight * PixelRatio.get()
     const size = {
       top: 0,
       left: 0,
       width: canvas.clientWidth,
       height: canvas.clientHeight,
-    };
+    }
 
     if (!root.current) {
-      root.current = createRoot(canvas);
+      root.current = createRoot(canvas)
     }
     root.current.configure({
       size,
@@ -198,62 +185,62 @@ export const FiberCanvas = ({
       scene,
       camera,
       gl: renderer,
-      frameloop: "always",
+      frameloop: 'always',
       dpr: 1,
       onCreated: async (state: RootState) => {
         // @ts-expect-error - WebGPU renderer has init method
-        await state.gl.init();
-        const renderFrame = state.gl.render.bind(state.gl);
+        await state.gl.init()
+        const renderFrame = state.gl.render.bind(state.gl)
         state.gl.render = (s: THREE.Scene, c: THREE.Camera) => {
-          renderFrame(s, c);
-          context?.present();
-        };
+          renderFrame(s, c)
+          context?.present()
+        }
       },
-    });
-    root.current.render(children);
+    })
+    root.current.render(children)
     return () => {
       if (canvas != null) {
-        unmountComponentAtNode(canvas!);
+        unmountComponentAtNode(canvas!)
       }
-    };
-  });
+    }
+  })
 
-  return <Canvas ref={canvasRef} style={style} />;
-};
+  return <Canvas ref={canvasRef} style={style} />
+}
 ```
 
 ## Basic 3D Scene
 
 ```tsx
-import * as THREE from "three/webgpu";
-import { View } from "react-native";
-import { useRef } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { FiberCanvas } from "@/lib/fiber-canvas";
+import * as THREE from 'three/webgpu'
+import { View } from 'react-native'
+import { useRef } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
+import { FiberCanvas } from '@/lib/fiber-canvas'
 
 function RotatingBox() {
-  const ref = useRef<THREE.Mesh>(null!);
+  const ref = useRef<THREE.Mesh>(null!)
 
   useFrame((_, delta) => {
-    ref.current.rotation.x += delta;
-    ref.current.rotation.y += delta * 0.5;
-  });
+    ref.current.rotation.x += delta
+    ref.current.rotation.y += delta * 0.5
+  })
 
   return (
     <mesh ref={ref}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color="hotpink" />
     </mesh>
-  );
+  )
 }
 
 function Scene() {
-  const { camera } = useThree();
+  const { camera } = useThree()
 
   useEffect(() => {
-    camera.position.set(0, 2, 5);
-    camera.lookAt(0, 0, 0);
-  }, [camera]);
+    camera.position.set(0, 2, 5)
+    camera.lookAt(0, 0, 0)
+  }, [camera])
 
   return (
     <>
@@ -261,7 +248,7 @@ function Scene() {
       <directionalLight position={[10, 10, 5]} intensity={1} />
       <RotatingBox />
     </>
-  );
+  )
 }
 
 export default function App() {
@@ -271,7 +258,7 @@ export default function App() {
         <Scene />
       </FiberCanvas>
     </View>
-  );
+  )
 }
 ```
 
@@ -280,10 +267,10 @@ export default function App() {
 Use React.lazy to code-split Three.js for better loading:
 
 ```tsx
-import React, { Suspense } from "react";
-import { ActivityIndicator, View } from "react-native";
+import React, { Suspense } from 'react'
+import { ActivityIndicator, View } from 'react-native'
 
-const Scene = React.lazy(() => import("@/components/scene"));
+const Scene = React.lazy(() => import('@/components/scene'))
 
 export default function Page() {
   return (
@@ -292,7 +279,7 @@ export default function Page() {
         <Scene />
       </Suspense>
     </View>
-  );
+  )
 }
 ```
 
@@ -343,72 +330,69 @@ export default function Page() {
 ## Animation with useFrame
 
 ```tsx
-import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
-import * as THREE from "three/webgpu";
+import { useFrame } from '@react-three/fiber'
+import { useRef } from 'react'
+import * as THREE from 'three/webgpu'
 
 function AnimatedMesh() {
-  const ref = useRef<THREE.Mesh>(null!);
+  const ref = useRef<THREE.Mesh>(null!)
 
   // Runs every frame - delta is time since last frame
   useFrame((state, delta) => {
     // Rotate
-    ref.current.rotation.y += delta;
+    ref.current.rotation.y += delta
 
     // Oscillate position
-    ref.current.position.y = Math.sin(state.clock.elapsedTime) * 2;
-  });
+    ref.current.position.y = Math.sin(state.clock.elapsedTime) * 2
+  })
 
   return (
     <mesh ref={ref}>
       <boxGeometry />
       <meshStandardMaterial color="orange" />
     </mesh>
-  );
+  )
 }
 ```
 
 ## Particle Systems
 
 ```tsx
-import * as THREE from "three/webgpu";
-import { useRef, useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
+import * as THREE from 'three/webgpu'
+import { useRef, useEffect } from 'react'
+import { useFrame } from '@react-three/fiber'
 
 function Particles({ count = 500 }) {
-  const ref = useRef<THREE.Points>(null!);
-  const positions = useRef<Float32Array>(new Float32Array(count * 3));
+  const ref = useRef<THREE.Points>(null!)
+  const positions = useRef<Float32Array>(new Float32Array(count * 3))
 
   useEffect(() => {
     for (let i = 0; i < count; i++) {
-      positions.current[i * 3] = (Math.random() - 0.5) * 50;
-      positions.current[i * 3 + 1] = (Math.random() - 0.5) * 50;
-      positions.current[i * 3 + 2] = (Math.random() - 0.5) * 50;
+      positions.current[i * 3] = (Math.random() - 0.5) * 50
+      positions.current[i * 3 + 1] = (Math.random() - 0.5) * 50
+      positions.current[i * 3 + 2] = (Math.random() - 0.5) * 50
     }
-  }, [count]);
+  }, [count])
 
   useFrame((_, delta) => {
     // Animate particles
     for (let i = 0; i < count; i++) {
-      positions.current[i * 3 + 1] -= delta * 2;
+      positions.current[i * 3 + 1] -= delta * 2
       if (positions.current[i * 3 + 1] < -25) {
-        positions.current[i * 3 + 1] = 25;
+        positions.current[i * 3 + 1] = 25
       }
     }
-    ref.current.geometry.attributes.position.needsUpdate = true;
-  });
+    ref.current.geometry.attributes.position.needsUpdate = true
+  })
 
   return (
     <points ref={ref}>
       <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[positions.current, 3]}
-        />
+        <bufferAttribute attach="attributes-position" args={[positions.current, 3]} />
       </bufferGeometry>
       <pointsMaterial color="#ffffff" size={0.2} sizeAttenuation />
     </points>
-  );
+  )
 }
 ```
 
@@ -417,12 +401,12 @@ function Particles({ count = 500 }) {
 See the full `orbit-controls.tsx` implementation in the lib files. Usage:
 
 ```tsx
-import { View } from "react-native";
-import { FiberCanvas } from "@/lib/fiber-canvas";
-import useControls from "@/lib/orbit-controls";
+import { View } from 'react-native'
+import { FiberCanvas } from '@/lib/fiber-canvas'
+import useControls from '@/lib/orbit-controls'
 
 function Scene() {
-  const [OrbitControls, events] = useControls();
+  const [OrbitControls, events] = useControls()
 
   return (
     <View style={{ flex: 1 }} {...events}>
@@ -431,7 +415,7 @@ function Scene() {
         {/* Your 3D content */}
       </FiberCanvas>
     </View>
-  );
+  )
 }
 ```
 
@@ -447,7 +431,7 @@ function Scene() {
 extend({
   AmbientLight: THREE.AmbientLight,
   // Add other missing components...
-});
+})
 ```
 
 ### 2. TypeScript Errors with Three.js
@@ -458,7 +442,7 @@ extend({
 
 ```tsx
 // @ts-expect-error - WebGPU renderer types don't match
-await state.gl.init();
+await state.gl.init()
 ```
 
 ### 3. Blank Screen
@@ -541,37 +525,37 @@ Performance critical?
 ## Example: Complete Game Scene
 
 ```tsx
-import * as THREE from "three/webgpu";
-import { View, Text, Pressable } from "react-native";
-import { useRef, useState, useCallback } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { FiberCanvas } from "@/lib/fiber-canvas";
+import * as THREE from 'three/webgpu'
+import { View, Text, Pressable } from 'react-native'
+import { useRef, useState, useCallback } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
+import { FiberCanvas } from '@/lib/fiber-canvas'
 
 function Player({ position }: { position: THREE.Vector3 }) {
-  const ref = useRef<THREE.Mesh>(null!);
+  const ref = useRef<THREE.Mesh>(null!)
 
   useFrame(() => {
-    ref.current.position.copy(position);
-  });
+    ref.current.position.copy(position)
+  })
 
   return (
     <mesh ref={ref}>
       <coneGeometry args={[0.5, 1, 8]} />
       <meshStandardMaterial color="#00ffff" />
     </mesh>
-  );
+  )
 }
 
 function GameScene({ playerX }: { playerX: number }) {
-  const { camera } = useThree();
-  const playerPos = useRef(new THREE.Vector3(0, 0, 0));
+  const { camera } = useThree()
+  const playerPos = useRef(new THREE.Vector3(0, 0, 0))
 
-  playerPos.current.x = playerX;
+  playerPos.current.x = playerX
 
   useEffect(() => {
-    camera.position.set(0, 10, 15);
-    camera.lookAt(0, 0, 0);
-  }, [camera]);
+    camera.position.set(0, 10, 15)
+    camera.lookAt(0, 0, 0)
+  }, [camera])
 
   return (
     <>
@@ -579,27 +563,27 @@ function GameScene({ playerX }: { playerX: number }) {
       <directionalLight position={[5, 10, 5]} />
       <Player position={playerPos.current} />
     </>
-  );
+  )
 }
 
 export default function Game() {
-  const [playerX, setPlayerX] = useState(0);
+  const [playerX, setPlayerX] = useState(0)
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
       <FiberCanvas style={{ flex: 1 }}>
         <GameScene playerX={playerX} />
       </FiberCanvas>
 
-      <View style={{ position: "absolute", bottom: 40, flexDirection: "row" }}>
+      <View style={{ position: 'absolute', bottom: 40, flexDirection: 'row' }}>
         <Pressable onPress={() => setPlayerX((x) => x - 1)}>
-          <Text style={{ color: "#fff", fontSize: 32 }}>◀</Text>
+          <Text style={{ color: '#fff', fontSize: 32 }}>◀</Text>
         </Pressable>
         <Pressable onPress={() => setPlayerX((x) => x + 1)}>
-          <Text style={{ color: "#fff", fontSize: 32 }}>▶</Text>
+          <Text style={{ color: '#fff', fontSize: 32 }}>▶</Text>
         </Pressable>
       </View>
     </View>
-  );
+  )
 }
 ```

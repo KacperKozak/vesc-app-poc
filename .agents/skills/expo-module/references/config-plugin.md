@@ -23,31 +23,26 @@ import {
   withInfoPlist,
   withAndroidManifest,
   AndroidConfig,
-} from "expo/config-plugins";
+} from 'expo/config-plugins'
 
 const withMyConfig: ConfigPlugin<{ apiKey: string }> = (config, { apiKey }) => {
   // iOS: modify Info.plist
   config = withInfoPlist(config, (config) => {
-    config.modResults["MY_API_KEY"] = apiKey;
-    return config;
-  });
+    config.modResults['MY_API_KEY'] = apiKey
+    return config
+  })
 
   // Android: modify AndroidManifest.xml
   config = withAndroidManifest(config, (config) => {
-    const mainApp =
-      AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults);
-    AndroidConfig.Manifest.addMetaDataItemToMainApplication(
-      mainApp,
-      "MY_API_KEY",
-      apiKey
-    );
-    return config;
-  });
+    const mainApp = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults)
+    AndroidConfig.Manifest.addMetaDataItemToMainApplication(mainApp, 'MY_API_KEY', apiKey)
+    return config
+  })
 
-  return config;
-};
+  return config
+}
 
-export default withMyConfig;
+export default withMyConfig
 ```
 
 ## Using in app.json

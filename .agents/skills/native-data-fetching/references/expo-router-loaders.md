@@ -22,10 +22,13 @@ You write one function and the framework manages when and how it executes.
       "output": "server"
     },
     "plugins": [
-      ["expo-router", {
-        "unstable_useServerDataLoaders": true,
-        "unstable_useServerRendering": true
-      }]
+      [
+        "expo-router",
+        {
+          "unstable_useServerDataLoaders": true,
+          "unstable_useServerRendering": true
+        }
+      ]
     ]
   }
 }
@@ -40,21 +43,24 @@ You write one function and the framework manages when and how it executes.
       "output": "static"
     },
     "plugins": [
-      ["expo-router", {
-        "unstable_useServerDataLoaders": true
-      }]
+      [
+        "expo-router",
+        {
+          "unstable_useServerDataLoaders": true
+        }
+      ]
     ]
   }
 }
 ```
 
-| | `"server"` | `"static"` |
-|---|-----------|------------|
-| `unstable_useServerDataLoaders` | Required | Required |
-| `unstable_useServerRendering` | Required | Not required |
-| Loader runs on | Live server (every request) | Build time (static generation) |
-| `request` object | Full access (headers, cookies) | Not available |
-| Hosting | Node.js server (EAS Hosting) | Any static host (Netlify, Vercel, S3) |
+|                                 | `"server"`                     | `"static"`                            |
+| ------------------------------- | ------------------------------ | ------------------------------------- |
+| `unstable_useServerDataLoaders` | Required                       | Required                              |
+| `unstable_useServerRendering`   | Required                       | Not required                          |
+| Loader runs on                  | Live server (every request)    | Build time (static generation)        |
+| `request` object                | Full access (headers, cookies) | Not available                         |
+| Hosting                         | Node.js server (EAS Hosting)   | Any static host (Netlify, Vercel, S3) |
 
 ## Imports
 
@@ -69,18 +75,18 @@ For loaders without params, a plain async function works:
 
 ```tsx
 // app/posts/index.tsx
-import { Suspense } from "react";
-import { useLoaderData } from "expo-router";
-import { ActivityIndicator, View, Text } from "react-native";
+import { Suspense } from 'react'
+import { useLoaderData } from 'expo-router'
+import { ActivityIndicator, View, Text } from 'react-native'
 
 export async function loader() {
-  const response = await fetch("https://api.example.com/posts");
-  const posts = await response.json();
-  return { posts };
+  const response = await fetch('https://api.example.com/posts')
+  const posts = await response.json()
+  return { posts }
 }
 
 function PostList() {
-  const { posts } = useLoaderData<typeof loader>();
+  const { posts } = useLoaderData<typeof loader>()
 
   return (
     <View>
@@ -88,7 +94,7 @@ function PostList() {
         <Text key={post.id}>{post.title}</Text>
       ))}
     </View>
-  );
+  )
 }
 
 export default function Posts() {
@@ -96,7 +102,7 @@ export default function Posts() {
     <Suspense fallback={<ActivityIndicator size="large" />}>
       <PostList />
     </Suspense>
-  );
+  )
 }
 ```
 
@@ -108,41 +114,38 @@ For loaders with params, use the `LoaderFunction<T>` type from `expo-server`. Th
 
 ```tsx
 // app/posts/[id].tsx
-import { Suspense } from "react";
-import { useLoaderData } from "expo-router";
-import { StatusError, type LoaderFunction } from "expo-server";
-import { ActivityIndicator, View, Text } from "react-native";
+import { Suspense } from 'react'
+import { useLoaderData } from 'expo-router'
+import { StatusError, type LoaderFunction } from 'expo-server'
+import { ActivityIndicator, View, Text } from 'react-native'
 
 type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+  id: number
+  title: string
+  body: string
+}
 
-export const loader: LoaderFunction<{ post: Post }> = async (
-  request,
-  params,
-) => {
-  const id = params.id as string;
-  const response = await fetch(`https://api.example.com/posts/${id}`);
+export const loader: LoaderFunction<{ post: Post }> = async (request, params) => {
+  const id = params.id as string
+  const response = await fetch(`https://api.example.com/posts/${id}`)
 
   if (!response.ok) {
-    throw new StatusError(404, `Post ${id} not found`);
+    throw new StatusError(404, `Post ${id} not found`)
   }
 
-  const post: Post = await response.json();
-  return { post };
-};
+  const post: Post = await response.json()
+  return { post }
+}
 
 function PostContent() {
-  const { post } = useLoaderData<typeof loader>();
+  const { post } = useLoaderData<typeof loader>()
 
   return (
     <View>
       <Text>{post.title}</Text>
       <Text>{post.body}</Text>
     </View>
-  );
+  )
 }
 
 export default function PostDetail() {
@@ -150,7 +153,7 @@ export default function PostDetail() {
     <Suspense fallback={<ActivityIndicator size="large" />}>
       <PostContent />
     </Suspense>
-  );
+  )
 }
 ```
 
@@ -158,33 +161,33 @@ Catch-all routes access `params.slug` the same way:
 
 ```tsx
 // app/docs/[...slug].tsx
-import { type LoaderFunction } from "expo-server";
+import { type LoaderFunction } from 'expo-server'
 
-type Doc = { title: string; content: string };
+type Doc = { title: string; content: string }
 
 export const loader: LoaderFunction<{ doc: Doc }> = async (request, params) => {
-  const slug = params.slug as string[];
-  const path = slug.join("/");
-  const doc = await fetchDoc(path);
-  return { doc };
-};
+  const slug = params.slug as string[]
+  const path = slug.join('/')
+  const doc = await fetchDoc(path)
+  return { doc }
+}
 ```
 
 Query parameters are available via the `request` object (server output mode only):
 
 ```tsx
 // app/search.tsx
-import { type LoaderFunction } from "expo-server";
+import { type LoaderFunction } from 'expo-server'
 
 export const loader: LoaderFunction<{ results: any[]; query: string }> = async (request) => {
   // Assuming request.url is `/search?q=expo&page=2`
-  const url = new URL(request!.url);
-  const query = url.searchParams.get("q") ?? "";
-  const page = Number(url.searchParams.get("page") ?? "1");
+  const url = new URL(request!.url)
+  const query = url.searchParams.get('q') ?? ''
+  const page = Number(url.searchParams.get('page') ?? '1')
 
-  const results = await fetchSearchResults(query, page);
-  return { results, query };
-};
+  const results = await fetchSearchResults(query, page)
+  return { results, query }
+}
 ```
 
 ## Server-Side Secrets & Request Access
@@ -193,23 +196,23 @@ Loaders run on the server, so you can access secrets and server-only resources d
 
 ```tsx
 // app/dashboard.tsx
-import { type LoaderFunction } from "expo-server";
+import { type LoaderFunction } from 'expo-server'
 
 export const loader: LoaderFunction<{ balance: any; isAuthenticated: boolean }> = async (
   request,
   params,
 ) => {
-  const data = await fetch("https://api.stripe.com/v1/balance", {
+  const data = await fetch('https://api.stripe.com/v1/balance', {
     headers: {
       Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
     },
-  });
+  })
 
-  const sessionToken = request?.headers.get("cookie")?.match(/session=([^;]+)/)?.[1];
+  const sessionToken = request?.headers.get('cookie')?.match(/session=([^;]+)/)?.[1]
 
-  const balance = await data.json();
-  return { balance, isAuthenticated: !!sessionToken };
-};
+  const balance = await data.json()
+  return { balance, isAuthenticated: !!sessionToken }
+}
 ```
 
 The `request` object is available in server output mode. In static output mode, `request` is always `undefined`.
@@ -220,15 +223,15 @@ The `request` object is available in server output mode. In static output mode, 
 
 ```tsx
 // app/products.tsx
-import { setResponseHeaders } from "expo-server";
+import { setResponseHeaders } from 'expo-server'
 
 export async function loader() {
   setResponseHeaders({
-    "Cache-Control": "public, max-age=300",
-  });
+    'Cache-Control': 'public, max-age=300',
+  })
 
-  const products = await fetchProducts();
-  return { products };
+  const products = await fetchProducts()
+  return { products }
 }
 ```
 
@@ -236,18 +239,18 @@ export async function loader() {
 
 ```tsx
 // app/products/[id].tsx
-import { StatusError, type LoaderFunction } from "expo-server";
+import { StatusError, type LoaderFunction } from 'expo-server'
 
 export const loader: LoaderFunction<{ product: Product }> = async (request, params) => {
-  const id = params.id as string;
-  const product = await fetchProduct(id);
+  const id = params.id as string
+  const product = await fetchProduct(id)
 
   if (!product) {
-    throw new StatusError(404, "Product not found");
+    throw new StatusError(404, 'Product not found')
   }
 
-  return { product };
-};
+  return { product }
+}
 ```
 
 ## Suspense & Error Boundaries
@@ -258,17 +261,17 @@ export const loader: LoaderFunction<{ product: Product }> = async (request, para
 
 ```tsx
 // app/posts/index.tsx
-import { Suspense } from "react";
-import { useLoaderData } from "expo-router";
-import { ActivityIndicator, View, Text } from "react-native";
+import { Suspense } from 'react'
+import { useLoaderData } from 'expo-router'
+import { ActivityIndicator, View, Text } from 'react-native'
 
 export async function loader() {
-  const response = await fetch("https://api.example.com/posts");
-  return { posts: await response.json() };
+  const response = await fetch('https://api.example.com/posts')
+  return { posts: await response.json() }
 }
 
 function PostList() {
-  const { posts } = useLoaderData<typeof loader>();
+  const { posts } = useLoaderData<typeof loader>()
 
   return (
     <View>
@@ -276,21 +279,21 @@ function PostList() {
         <Text key={post.id}>{post.title}</Text>
       ))}
     </View>
-  );
+  )
 }
 
 export default function Posts() {
   return (
     <Suspense
       fallback={
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" />
         </View>
       }
     >
       <PostList />
     </Suspense>
-  );
+  )
 }
 ```
 
@@ -302,10 +305,10 @@ The `<Suspense>` boundary must be above the component calling `useLoaderData()`.
 // app/posts/[id].tsx
 export function ErrorBoundary({ error }: { error: Error }) {
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
       <Text>Error: {error.message}</Text>
     </View>
-  );
+  )
 }
 ```
 
@@ -313,13 +316,13 @@ When a loader throws (including `StatusError`), the nearest `ErrorBoundary` catc
 
 ## Static vs Server Rendering
 
-| | Server (`"server"`) | Static (`"static"`) |
-|---|---|---|
-| **When loader runs** | Every request (live) | At build time (`npx expo export`) |
-| **Data freshness** | Fresh on initial server request | Stale until next build |
-| **`request` object** | Full access | Not available |
-| **Hosting** | Node.js server (EAS Hosting) | Any static host |
-| **Use case** | Personalized/dynamic content | Marketing pages, blogs, docs |
+|                      | Server (`"server"`)             | Static (`"static"`)               |
+| -------------------- | ------------------------------- | --------------------------------- |
+| **When loader runs** | Every request (live)            | At build time (`npx expo export`) |
+| **Data freshness**   | Fresh on initial server request | Stale until next build            |
+| **`request` object** | Full access                     | Not available                     |
+| **Hosting**          | Node.js server (EAS Hosting)    | Any static host                   |
+| **Use case**         | Personalized/dynamic content    | Marketing pages, blogs, docs      |
 
 **Choose server** when data changes frequently or content is personalized (cookies, auth, headers).
 

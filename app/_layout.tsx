@@ -1,6 +1,6 @@
-import '../global.css';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import '../global.css'
+import { Stack } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 
 export default function RootLayout() {
   return (
@@ -13,16 +13,10 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#111827' },
         }}
       >
-        <Stack.Screen
-          name="index"
-          options={{ title: 'VESC Scan' }}
-        />
-        <Stack.Screen
-          name="device/[id]"
-          options={{ title: 'Telemetry' }}
-        />
+        <Stack.Screen name="index" options={{ title: 'VESC Scan' }} />
+        <Stack.Screen name="device/[id]" options={{ title: 'Telemetry' }} />
       </Stack>
       <StatusBar style="light" />
     </>
-  );
+  )
 }

@@ -1,6 +1,6 @@
 ---
 name: Expo UI Jetpack Compose
-description: "`@expo/ui/jetpack-compose` package lets you use Jetpack Compose Views and modifiers in your app."
+description: '`@expo/ui/jetpack-compose` package lets you use Jetpack Compose Views and modifiers in your app.'
 ---
 
 > The instructions in this skill apply to SDK 55 only. For other SDK versions, refer to the Expo UI Jetpack Compose docs for that version for the most accurate information.
@@ -23,15 +23,15 @@ A native rebuild is required after installation (`npx expo run:android`).
 - Every Jetpack Compose tree must be wrapped in `Host`. Use `<Host matchContents>` for intrinsic sizing, or `<Host style={{ flex: 1 }}>` when you need explicit size (e.g. as a parent of `LazyColumn`). Example:
 
 ```jsx
-import { Host, Column, Button, Text } from "@expo/ui/jetpack-compose";
-import { fillMaxWidth, paddingAll } from "@expo/ui/jetpack-compose/modifiers";
+import { Host, Column, Button, Text } from '@expo/ui/jetpack-compose'
+import { fillMaxWidth, paddingAll } from '@expo/ui/jetpack-compose/modifiers'
 
-<Host matchContents>
+;<Host matchContents>
   <Column verticalArrangement={{ spacedBy: 8 }} modifiers={[fillMaxWidth(), paddingAll(16)]}>
-    <Text style={{ typography: "titleLarge" }}>Hello</Text>
-    <Button onPress={() => alert("Pressed!")}>Press me</Button>
+    <Text style={{ typography: 'titleLarge' }}>Hello</Text>
+    <Button onPress={() => alert('Pressed!')}>Press me</Button>
   </Column>
-</Host>;
+</Host>
 ```
 
 ## Key Components

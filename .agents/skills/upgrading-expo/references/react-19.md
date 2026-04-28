@@ -10,12 +10,12 @@ The `use` hook replaces `useContext`:
 
 ```tsx
 // Before (React 18)
-import { useContext } from "react";
-const value = useContext(MyContext);
+import { useContext } from 'react'
+const value = useContext(MyContext)
 
 // After (React 19)
-import { use } from "react";
-const value = use(MyContext);
+import { use } from 'react'
+const value = use(MyContext)
 ```
 
 - The `use` hook can also read promises, enabling Suspense-based data fetching.
@@ -45,15 +45,15 @@ Components can now receive `ref` as a regular prop. `forwardRef` is no longer ne
 
 ```tsx
 // Before (React 18)
-import { forwardRef } from "react";
+import { forwardRef } from 'react'
 
 const Input = forwardRef<TextInput, Props>((props, ref) => {
-  return <TextInput ref={ref} {...props} />;
-});
+  return <TextInput ref={ref} {...props} />
+})
 
 // After (React 19)
 function Input({ ref, ...props }: Props & { ref?: React.Ref<TextInput> }) {
-  return <TextInput ref={ref} {...props} />;
+  return <TextInput ref={ref} {...props} />
 }
 ```
 

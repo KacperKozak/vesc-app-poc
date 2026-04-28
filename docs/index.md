@@ -12,10 +12,10 @@
 
 ## Status
 
-| Area | State |
-|------|-------|
-| BLE scan & connect | ✅ |
-| BLE notifications (Android 13+) | ✅ fixed — see [ble-android.md](./ble-android.md) |
+| Area                               | State                                                 |
+| ---------------------------------- | ----------------------------------------------------- |
+| BLE scan & connect                 | ✅                                                    |
+| BLE notifications (Android 13+)    | ✅ fixed — see [ble-android.md](./ble-android.md)     |
 | CAN forwarding to motor controller | ✅ fixed — see [vesc-protocol.md](./vesc-protocol.md) |
-| Refloat GET_ALLDATA telemetry | ✅ |
-| iOS | stub only |
+| Refloat GET_ALLDATA telemetry      | ✅                                                    |
+| iOS                                | stub only                                             |

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect } from 'react'
 import {
   Alert,
   View,
@@ -7,17 +7,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+} from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { router } from 'expo-router'
 
-import { useBleStore } from '@/src/store/bleStore';
-import { usePermissions } from '@/src/ble/usePermissions';
-import { DeviceRow } from '@/src/components/DeviceRow';
-import type { RecordingInfo, ScannedDevice } from '@/src/store/bleStore';
+import { useBleStore } from '@/src/store/bleStore'
+import { usePermissions } from '@/src/ble/usePermissions'
+import { DeviceRow } from '@/src/components/DeviceRow'
+import type { RecordingInfo, ScannedDevice } from '@/src/store/bleStore'
 
 export default function ScanScreen() {
-  const { status, request } = usePermissions();
+  const { status, request } = usePermissions()
   const {
     status: bleStatus,
     devices,
@@ -29,44 +29,44 @@ export default function ScanScreen() {
     loadRecordings,
     deleteRecording,
     exportRecording,
-  } = useBleStore();
+  } = useBleStore()
 
   useEffect(() => {
-    void request();
-    void loadRecordings();
-  }, [request, loadRecordings]);
+    void request()
+    void loadRecordings()
+  }, [request, loadRecordings])
 
   useEffect(() => {
     if (status === 'granted' && bleStatus === 'idle') {
-      startScan();
+      startScan()
     }
-  }, [status, bleStatus, startScan]);
+  }, [status, bleStatus, startScan])
 
   useEffect(() => {
-    return () => stopScan();
-  }, [stopScan]);
+    return () => stopScan()
+  }, [stopScan])
 
-  const isScanning = bleStatus === 'scanning';
+  const isScanning = bleStatus === 'scanning'
 
   const handleToggleScan = () => {
     if (isScanning) {
-      stopScan();
+      stopScan()
     } else {
-      startScan();
+      startScan()
     }
-  };
+  }
 
   const handleDevicePress = (device: ScannedDevice) => {
-    stopScan();
-    router.push(`/device/${device.id}?name=${encodeURIComponent(device.name)}`);
-  };
+    stopScan()
+    router.push(`/device/${device.id}?name=${encodeURIComponent(device.name)}`)
+  }
 
   const handleRecordingPress = (recording: RecordingInfo) => {
-    stopScan();
+    stopScan()
     router.push(
       `/device/__recording__?recordingPath=${encodeURIComponent(recording.path)}&name=${encodeURIComponent(recording.deviceName)}`,
-    );
-  };
+    )
+  }
 
   const handleRecordingMenu = (recording: RecordingInfo) => {
     Alert.alert(recording.deviceName, recording.fileName, [
@@ -74,8 +74,8 @@ export default function ScanScreen() {
         text: 'Download',
         onPress: () => {
           void exportRecording(recording).then((target) => {
-            Alert.alert('Recording exported', target);
-          });
+            Alert.alert('Recording exported', target)
+          })
         },
       },
       {
@@ -84,8 +84,8 @@ export default function ScanScreen() {
         onPress: () => void deleteRecording(recording),
       },
       { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
+    ])
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -121,11 +121,7 @@ export default function ScanScreen() {
         keyExtractor={(d) => d.id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <DeviceRow
-            name={item.name}
-            rssi={item.rssi}
-            onPress={() => handleDevicePress(item)}
-          />
+          <DeviceRow name={item.name} rssi={item.rssi} onPress={() => handleDevicePress(item)} />
         )}
         ListEmptyComponent={
           isScanning ? (
@@ -161,7 +157,8 @@ export default function ScanScreen() {
                     <View style={styles.recordingInfo}>
                       <Text style={styles.recordingName}>{recording.deviceName}</Text>
                       <Text style={styles.recordingMeta}>
-                        {new Date(recording.startedAt).toLocaleString()} · {Math.ceil(recording.sizeBytes / 1024)} KB
+                        {new Date(recording.startedAt).toLocaleString()} ·{' '}
+                        {Math.ceil(recording.sizeBytes / 1024)} KB
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -178,7 +175,7 @@ export default function ScanScreen() {
         }
       />
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -317,4 +314,4 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 15,
   },
-});
+})

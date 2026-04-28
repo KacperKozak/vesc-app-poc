@@ -134,9 +134,9 @@ OnViewDestroys { view: MyNativeView ->
 Functions defined inside `View` are accessible via React ref:
 
 ```typescript
-const ref = useRef<MyView>(null);
+const ref = useRef<MyView>(null)
 // Call native function
-await ref.current?.reset();
+await ref.current?.reset()
 ```
 
 ## PropGroup (Android)

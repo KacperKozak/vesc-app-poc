@@ -19,7 +19,7 @@ All examples below use SDK 55 syntax. For SDK 54, replace `NativeTabs.Trigger.Ic
 ## Basic Usage
 
 ```tsx
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from 'expo-router/unstable-native-tabs'
 
 export default function TabLayout() {
   return (
@@ -37,7 +37,7 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Label>Search</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
-  );
+  )
 }
 ```
 
@@ -188,44 +188,35 @@ Use `hidden` prop on `NativeTabs` to hide the entire tab bar dynamically:
 **Important**: Two instances render simultaneously — store state outside the component (props, context, or external store).
 
 ```tsx
-import { NativeTabs } from "expo-router/unstable-native-tabs";
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { NativeTabs } from 'expo-router/unstable-native-tabs'
+import { useState } from 'react'
+import { Pressable, Text, View } from 'react-native'
 
-function MiniPlayer({
-  isPlaying,
-  onToggle,
-}: {
-  isPlaying: boolean;
-  onToggle: () => void;
-}) {
-  const placement = NativeTabs.BottomAccessory.usePlacement();
-  if (placement === "inline") {
+function MiniPlayer({ isPlaying, onToggle }: { isPlaying: boolean; onToggle: () => void }) {
+  const placement = NativeTabs.BottomAccessory.usePlacement()
+  if (placement === 'inline') {
     return (
       <Pressable onPress={onToggle}>
-        <SymbolView name={isPlaying ? "pause.fill" : "play.fill"} />
+        <SymbolView name={isPlaying ? 'pause.fill' : 'play.fill'} />
       </Pressable>
-    );
+    )
   }
-  return <View>{/* full player UI */}</View>;
+  return <View>{/* full player UI */}</View>
 }
 
 export default function TabLayout() {
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false)
   return (
     <NativeTabs>
       <NativeTabs.BottomAccessory>
-        <MiniPlayer
-          isPlaying={isPlaying}
-          onToggle={() => setIsPlaying(!isPlaying)}
-        />
+        <MiniPlayer isPlaying={isPlaying} onToggle={() => setIsPlaying(!isPlaying)} />
       </NativeTabs.BottomAccessory>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
-  );
+  )
 }
 ```
 
@@ -246,14 +237,14 @@ To opt out per-tab, use `disableAutomaticContentInsets` and manage manually:
 
 ```tsx
 // In the screen
-import { SafeAreaView } from "react-native-screens/experimental";
+import { SafeAreaView } from 'react-native-screens/experimental'
 
 export default function HomeScreen() {
   return (
     <SafeAreaView edges={{ bottom: true }} style={{ flex: 1 }}>
       {/* content */}
     </SafeAreaView>
-  );
+  )
 }
 ```
 
@@ -262,10 +253,10 @@ export default function HomeScreen() {
 If you must use @expo/vector-icons instead of SF Symbols:
 
 ```tsx
-import { NativeTabs } from "expo-router/unstable-native-tabs";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { NativeTabs } from 'expo-router/unstable-native-tabs'
+import Ionicons from '@expo/vector-icons/Ionicons'
 
-<NativeTabs.Trigger name="home">
+;<NativeTabs.Trigger name="home">
   <NativeTabs.Trigger.VectorIcon vector={Ionicons} name="home" />
   <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
 </NativeTabs.Trigger>
@@ -281,7 +272,7 @@ Native tabs don't render headers. Nest Stacks inside each tab for navigation hea
 
 ```tsx
 // app/(tabs)/_layout.tsx
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from 'expo-router/unstable-native-tabs'
 
 export default function TabLayout() {
   return (
@@ -291,22 +282,19 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
       </NativeTabs.Trigger>
     </NativeTabs>
-  );
+  )
 }
 
 // app/(tabs)/(home)/_layout.tsx
-import Stack from "expo-router/stack";
+import Stack from 'expo-router/stack'
 
 export default function HomeStack() {
   return (
     <Stack>
-      <Stack.Screen
-        name="index"
-        options={{ title: "Home", headerLargeTitle: true }}
-      />
-      <Stack.Screen name="details" options={{ title: "Details" }} />
+      <Stack.Screen name="index" options={{ title: 'Home', headerLargeTitle: true }} />
+      <Stack.Screen name="details" options={{ title: 'Details' }} />
     </Stack>
-  );
+  )
 }
 ```
 
@@ -327,32 +315,32 @@ Or extract to a component: `components/app-tabs.tsx` + `components/app-tabs.web.
 ### Before (JS Tabs)
 
 ```tsx
-import { Tabs } from "expo-router";
+import { Tabs } from 'expo-router'
 
-<Tabs>
+;<Tabs>
   <Tabs.Screen
     name="index"
     options={{
-      title: "Home",
+      title: 'Home',
       tabBarIcon: ({ color }) => <IconSymbol name="house.fill" color={color} />,
       tabBarBadge: 3,
     }}
   />
-</Tabs>;
+</Tabs>
 ```
 
 ### After (Native Tabs)
 
 ```tsx
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from 'expo-router/unstable-native-tabs'
 
-<NativeTabs>
+;<NativeTabs>
   <NativeTabs.Trigger name="index">
     <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
     <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
     <NativeTabs.Trigger.Badge>3</NativeTabs.Trigger.Badge>
   </NativeTabs.Trigger>
-</NativeTabs>;
+</NativeTabs>
 ```
 
 ### Key Differences
@@ -399,35 +387,31 @@ Configure in app.json:
 7. **Header buttons flicker when navigating between tabs**: Make sure the app is wrapped in a `ThemeProvider`
 
 ```tsx
-import {
-  ThemeProvider,
-  DarkTheme,
-  DefaultTheme,
-} from "@react-navigation/native";
-import { useColorScheme } from "react-native";
-import { Stack } from "expo-router";
+import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native'
+import { useColorScheme } from 'react-native'
+import { Stack } from 'expo-router'
 
 export default function Layout() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme()
   return (
-    <ThemeProvider theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider theme={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack />
     </ThemeProvider>
-  );
+  )
 }
 ```
 
 If the app only uses a light or dark theme, you can directly pass `DarkTheme` or `DefaultTheme` to `ThemeProvider` without checking the color scheme.
 
 ```tsx
-import { ThemeProvider, DarkTheme } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { ThemeProvider, DarkTheme } from '@react-navigation/native'
+import { Stack } from 'expo-router'
 
 export default function Layout() {
   return (
     <ThemeProvider theme={DarkTheme}>
       <Stack />
     </ThemeProvider>
-  );
+  )
 }
 ```

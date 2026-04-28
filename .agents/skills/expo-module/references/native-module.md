@@ -90,16 +90,16 @@ sendEvent("onChange", bundleOf("value" to newValue))
 **JS subscription:**
 
 ```typescript
-import { useEvent } from "expo";
-import MyModule from "./MyModule";
+import { useEvent } from 'expo'
+import MyModule from './MyModule'
 
 // Hook-based (recommended)
-const event = useEvent(MyModule, "onChange");
+const event = useEvent(MyModule, 'onChange')
 
 // Manual subscription
-const subscription = MyModule.addListener("onChange", (event) => {
-  console.log(event.value);
-});
+const subscription = MyModule.addListener('onChange', (event) => {
+  console.log(event.value)
+})
 // Clean up: subscription.remove()
 ```
 
@@ -123,20 +123,20 @@ OnStopObserving("onChange") {
 
 ### Primitives
 
-| Swift | Kotlin | JS |
-|-------|--------|----|
-| `Bool` | `Boolean` | `boolean` |
-| `Int`, `Int32` | `Int` | `number` |
-| `Int64` | `Long` | `number` |
-| `Float`, `Float32` | `Float` | `number` |
-| `Double` | `Double` | `number` |
-| `String` | `String` | `string` |
-| `URL` | `java.net.URL` / `android.net.Uri` | `string` |
-| `CGPoint` | - | `{ x, y }` |
-| `CGSize` | - | `{ width, height }` |
-| `CGRect` | - | `{ x, y, width, height }` |
-| `UIColor` / `CGColor` | `android.graphics.Color` | `string` (ProcessedColorValue) |
-| `Data` | `kotlin.ByteArray` | `Uint8Array` |
+| Swift                 | Kotlin                             | JS                             |
+| --------------------- | ---------------------------------- | ------------------------------ |
+| `Bool`                | `Boolean`                          | `boolean`                      |
+| `Int`, `Int32`        | `Int`                              | `number`                       |
+| `Int64`               | `Long`                             | `number`                       |
+| `Float`, `Float32`    | `Float`                            | `number`                       |
+| `Double`              | `Double`                           | `number`                       |
+| `String`              | `String`                           | `string`                       |
+| `URL`                 | `java.net.URL` / `android.net.Uri` | `string`                       |
+| `CGPoint`             | -                                  | `{ x, y }`                     |
+| `CGSize`              | -                                  | `{ width, height }`            |
+| `CGRect`              | -                                  | `{ x, y, width, height }`      |
+| `UIColor` / `CGColor` | `android.graphics.Color`           | `string` (ProcessedColorValue) |
+| `Data`                | `kotlin.ByteArray`                 | `Uint8Array`                   |
 
 ### Records (Struct-like types)
 
@@ -280,7 +280,7 @@ final class ImageRef: SharedRef<UIImage> {}
 ### JS Usage
 
 ```typescript
-const ctx = await ImageModule.create("/path/to/image.png");
-ctx.rotate(90);
-console.log(ctx.width);
+const ctx = await ImageModule.create('/path/to/image.png')
+ctx.rotate(90)
+console.log(ctx.width)
 ```
