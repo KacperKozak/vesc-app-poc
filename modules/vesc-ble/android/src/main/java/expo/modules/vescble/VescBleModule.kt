@@ -15,6 +15,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 private const val TAG = "VescBle"
+private const val DEFAULT_BOARD_NAME = "VESC Board"
 
 @SuppressLint("MissingPermission") // permissions are requested at the JS/RN layer
 class VescBleModule : Module() {
@@ -74,7 +75,7 @@ class VescBleModule : Module() {
         mapOf(
           "mode" to "ble",
           "deviceId" to deviceId,
-          "deviceName" to deviceId,
+          "deviceName" to DEFAULT_BOARD_NAME,
           "pollIntervalMs" to 500,
         ),
         promise,
@@ -155,7 +156,7 @@ class VescBleModule : Module() {
   private fun startSession(options: Map<String, Any?>, promise: Promise?) {
     val mode = options["mode"] as? String ?: "ble"
     val deviceId = options["deviceId"] as? String
-    val deviceName = options["deviceName"] as? String ?: deviceId ?: "VESC"
+    val deviceName = options["deviceName"] as? String ?: DEFAULT_BOARD_NAME
     val canId = (options["canId"] as? Number)?.toInt()
     val pollIntervalMs = (options["pollIntervalMs"] as? Number)?.toLong() ?: 500L
     val scenario = options["scenario"] as? String ?: "cruise"
