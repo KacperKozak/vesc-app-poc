@@ -29,7 +29,7 @@ export interface ErrorEvent {
 }
 
 export type SessionStatus = 'idle' | 'connecting' | 'connected' | 'error';
-export type SessionMode = 'ble' | 'demo';
+export type SessionMode = 'ble' | 'demo' | 'replay';
 export type DemoScenario = 'idle' | 'cruise' | 'accel-brake' | 'low-battery' | 'fault';
 
 export interface TelemetryEvent {
@@ -74,13 +74,30 @@ export type StartSessionOptions =
       deviceName: string;
       canId?: number;
       pollIntervalMs?: number;
+      recordingEnabled?: boolean;
     }
   | {
       mode: 'demo';
       deviceName?: string;
       pollIntervalMs?: number;
       scenario?: DemoScenario;
+      recordingEnabled?: boolean;
+    }
+  | {
+      mode: 'replay';
+      deviceName?: string;
+      recordingPath: string;
+      pollIntervalMs?: number;
     };
+
+export interface RecordingInfo {
+  id: string;
+  path: string;
+  fileName: string;
+  deviceName: string;
+  startedAt: number;
+  sizeBytes: number;
+}
 
 // ---------------------------------------------------------------------------
 // Typed emitter
@@ -118,6 +135,9 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   startSession(options: StartSessionOptions): Promise<void>;
   stopSession(): Promise<void>;
   getSessionState(): SessionStateEvent;
+  listRecordings(): Promise<RecordingInfo[]>;
+  deleteRecording(path: string): Promise<boolean>;
+  exportRecording(path: string): Promise<string>;
   startForegroundService(deviceName: string): void;
   stopForegroundService(): void;
   updateNotification(text: string): void;
@@ -174,6 +194,18 @@ export async function stopSession(): Promise<void> {
 /** Read the current native Android session state snapshot. */
 export function getSessionState(): SessionStateEvent {
   return native.getSessionState();
+}
+
+export async function listRecordings(): Promise<RecordingInfo[]> {
+  return native.listRecordings();
+}
+
+export async function deleteRecording(path: string): Promise<boolean> {
+  return native.deleteRecording(path);
+}
+
+export async function exportRecording(path: string): Promise<string> {
+  return native.exportRecording(path);
 }
 
 /**

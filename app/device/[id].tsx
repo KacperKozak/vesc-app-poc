@@ -77,13 +77,22 @@ function StatusPill({ status }: StatusPillProps) {
 }
 
 export default function TelemetryScreen() {
-  const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
+  const { id, name, recordingPath } = useLocalSearchParams<{ id: string; name?: string; recordingPath?: string }>();
   const navigation = useNavigation();
 
-  const { status, refloatValues, error, rxCount, connect, disconnect } = useBleStore();
+  const { status, refloatValues, error, rxCount, connect, replayRecording, disconnect } = useBleStore();
 
   useEffect(() => {
-    if (id) {
+    if (recordingPath) {
+      void replayRecording({
+        id: recordingPath,
+        path: recordingPath,
+        fileName: recordingPath.split('/').pop() ?? 'recording.jsonl',
+        deviceName: name ? decodeURIComponent(name) : 'Recorded Session',
+        startedAt: Date.now(),
+        sizeBytes: 0,
+      });
+    } else if (id) {
       void connect(id, name ? decodeURIComponent(name) : undefined);
     }
     return () => {
@@ -91,7 +100,7 @@ export default function TelemetryScreen() {
     };
     // Only run on mount/unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, name, recordingPath]);
 
   const boardName = name ? decodeURIComponent(name) : id;
 

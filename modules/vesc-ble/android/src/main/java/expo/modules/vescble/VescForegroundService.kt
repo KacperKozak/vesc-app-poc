@@ -16,15 +16,22 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Environment
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
+import org.json.JSONObject
+import java.io.File
+import java.io.FileWriter
+import java.io.OutputStreamWriter
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
@@ -60,6 +67,8 @@ data class SessionConfig(
     val canId: Int?,
     val pollIntervalMs: Long,
     val scenario: String,
+    val recordingEnabled: Boolean,
+    val recordingPath: String?,
 )
 
 private data class RefloatTelemetry(
@@ -158,6 +167,18 @@ class VescForegroundService : Service() {
             instance?.showNotification(text)
         }
 
+        fun listRecordings(context: Context): List<Map<String, Any?>> {
+            return VescRecordingStore(context).list()
+        }
+
+        fun deleteRecording(path: String): Boolean {
+            return File(path).delete()
+        }
+
+        fun exportRecording(context: Context, path: String): String {
+            return VescRecordingStore(context).export(path)
+        }
+
         private fun idleState(): Map<String, Any?> = mapOf(
             "status" to "idle",
             "mode" to null,
@@ -193,11 +214,15 @@ class VescForegroundService : Service() {
     private var pendingConnect: PendingStart? = null
     private var pollRunnable: Runnable? = null
     private var demoRunnable: Runnable? = null
+    private var replayStartRunnable: Runnable? = null
+    private var replayRunnable: Runnable? = null
+    private val replayEventRunnables = mutableListOf<Runnable>()
     private var lastPollAt = 0L
     private var diagWriteCount = 0
     private var demo = DemoBoard()
     private var intentionalDisconnect = false
     private var connectAttempt = 0
+    private var recorder: VescSessionRecorder? = null
 
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -268,13 +293,16 @@ class VescForegroundService : Service() {
         packetReassembler.reset()
         diagWriteCount = 0
         connectAttempt = 0
+        if (start.config.recordingEnabled && start.config.mode != "replay") {
+            recorder = VescSessionRecorder(this, start.config).also { it.start() }
+        }
         setStatus("connecting")
         showNotification("Connecting...")
 
-        if (start.config.mode == "demo") {
-            startDemoSession(start)
-        } else {
-            startBleSession(start)
+        when (start.config.mode) {
+            "demo" -> startDemoSession(start)
+            "replay" -> startReplaySession(start)
+            else -> startBleSession(start)
         }
     }
 
@@ -284,6 +312,29 @@ class VescForegroundService : Service() {
         showNotification("Demo session running")
         start.onSuccess()
         startDemoLoop()
+    }
+
+    private fun startReplaySession(start: PendingStart) {
+        val path = start.config.recordingPath
+        if (path.isNullOrBlank()) {
+            failStart(start, "INVALID_RECORDING", "Replay session requires recordingPath")
+            return
+        }
+        val events = try {
+            VescRecordingStore(this).readReplayEvents(path)
+        } catch (e: Exception) {
+            failStart(start, "INVALID_RECORDING", e.message ?: "Could not read recording")
+            return
+        }
+        showNotification("Opening recording...")
+        replayStartRunnable = Runnable {
+            status = "connected"
+            emitState()
+            showNotification("Replaying recording")
+            start.onSuccess()
+            startReplayLoop(events)
+        }
+        mainHandler.postDelayed(replayStartRunnable!!, 700)
     }
 
     private fun startBleSession(start: PendingStart) {
@@ -302,6 +353,7 @@ class VescForegroundService : Service() {
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
+            recorder?.recordState("gatt:$newState", mapOf("status" to status))
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> gatt.requestMtu(517)
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -321,6 +373,7 @@ class VescForegroundService : Service() {
                     } else {
                         setError("Board disconnected")
                         emitEvent("onDisconnected", mapOf("status" to status))
+                        finishRecording("error")
                     }
                 }
             }
@@ -418,6 +471,7 @@ class VescForegroundService : Service() {
     }
 
     private fun handleFrameChunk(chunk: ByteArray) {
+        recorder?.recordChunk("rx", chunk)
         emitEvent("onNotification", mapOf("value" to Base64.encodeToString(chunk, Base64.NO_WRAP)))
         for (payload in packetReassembler.feed(chunk)) {
             handlePayload(payload)
@@ -484,6 +538,41 @@ class VescForegroundService : Service() {
         mainHandler.post(demoRunnable!!)
     }
 
+    private fun startReplayLoop(events: List<RecordedReplayEvent>) {
+        stopReplayLoop()
+        if (events.isEmpty()) {
+            setError("Recording has no RX events")
+            return
+        }
+        fun scheduleLoop() {
+            replayEventRunnables.clear()
+            events.forEach { event ->
+                val runnable = Runnable {
+                    lastPollAt = System.currentTimeMillis() - 40
+                    handleFrameChunk(event.bytes)
+                }
+                replayEventRunnables.add(runnable)
+                mainHandler.postDelayed(runnable, event.t)
+            }
+            val loopDelay = events.last().t + 1000L
+            replayRunnable = Runnable {
+                packetReassembler.reset()
+                scheduleLoop()
+            }
+            mainHandler.postDelayed(replayRunnable!!, loopDelay)
+        }
+        scheduleLoop()
+    }
+
+    private fun stopReplayLoop() {
+        replayStartRunnable?.let { mainHandler.removeCallbacks(it) }
+        replayStartRunnable = null
+        replayRunnable?.let { mainHandler.removeCallbacks(it) }
+        replayRunnable = null
+        replayEventRunnables.forEach { mainHandler.removeCallbacks(it) }
+        replayEventRunnables.clear()
+    }
+
     private fun stopDemoLoop() {
         demoRunnable?.let { mainHandler.removeCallbacks(it) }
         demoRunnable = null
@@ -503,7 +592,7 @@ class VescForegroundService : Service() {
         } else {
             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         }
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             g.writeCharacteristic(tx, bytes, writeType) == BluetoothStatusCodes.SUCCESS
         } else {
             @Suppress("DEPRECATION")
@@ -513,6 +602,8 @@ class VescForegroundService : Service() {
             @Suppress("DEPRECATION")
             g.writeCharacteristic(tx)
         }
+        if (ok) recorder?.recordChunk("tx", bytes)
+        return ok
     }
 
     private fun parseGetAllData(payload: ByteArray): RefloatTelemetry? {
@@ -591,7 +682,9 @@ class VescForegroundService : Service() {
         cancelCccdTimeout()
         stopPolling()
         stopDemoLoop()
+        stopReplayLoop()
         clearGatt(markIntentional = true)
+        finishRecording(if (emitDisconnected) "disconnected" else "stopped")
         pendingConnect = null
         canId = null
         telemetry = null
@@ -614,6 +707,11 @@ class VescForegroundService : Service() {
         txChar = null
     }
 
+    private fun finishRecording(status: String) {
+        recorder?.finish(status = status)
+        recorder = null
+    }
+
     private fun failPendingConnect(code: String, message: String) {
         pendingConnect?.let { failStart(it, code, message) }
     }
@@ -622,17 +720,20 @@ class VescForegroundService : Service() {
         pendingConnect = null
         setError(message)
         showNotification(message)
+        finishRecording("error")
         start.onError(code, message)
     }
 
     private fun setStatus(next: String) {
         status = next
+        recorder?.recordState(next)
         emitState()
     }
 
     private fun setError(message: String) {
         status = "error"
         error = message
+        recorder?.recordState("error", mapOf("message" to message))
         emitEvent("onError", mapOf("message" to message))
         emitState()
     }
@@ -812,6 +913,158 @@ private class VescPacketReassembler {
             }
         }
         return packets
+    }
+}
+
+private data class RecordedReplayEvent(val t: Long, val bytes: ByteArray)
+
+private class VescSessionRecorder(context: Context, private val config: SessionConfig) {
+    private val store = VescRecordingStore(context)
+    private val startedAt = System.currentTimeMillis()
+    private val writer: FileWriter
+    val file: File
+
+    init {
+        file = store.createFile(config.deviceName)
+        writer = FileWriter(file, false)
+    }
+
+    fun start() {
+        write(
+            JSONObject()
+                .put("t", 0)
+                .put("kind", "meta")
+                .put("version", 1)
+                .put("deviceName", config.deviceName)
+                .put("deviceId", config.deviceId)
+                .put("mode", config.mode)
+                .put("pollIntervalMs", config.pollIntervalMs)
+                .put("startedAt", startedAt)
+        )
+        recordState("recording-started")
+    }
+
+    fun recordState(status: String, extra: Map<String, Any?> = emptyMap()) {
+        val json = JSONObject()
+            .put("t", elapsed())
+            .put("kind", "session-state")
+            .put("status", status)
+        extra.forEach { (key, value) -> json.put(key, value) }
+        write(json)
+    }
+
+    fun recordChunk(direction: String, bytes: ByteArray) {
+        write(
+            JSONObject()
+                .put("t", elapsed())
+                .put("kind", "ble-chunk")
+                .put("direction", direction)
+                .put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+        )
+    }
+
+    fun finish(status: String) {
+        try {
+            recordState(status)
+            writer.flush()
+            writer.close()
+        } catch (e: Exception) {
+            Log.w(TAG, "Recording close failed: ${e.message}")
+        }
+    }
+
+    private fun elapsed(): Long = System.currentTimeMillis() - startedAt
+
+    private fun write(json: JSONObject) {
+        try {
+            writer.append(json.toString()).append('\n')
+            writer.flush()
+        } catch (e: Exception) {
+            Log.w(TAG, "Recording write failed: ${e.message}")
+        }
+    }
+}
+
+private class VescRecordingStore(private val context: Context) {
+    private val dir: File
+        get() = File(context.filesDir, "vesc-recordings").also { it.mkdirs() }
+
+    fun createFile(deviceName: String): File {
+        val safeName = deviceName.replace(Regex("[^A-Za-z0-9._-]+"), "-").trim('-').ifBlank { "vesc-board" }
+        return File(dir, "${System.currentTimeMillis()}-$safeName.jsonl")
+    }
+
+    fun list(): List<Map<String, Any?>> {
+        return dir.listFiles { file -> file.isFile && file.extension == "jsonl" }
+            ?.sortedByDescending { it.lastModified() }
+            ?.map { file ->
+                val meta = readMeta(file)
+                mapOf(
+                    "id" to file.absolutePath,
+                    "path" to file.absolutePath,
+                    "fileName" to file.name,
+                    "deviceName" to (meta?.optString("deviceName")?.takeIf { it.isNotBlank() } ?: "Recorded Session"),
+                    "startedAt" to (meta?.optLong("startedAt", file.lastModified()) ?: file.lastModified()),
+                    "sizeBytes" to file.length(),
+                )
+            }
+            ?: emptyList()
+    }
+
+    fun readReplayEvents(path: String): List<RecordedReplayEvent> {
+        val file = File(path)
+        if (!file.exists()) throw IllegalArgumentException("Recording not found")
+        val events = mutableListOf<RecordedReplayEvent>()
+        file.forEachLine { line ->
+            if (line.isBlank()) return@forEachLine
+            val json = JSONObject(line)
+            if (json.optString("kind") == "ble-chunk" && json.optString("direction") == "rx") {
+                events.add(
+                    RecordedReplayEvent(
+                        t = json.optLong("t", 0L),
+                        bytes = Base64.decode(json.getString("base64"), Base64.NO_WRAP),
+                    )
+                )
+            }
+        }
+        val first = events.firstOrNull()?.t ?: 0L
+        return events.map { it.copy(t = (it.t - first).coerceAtLeast(0L)) }
+    }
+
+    fun export(path: String): String {
+        val source = File(path)
+        if (!source.exists()) throw IllegalArgumentException("Recording not found")
+        val outputName = source.name
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, outputName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/jsonl")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("Could not create download")
+            resolver.openOutputStream(uri)?.use { output ->
+                source.inputStream().use { input -> input.copyTo(output) }
+            }
+            return uri.toString()
+        }
+        val destDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: throw IllegalStateException("Downloads directory unavailable")
+        destDir.mkdirs()
+        val dest = File(destDir, outputName)
+        source.copyTo(dest, overwrite = true)
+        return dest.absolutePath
+    }
+
+    private fun readMeta(file: File): JSONObject? {
+        return try {
+            file.useLines { lines ->
+                lines.firstOrNull { it.isNotBlank() }?.let { JSONObject(it) }
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 }
 

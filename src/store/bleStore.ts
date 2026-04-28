@@ -5,9 +5,13 @@ import {
   stopScan as nativeStopScan,
   startSession,
   stopSession,
+  listRecordings as nativeListRecordings,
+  deleteRecording as nativeDeleteRecording,
+  exportRecording as nativeExportRecording,
   addDeviceListener,
   addSessionStateListener,
   addTelemetryListener,
+  type RecordingInfo,
 } from 'vesc-ble';
 import { type RefloatValues } from '../vesc/types';
 import { VIRTUAL_BOARD_NAME } from '../simulator/virtualBoard';
@@ -17,6 +21,8 @@ export interface ScannedDevice {
   name: string;
   rssi: number;
 }
+
+export type { RecordingInfo };
 
 export const VIRTUAL_BOARD_ID = '__virtual__';
 
@@ -34,13 +40,20 @@ interface BleState {
   lastPacketAt: number | null;
   /** Rolling average round-trip time in ms (poll sent → response received) */
   avgLatency: number | null;
+  recordDebugSession: boolean;
+  recordings: RecordingInfo[];
 }
 
 interface BleActions {
   startScan: () => void;
   stopScan: () => void;
   connect: (id: string, name?: string) => Promise<void>;
+  replayRecording: (recording: RecordingInfo) => Promise<void>;
   disconnect: () => Promise<void>;
+  setRecordDebugSession: (enabled: boolean) => void;
+  loadRecordings: () => Promise<void>;
+  deleteRecording: (recording: RecordingInfo) => Promise<void>;
+  exportRecording: (recording: RecordingInfo) => Promise<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +93,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   rxCount: 0,
   lastPacketAt: null,
   avgLatency: null,
+  recordDebugSession: false,
+  recordings: [],
 
   // ---- actions ----
 
@@ -145,9 +160,52 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       await startSession(
         id === VIRTUAL_BOARD_ID
           ? { mode: 'demo', deviceName, scenario: 'cruise', pollIntervalMs: 500 }
-          : { mode: 'ble', deviceId: id, deviceName, pollIntervalMs: 500 },
+          : {
+              mode: 'ble',
+              deviceId: id,
+              deviceName,
+              pollIntervalMs: 500,
+              recordingEnabled: get().recordDebugSession,
+            },
       );
       set({ status: 'connected', connectedId: id });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ status: 'error', error: msg });
+    }
+  },
+
+  async replayRecording(recording: RecordingInfo) {
+    const { stopScan } = get();
+    stopScan();
+    set({ status: 'connecting', connectedId: recording.path, refloatValues: null, error: undefined, lastPacketAt: null, avgLatency: null });
+
+    removeSessionSubscriptions();
+    telemetrySub = addTelemetryListener((telemetry) => {
+      const { avgLatency, lastPacketAt, stateName: _stateName, ...refloatValues } = telemetry;
+      set((s) => ({
+        refloatValues: refloatValues as RefloatValues,
+        lastPacketAt,
+        avgLatency,
+        rxCount: s.rxCount + 1,
+      }));
+    });
+    sessionSub = addSessionStateListener((session) => {
+      set({
+        status: session.status === 'error' ? 'error' : session.status,
+        connectedId: session.deviceId ?? recording.path,
+        error: session.error ?? undefined,
+      });
+    });
+
+    try {
+      await startSession({
+        mode: 'replay',
+        deviceName: recording.deviceName,
+        recordingPath: recording.path,
+        pollIntervalMs: 500,
+      });
+      set({ status: 'connected', connectedId: recording.path });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       set({ status: 'error', error: msg });
@@ -157,6 +215,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   async disconnect() {
     await stopSession();
     removeSessionSubscriptions();
+    await get().loadRecordings();
     set({
       status: 'idle',
       connectedId: null,
@@ -166,5 +225,23 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       lastPacketAt: null,
       avgLatency: null,
     });
+  },
+
+  setRecordDebugSession(enabled: boolean) {
+    set({ recordDebugSession: enabled });
+  },
+
+  async loadRecordings() {
+    const recordings = await nativeListRecordings();
+    set({ recordings });
+  },
+
+  async deleteRecording(recording: RecordingInfo) {
+    await nativeDeleteRecording(recording.path);
+    await get().loadRecordings();
+  },
+
+  async exportRecording(recording: RecordingInfo) {
+    return nativeExportRecording(recording.path);
   },
 }));

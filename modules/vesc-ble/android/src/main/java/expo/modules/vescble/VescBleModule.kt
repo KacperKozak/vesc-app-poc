@@ -99,6 +99,19 @@ class VescBleModule : Module() {
     AsyncFunction("stopSession") { promise: Promise ->
       stopSession(promise)
     }
+    AsyncFunction("listRecordings") { promise: Promise ->
+      promise.resolve(VescForegroundService.listRecordings(context.applicationContext))
+    }
+    AsyncFunction("deleteRecording") { path: String, promise: Promise ->
+      promise.resolve(VescForegroundService.deleteRecording(path))
+    }
+    AsyncFunction("exportRecording") { path: String, promise: Promise ->
+      try {
+        promise.resolve(VescForegroundService.exportRecording(context.applicationContext, path))
+      } catch (e: Exception) {
+        promise.reject("EXPORT_FAILED", e.message ?: "Could not export recording", e)
+      }
+    }
   }
 
   private fun startScan() {
@@ -165,6 +178,8 @@ class VescBleModule : Module() {
     val canId = (options["canId"] as? Number)?.toInt()
     val pollIntervalMs = (options["pollIntervalMs"] as? Number)?.toLong() ?: 500L
     val scenario = options["scenario"] as? String ?: "cruise"
+    val recordingEnabled = options["recordingEnabled"] as? Boolean ?: false
+    val recordingPath = options["recordingPath"] as? String
 
     VescForegroundService.startSession(
       context.applicationContext,
@@ -175,6 +190,8 @@ class VescBleModule : Module() {
         canId = canId,
         pollIntervalMs = pollIntervalMs,
         scenario = scenario,
+        recordingEnabled = recordingEnabled,
+        recordingPath = recordingPath,
       ),
       onSuccess = { promise?.resolve(null) },
       onError = { code, message ->
