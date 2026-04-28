@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { Permission, PermissionsAndroid, Platform } from 'react-native';
 
 export type PermissionStatus = 'unknown' | 'granted' | 'denied';
 
@@ -21,12 +21,20 @@ export function usePermissions(): {
     }
 
     try {
-      const results = await PermissionsAndroid.requestMultiple([
+      const permissions: Permission[] = [
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         // ACCESS_FINE_LOCATION is required for BLE scanning on API < 31
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ]);
+      ];
+
+      // POST_NOTIFICATIONS is required on Android 13+ to show the foreground
+      // service notification while monitoring in background
+      if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
+        permissions.push('android.permission.POST_NOTIFICATIONS' as Permission);
+      }
+
+      const results = await PermissionsAndroid.requestMultiple(permissions);
 
       const allGranted = Object.values(results).every(
         (r) => r === PermissionsAndroid.RESULTS.GRANTED,

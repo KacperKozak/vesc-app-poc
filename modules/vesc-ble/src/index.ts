@@ -33,11 +33,12 @@ export interface ErrorEvent {
 // ---------------------------------------------------------------------------
 
 type VescBleEvents = {
-  onDevice:       (event: DeviceFoundEvent)   => void;
-  onNotification: (event: NotificationEvent)  => void;
-  onConnected:    (event: ConnectedEvent)     => void;
-  onDisconnected: (event: DisconnectedEvent)  => void;
-  onError:        (event: ErrorEvent)         => void;
+  onDevice:          (event: DeviceFoundEvent)   => void;
+  onNotification:    (event: NotificationEvent)  => void;
+  onConnected:       (event: ConnectedEvent)     => void;
+  onDisconnected:    (event: DisconnectedEvent)  => void;
+  onError:           (event: ErrorEvent)         => void;
+  onStopRequested:   (event: Record<never, never>) => void;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,6 +78,30 @@ export async function send(base64: string): Promise<void> {
 /** Disconnect from the current device and clean up. */
 export async function disconnect(): Promise<void> {
   return native.disconnect();
+}
+
+/**
+ * Start an Android foreground service that keeps the process alive while
+ * backgrounded. Shows a persistent notification (required by Android).
+ * No-op on other platforms.
+ */
+export function startForegroundService(): void {
+  native.startForegroundService();
+}
+
+/** Stop the Android foreground service started by startForegroundService. */
+export function stopForegroundService(): void {
+  native.stopForegroundService();
+}
+
+/**
+ * Listen for the user tapping "Disconnect" in the foreground service
+ * notification. Fires on Android only.
+ */
+export function addStopRequestedListener(
+  cb: () => void,
+): EventSubscription {
+  return emitter.addListener('onStopRequested', cb);
 }
 
 // ---------------------------------------------------------------------------

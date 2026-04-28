@@ -64,11 +64,21 @@ class VescBleModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("VescBle")
 
-    Events("onDevice", "onNotification", "onConnected", "onDisconnected", "onError")
+    Events("onDevice", "onNotification", "onConnected", "onDisconnected", "onError", "onStopRequested")
 
     // -- synchronous --
     Function("scan") { startScan() }
     Function("stopScan") { stopScanInternal() }
+    Function("startForegroundService") {
+      VescForegroundService.onStopRequested = {
+        sendEvent("onStopRequested", emptyMap<String, Any>())
+      }
+      VescForegroundService.start(context)
+    }
+    Function("stopForegroundService") {
+      VescForegroundService.onStopRequested = null
+      VescForegroundService.stop(context)
+    }
 
     // -- async --
     AsyncFunction("connect") { deviceId: String, promise: Promise ->

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { Platform } from 'react-native';
+import { startForegroundService, stopForegroundService, addStopRequestedListener } from 'vesc-ble';
 import { vescBle } from '../ble/manager';
 import { parsePingCan, Comm } from '../vesc/commands';
 import { buildGetAllData, parseGetAllData, REFLOAT_MAGIC, RefloatCmd } from '../vesc/refloat';
@@ -122,6 +124,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
           rxCount: s.rxCount + 1,
         }));
       });
+      if (Platform.OS === 'android') startForegroundService();
       return;
     }
 
@@ -180,6 +183,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
 
     const onDisconnect = () => {
       console.warn('[BLE] remote disconnect detected');
+      if (Platform.OS === 'android') stopForegroundService();
       stopPolling();
       vescBle.canId = undefined;
       set({
@@ -197,6 +201,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
         await vescBle.connect(id, onPacket, onDisconnect);
         set({ status: 'connected', connectedId: id });
         startPolling();
+        if (Platform.OS === 'android') startForegroundService();
         return;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -211,6 +216,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   async disconnect() {
+    if (Platform.OS === 'android') stopForegroundService();
     if (virtualCleanup !== null) {
       virtualCleanup();
       virtualCleanup = null;
@@ -231,3 +237,11 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     });
   },
 }));
+
+// When the user taps "Disconnect" in the foreground service notification,
+// run the full disconnect flow so the store state stays consistent.
+if (Platform.OS === 'android') {
+  addStopRequestedListener(() => {
+    useBleStore.getState().disconnect();
+  });
+}
