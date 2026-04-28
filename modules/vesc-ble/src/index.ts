@@ -135,6 +135,8 @@ interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) =
 type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   scan(): void
   stopScan(): void
+  startLocationUpdates(): void
+  stopLocationUpdates(): void
   startSession(options: StartSessionOptions): Promise<void>
   stopSession(): Promise<void>
   getSessionState(): SessionStateEvent
@@ -158,6 +160,16 @@ export function scan(): void {
 /** Stop ongoing BLE scan. */
 export function stopScan(): void {
   native.stopScan()
+}
+
+/** Start app-level Android location updates independently of a board session. */
+export function startLocationUpdates(): void {
+  native.startLocationUpdates()
+}
+
+/** Stop app-level Android location updates. Board sessions manage their own recording location. */
+export function stopLocationUpdates(): void {
+  native.stopLocationUpdates()
 }
 
 /** Start a native Android BLE/replay session. The service owns polling and notification updates. */

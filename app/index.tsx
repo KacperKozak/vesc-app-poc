@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import PagerView from 'react-native-pager-view'
 
 import { useBoardStore } from '@/src/store/boardStore'
+import { useBleStore } from '@/src/store/bleStore'
+import { usePermissions } from '@/src/ble/usePermissions'
 import { HistoryScreen } from '@/src/screens/HistoryScreen'
 import { CenterScreen } from '@/src/screens/CenterScreen'
 import { MapScreen } from '@/src/screens/MapScreen'
@@ -14,10 +16,20 @@ export default function MainScreen() {
   const [page, setPage] = useState(1)
   const pagerRef = useRef<PagerView>(null)
   const load = useBoardStore((s) => s.load)
+  const startGpsTracking = useBleStore((s) => s.startGpsTracking)
+  const { status: permStatus, request } = usePermissions()
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    void request()
+  }, [request])
+
+  useEffect(() => {
+    if (permStatus === 'granted') startGpsTracking()
+  }, [permStatus, startGpsTracking])
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

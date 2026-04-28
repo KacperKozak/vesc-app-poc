@@ -7,9 +7,14 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -17,13 +22,19 @@ import expo.modules.kotlin.modules.ModuleDefinition
 private const val TAG = "VescBle"
 private const val DEFAULT_BOARD_NAME = "VESC Board"
 private const val NUS_SERVICE_UUID_STRING = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+private const val MAX_RECORDING_ACCURACY_M = 20.0
 private val VESC_NAME_PREFIXES = listOf("vesc", "float wheel", "floatwheel", "onewheel")
 
 @SuppressLint("MissingPermission") // permissions are requested at the JS/RN layer
 class VescBleModule : Module() {
   private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
   private var scanCallback: ScanCallback? = null
+  private var locationManager: LocationManager? = null
   private val mainHandler = Handler(Looper.getMainLooper())
+
+  private val locationListener = LocationListener { location ->
+    sendLocation(location)
+  }
 
   private val context: Context get() = appContext.reactContext
     ?: throw IllegalStateException("No React context")
@@ -51,6 +62,8 @@ class VescBleModule : Module() {
 
     Function("scan") { startScan() }
     Function("stopScan") { stopScanInternal() }
+    Function("startLocationUpdates") { startLocationUpdates() }
+    Function("stopLocationUpdates") { stopLocationUpdates() }
     Function("getSessionState") {
       VescForegroundService.currentState()
     }
@@ -131,6 +144,60 @@ class VescBleModule : Module() {
     scanner?.stopScan(scanCallback)
     scanner = null
     scanCallback = null
+  }
+
+  private fun startLocationUpdates() {
+    val hasFine = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+      PackageManager.PERMISSION_GRANTED
+    if (!hasFine) {
+      sendEvent("onError", mapOf("message" to "Location permission not granted"))
+      return
+    }
+    val lm = (context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager) ?: return
+    if (locationManager != null) return
+    locationManager = lm
+    try {
+      lm.requestLocationUpdates(
+        LocationManager.GPS_PROVIDER,
+        1000L,
+        0f,
+        locationListener,
+        Looper.getMainLooper(),
+      )
+      lm.requestLocationUpdates(
+        LocationManager.NETWORK_PROVIDER,
+        2000L,
+        0f,
+        locationListener,
+        Looper.getMainLooper(),
+      )
+    } catch (e: Exception) {
+      Log.w(TAG, "Location updates failed: ${e.message}")
+    }
+  }
+
+  private fun stopLocationUpdates() {
+    val lm = locationManager ?: return
+    try {
+      lm.removeUpdates(locationListener)
+    } catch (_: Exception) {
+    }
+    locationManager = null
+  }
+
+  private fun sendLocation(location: Location) {
+    val precise = location.hasAccuracy() && location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
+    sendEvent("onLocation", mapOf(
+      "latitude" to location.latitude,
+      "longitude" to location.longitude,
+      "speedMps" to if (location.hasSpeed()) location.speed.toDouble() else null,
+      "bearingDeg" to if (location.hasBearing()) location.bearing.toDouble() else null,
+      "accuracyM" to if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+      "altitudeM" to if (location.hasAltitude()) location.altitude else null,
+      "timestamp" to location.time,
+      "precise" to precise,
+      "saved" to false,
+    ))
   }
 
   private fun startSession(options: Map<String, Any?>, promise: Promise?) {

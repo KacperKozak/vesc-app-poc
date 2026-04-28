@@ -3,6 +3,8 @@ import type { EventSubscription } from 'expo-modules-core'
 import {
   scan as nativeScan,
   stopScan as nativeStopScan,
+  startLocationUpdates as nativeStartLocationUpdates,
+  stopLocationUpdates as nativeStopLocationUpdates,
   startSession,
   stopSession,
   listRecordings as nativeListRecordings,
@@ -58,6 +60,8 @@ interface BleActions {
   loadRecordings: () => Promise<void>
   deleteRecording: (recording: RecordingInfo) => Promise<void>
   exportRecording: (recording: RecordingInfo) => Promise<string>
+  startGpsTracking: () => void
+  stopGpsTracking: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +70,7 @@ interface BleActions {
 
 let telemetrySub: EventSubscription | null = null
 let sessionSub: EventSubscription | null = null
-let locationSub: EventSubscription | null = null
+let gpsSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 const DEFAULT_BOARD_NAME = 'VESC Board'
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
@@ -76,8 +80,6 @@ function removeSessionSubscriptions(): void {
   telemetrySub = null
   sessionSub?.remove()
   sessionSub = null
-  locationSub?.remove()
-  locationSub = null
 }
 
 function friendlyDeviceName(id: string, name?: string): string {
@@ -146,16 +148,12 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       sessionMode: 'ble',
       connectedId: null,
       refloatValues: null,
-      gpsFix: null,
       error: undefined,
       lastPacketAt: null,
       avgLatency: null,
     })
 
     removeSessionSubscriptions()
-    locationSub = addLocationListener((location) => {
-      set({ gpsFix: location })
-    })
     telemetrySub = addTelemetryListener((telemetry) => {
       const {
         avgLatency,
@@ -166,7 +164,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       } = telemetry
       set((s) => ({
         refloatValues: refloatValues as RefloatValues,
-        gpsFix: location ?? null,
+        ...(location ? { gpsFix: location } : {}),
         lastPacketAt,
         avgLatency,
         rxCount: s.rxCount + 1,
@@ -207,16 +205,12 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       sessionMode: 'replay',
       connectedId: recording.path,
       refloatValues: null,
-      gpsFix: null,
       error: undefined,
       lastPacketAt: null,
       avgLatency: null,
     })
 
     removeSessionSubscriptions()
-    locationSub = addLocationListener((location) => {
-      set({ gpsFix: location })
-    })
     telemetrySub = addTelemetryListener((telemetry) => {
       const {
         avgLatency,
@@ -227,7 +221,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       } = telemetry
       set((s) => ({
         refloatValues: refloatValues as RefloatValues,
-        gpsFix: location ?? null,
+        ...(location ? { gpsFix: location } : {}),
         lastPacketAt,
         avgLatency,
         rxCount: s.rxCount + 1,
@@ -265,7 +259,6 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       sessionMode: null,
       connectedId: null,
       refloatValues: null,
-      gpsFix: null,
       error: undefined,
       rxCount: 0,
       lastPacketAt: null,
@@ -289,5 +282,21 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
 
   async exportRecording(recording: RecordingInfo) {
     return nativeExportRecording(recording.path)
+  },
+
+  startGpsTracking() {
+    if (!gpsSub) {
+      gpsSub = addLocationListener((location) => {
+        set({ gpsFix: location })
+      })
+    }
+    nativeStartLocationUpdates()
+  },
+
+  stopGpsTracking() {
+    nativeStopLocationUpdates()
+    gpsSub?.remove()
+    gpsSub = null
+    set({ gpsFix: null })
   },
 }))

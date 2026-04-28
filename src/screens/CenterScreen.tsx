@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { router } from 'expo-router'
 
 import { useBoardStore } from '@/src/store/boardStore'
@@ -142,8 +142,6 @@ export function CenterScreen() {
     void replayRecording(recording)
   }
 
-  const isConnected = bleStatus === 'connected' || bleStatus === 'connecting'
-
   return (
     <View style={styles.container}>
       <View style={styles.selectorBar}>
@@ -153,78 +151,74 @@ export function CenterScreen() {
           </Text>
           <Text style={styles.selectorChevron}>▾</Text>
         </TouchableOpacity>
-        {bleStatus === 'connected' && <GpsStatusBadge />}
+        <GpsStatusBadge />
         <StatusPill status={bleStatus} />
         <BoardMenu items={menuItems} />
       </View>
 
-      {isConnected ? (
-        <TelemetryView />
+      {activeBoard?.bleId || bleStatus === 'connected' || bleStatus === 'connecting' ? (
+        <View style={styles.telemetryShell}>
+          {activeBoard && bleStatus === 'scanning' && (
+            <View style={styles.connectionBar}>
+              <Text style={styles.connectionText}>Searching for {activeBoard.name}</Text>
+              <TouchableOpacity
+                style={styles.connectionButton}
+                onPress={() => {
+                  setScanEnabled(false)
+                  stopScan()
+                }}
+              >
+                <Text style={styles.connectionButtonText}>Stop</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {activeBoard && bleStatus === 'idle' && activeBoard.bleId && (
+            <View style={styles.connectionBar}>
+              <Text style={styles.connectionText}>Board not connected</Text>
+              <TouchableOpacity
+                style={styles.connectionButton}
+                onPress={() => {
+                  setScanEnabled(true)
+                  startScan()
+                }}
+              >
+                <Text style={styles.connectionButtonText}>Connect</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {activeBoard && bleStatus === 'error' && activeBoard.bleId && (
+            <View style={styles.connectionBar}>
+              <Text style={styles.connectionText}>Connection failed</Text>
+              <TouchableOpacity
+                style={styles.connectionButton}
+                onPress={() => {
+                  setScanEnabled(true)
+                  startScan()
+                }}
+              >
+                <Text style={styles.connectionButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <TelemetryView />
+        </View>
       ) : (
         <View style={styles.body}>
           {activeBoard ? (
             <>
-              {bleStatus === 'scanning' ? (
-                <>
-                  <ActivityIndicator color="#facc15" />
-                  <Text style={styles.bodyTitle}>Searching for {activeBoard.name}…</Text>
-                  <TouchableOpacity
-                    style={styles.scanStopButton}
-                    onPress={() => {
-                      setScanEnabled(false)
-                      stopScan()
-                    }}
-                  >
-                    <Text style={styles.scanStopText}>Stop</Text>
-                  </TouchableOpacity>
-                </>
-              ) : bleStatus === 'error' ? (
-                <>
-                  <Text style={styles.bodyTitle}>Connection failed</Text>
-                  <Text style={styles.bodySubtitle}>
-                    Make sure your board is powered on and in range
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.scanButton}
-                    onPress={() => {
-                      setScanEnabled(true)
-                      startScan()
-                    }}
-                  >
-                    <Text style={styles.scanButtonText}>Connect</Text>
-                  </TouchableOpacity>
-                </>
-              ) : activeBoard.bleId ? (
-                <>
-                  <Text style={styles.bodyTitle}>{activeBoard.name}</Text>
-                  <Text style={styles.bodySubtitle}>Board not connected</Text>
-                  <TouchableOpacity
-                    style={styles.scanButton}
-                    onPress={() => {
-                      setScanEnabled(true)
-                      startScan()
-                    }}
-                  >
-                    <Text style={styles.scanButtonText}>Connect</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.bodyTitle}>{activeBoard.name}</Text>
-                  <Text style={styles.bodySubtitle}>No device paired</Text>
-                  <TouchableOpacity
-                    style={styles.scanStopButton}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/add-board/details',
-                        params: { boardId: activeBoard.id },
-                      })
-                    }
-                  >
-                    <Text style={styles.scanStopText}>Open Settings</Text>
-                  </TouchableOpacity>
-                </>
-              )}
+              <Text style={styles.bodyTitle}>{activeBoard.name}</Text>
+              <Text style={styles.bodySubtitle}>No device paired</Text>
+              <TouchableOpacity
+                style={styles.scanStopButton}
+                onPress={() =>
+                  router.push({
+                    pathname: '/add-board/details',
+                    params: { boardId: activeBoard.id },
+                  })
+                }
+              >
+                <Text style={styles.scanStopText}>Open Settings</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <>
@@ -279,6 +273,28 @@ const styles = StyleSheet.create({
   selector: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   selectorText: { flex: 1, color: '#f9fafb', fontSize: 16, fontWeight: '600' },
   selectorChevron: { color: '#6b7280', fontSize: 16 },
+  telemetryShell: { flex: 1 },
+  connectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#1f2937',
+    gap: 12,
+  },
+  connectionText: { flex: 1, color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  connectionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+  },
+  connectionButtonText: { color: '#f9fafb', fontSize: 13, fontWeight: '700' },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 12 },
   bodyTitle: { color: '#9ca3af', fontSize: 16, textAlign: 'center' },
   bodySubtitle: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
@@ -290,14 +306,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   addButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  scanButton: {
-    marginTop: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    backgroundColor: '#3b82f6',
-    borderRadius: 10,
-  },
-  scanButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   scanStopButton: {
     marginTop: 8,
     paddingVertical: 10,
