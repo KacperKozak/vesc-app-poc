@@ -12,6 +12,7 @@ import {
   addSessionStateListener,
   addTelemetryListener,
   type RecordingInfo,
+  type SessionMode,
 } from 'vesc-ble'
 import { type RefloatValues } from '../vesc/types'
 
@@ -22,11 +23,13 @@ export interface ScannedDevice {
 }
 
 export type { RecordingInfo }
+export type { SessionMode }
 
 export type BleStatus = 'idle' | 'scanning' | 'connecting' | 'connected' | 'error'
 
 interface BleState {
   status: BleStatus
+  sessionMode: SessionMode | null
   devices: ScannedDevice[]
   connectedId: string | null
   refloatValues: RefloatValues | null
@@ -83,6 +86,7 @@ function friendlyDeviceName(id: string, name?: string): string {
 export const useBleStore = create<BleState & BleActions>((set, get) => ({
   // ---- state ----
   status: 'idle',
+  sessionMode: null,
   devices: [],
   connectedId: null,
   refloatValues: null,
@@ -131,6 +135,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     stopScan()
     set({
       status: 'connecting',
+      sessionMode: 'ble',
       connectedId: null,
       refloatValues: null,
       error: undefined,
@@ -151,6 +156,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     sessionSub = addSessionStateListener((session) => {
       set({
         status: session.status === 'error' ? 'error' : session.status,
+        sessionMode: session.mode,
         connectedId: session.deviceId,
         error: session.error ?? undefined,
       })
@@ -167,10 +173,10 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
         pollIntervalMs: 500,
         recordingEnabled: get().recordDebugSession,
       })
-      set({ status: 'connected', connectedId: id })
+      set({ status: 'connected', sessionMode: 'ble', connectedId: id })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      set({ status: 'error', error: msg })
+      set({ status: 'error', sessionMode: 'ble', error: msg })
     }
   },
 
@@ -179,6 +185,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     stopScan()
     set({
       status: 'connecting',
+      sessionMode: 'replay',
       connectedId: recording.path,
       refloatValues: null,
       error: undefined,
@@ -199,6 +206,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     sessionSub = addSessionStateListener((session) => {
       set({
         status: session.status === 'error' ? 'error' : session.status,
+        sessionMode: session.mode ?? 'replay',
         connectedId: session.deviceId ?? recording.path,
         error: session.error ?? undefined,
       })
@@ -211,10 +219,10 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
         recordingPath: recording.path,
         pollIntervalMs: 500,
       })
-      set({ status: 'connected', connectedId: recording.path })
+      set({ status: 'connected', sessionMode: 'replay', connectedId: recording.path })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      set({ status: 'error', error: msg })
+      set({ status: 'error', sessionMode: 'replay', error: msg })
     }
   },
 
@@ -224,6 +232,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     await get().loadRecordings()
     set({
       status: 'idle',
+      sessionMode: null,
       connectedId: null,
       refloatValues: null,
       error: undefined,
