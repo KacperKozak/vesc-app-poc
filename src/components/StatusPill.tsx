@@ -40,6 +40,18 @@ export function StatusPill({ status, style }: { status: string; style?: ViewStyl
       : avgLatency < 400
         ? '#fbbf24'
         : '#ef4444'
+  const connectedNeedsText = status === 'connected' && (isStale || (avgLatency ?? 0) >= 400)
+
+  if (status === 'connected' && !connectedNeedsText) {
+    return (
+      <View style={[styles.connectedPill, { backgroundColor: COLORS.connected.bg }, style]}>
+        <Animated.View style={[styles.dot, { backgroundColor: dotColor, opacity: pulseOpacity }]} />
+        {avgLatency != null && (
+          <Text style={[styles.latency, { color: dotColor }]}>{avgLatency}ms</Text>
+        )}
+      </View>
+    )
+  }
 
   return (
     <View style={[styles.pill, { backgroundColor: c.bg }, style]}>
@@ -53,8 +65,44 @@ export function StatusPill({ status, style }: { status: string; style?: ViewStyl
         <Text style={[styles.latency, { color: dotColor }]}>{avgLatency}ms</Text>
       )}
       <Text style={[styles.label, { color: c.text }]}>
-        {status === 'scanning' ? 'SEARCHING' : status.toUpperCase()}
+        {status === 'connected' && isStale
+          ? 'STALE'
+          : status === 'connected'
+            ? 'SLOW'
+            : status === 'scanning'
+              ? 'SEARCHING'
+              : status.toUpperCase()}
       </Text>
+    </View>
+  )
+}
+
+export function GpsStatusBadge({ style }: { style?: ViewStyle }) {
+  const gpsFix = useBleStore((s) => s.gpsFix)
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const ageSec = gpsFix ? Math.max(0, (now - gpsFix.timestamp) / 1000) : null
+  const isStale = ageSec != null && ageSec > 5
+  const isRejected = !!gpsFix && !gpsFix.precise
+  const bg = !gpsFix ? '#1f2937' : isRejected ? '#7f1d1d' : isStale ? '#422006' : '#14532d'
+  const color = !gpsFix ? '#9ca3af' : isRejected ? '#f87171' : isStale ? '#facc15' : '#4ade80'
+  const label = !gpsFix
+    ? 'GPS'
+    : isRejected && gpsFix.accuracyM != null
+      ? `GPS ±${gpsFix.accuracyM.toFixed(0)}m`
+      : isStale
+        ? `GPS ${ageSec.toFixed(0)}s`
+        : 'GPS'
+
+  return (
+    <View style={[styles.gpsPill, { backgroundColor: bg }, style]}>
+      <View style={[styles.dot, { backgroundColor: color }]} />
+      <Text style={[styles.gpsLabel, { color }]}>{label}</Text>
     </View>
   )
 }
@@ -68,8 +116,28 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 5,
   },
+  connectedPill: {
+    minWidth: 42,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  gpsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 72,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 14,
+    gap: 4,
+  },
   spinner: { transform: [{ scale: 0.7 }] },
   dot: { width: 7, height: 7, borderRadius: 4 },
   latency: { fontSize: 10, fontWeight: '600', fontFamily: 'monospace' },
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  gpsLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 })

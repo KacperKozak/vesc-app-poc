@@ -14,7 +14,6 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="device/[id]" options={{ title: 'Telemetry' }} />
         <Stack.Screen name="add-board/scan" options={{ title: 'Add Board' }} />
         <Stack.Screen name="add-board/details" options={{ title: 'Board Details' }} />
       </Stack>

@@ -7,7 +7,7 @@ import { useBleStore } from '@/src/store/bleStore'
 import { usePermissions } from '@/src/ble/usePermissions'
 import { BoardMenu, type BoardMenuItem } from '@/src/components/BoardMenu'
 import { BoardSelectorSheet } from '@/src/components/BoardSelectorSheet'
-import { StatusPill } from '@/src/components/StatusPill'
+import { GpsStatusBadge, StatusPill } from '@/src/components/StatusPill'
 import { TelemetryView } from '@/src/components/TelemetryView'
 import type { RecordingInfo } from '@/src/store/bleStore'
 
@@ -153,6 +153,7 @@ export function CenterScreen() {
           </Text>
           <Text style={styles.selectorChevron}>▾</Text>
         </TouchableOpacity>
+        {bleStatus === 'connected' && <GpsStatusBadge />}
         <StatusPill status={bleStatus} />
         <BoardMenu items={menuItems} />
       </View>
