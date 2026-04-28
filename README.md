@@ -1,50 +1,106 @@
-# Welcome to your Expo app 👋
+# VESC PoC
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Mobile telemetry proof of concept for VESC-based boards over BLE.
 
-## Get started
+The app scans for nearby VESC BLE devices, connects over the Nordic UART
+Service, discovers the motor controller on CAN, and polls Refloat telemetry for
+live riding, electrical, and thermal values.
 
-1. Install dependencies
+## Supported Hardware
 
-   ```bash
-   npm install
-   ```
+- Floatwheel ADV2
+- Thor 301 controller
 
-2. Start the app
+Current development targets Android. iOS has a native module stub only.
 
-   ```bash
-   npx expo start
-   ```
+## Stack
 
-In the output, you'll find options to open the app in a
+- Expo SDK 54
+- React Native 0.81
+- Expo Router
+- TypeScript
+- Zustand
+- NativeWind
+- Bun
+- Custom Expo native module for BLE: `modules/vesc-ble`
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## How It Works
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+Phone
+  -> BLE / Nordic UART Service
+  -> VESC BLE bridge
+  -> CAN bus
+  -> VESC motor controller
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+On connect, the app:
 
-## Learn more
+1. Enables BLE notifications.
+2. Sends `COMM_FW_VERSION` to verify the notification path.
+3. Sends `COMM_PING_CAN` to discover the motor controller CAN ID.
+4. Polls Refloat `COMMAND_GET_ALLDATA` every 500 ms.
+5. Parses responses into telemetry shown on the device screen.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Features
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- BLE scan and connect flow
+- Android foreground service while connected
+- CAN forwarding for controller commands
+- Refloat `GET_ALLDATA` parsing
+- Live speed, pitch, roll, voltage, current, duty cycle, temperature, fault, and
+  distance telemetry
+- Virtual board simulator for development without hardware
 
-## Join the community
+## Project Layout
 
-Join our community of developers creating universal apps.
+```text
+app/                         Expo Router screens
+app/index.tsx                BLE scan screen
+app/device/[id].tsx          Telemetry screen
+src/ble/manager.ts           BLE scan/connect/send/disconnect wrapper
+src/store/bleStore.ts        Zustand BLE state and polling
+src/vesc/                    VESC packet, command, CRC, and parser code
+src/simulator/virtualBoard.ts Virtual telemetry source
+modules/vesc-ble/            Custom Expo native BLE module
+docs/                        Protocol and architecture notes
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Development
+
+Install dependencies:
+
+```bash
+bun install
+```
+
+Start Expo:
+
+```bash
+bun run start
+```
+
+Run on Android:
+
+```bash
+bun run android
+```
+
+Run tests:
+
+```bash
+bun test
+```
+
+Type-check:
+
+```bash
+bun run ts
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [VESC protocol](docs/vesc-protocol.md)
+- [Refloat GET_ALLDATA layout](docs/refloat-alldata.md)
+- [Android BLE notes](docs/ble-android.md)
