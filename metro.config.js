@@ -3,4 +3,6 @@ const { withNativeWind } = require('nativewind/metro')
 
 const config = getDefaultConfig(__dirname)
 
-module.exports = withNativeWind(config, { input: './global.css' })
+config.resolver.blockList = [/.*\.test\.[jt]sx?$/, /.*\/__tests__\/.*/]
+
+module.exports = withNativeWind(config, { input: './src/global.css' })

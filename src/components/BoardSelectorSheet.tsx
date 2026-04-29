@@ -9,8 +9,8 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import type { Board } from '@/src/db/boards'
-import type { RecordingInfo } from '@/src/store/bleStore'
+import type { Board } from '@/db/boards'
+import type { RecordingInfo } from '@/store/bleStore'
 
 export function BoardSelectorSheet({
   visible,

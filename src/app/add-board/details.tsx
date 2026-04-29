@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams, useNavigation } from 'expo-router'
 
-import { useBoardStore } from '@/src/store/boardStore'
+import { useBoardStore } from '@/store/boardStore'
 
 export default function BoardDetailsScreen() {
   const { bleId, bleName, boardId } = useLocalSearchParams<{

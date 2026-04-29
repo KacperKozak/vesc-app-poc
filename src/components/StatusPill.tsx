@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, ActivityIndicator, Animated, StyleSheet, type ViewStyle } from 'react-native'
 import { Lightning, NavigationArrow, WarningCircle } from 'phosphor-react-native'
-import { useBleStore } from '@/src/store/bleStore'
+import { useBleStore } from '@/store/bleStore'
 
 const COLORS: Record<string, { bg: string; text: string }> = {
   connected: { bg: '#14532d', text: '#4ade80' },

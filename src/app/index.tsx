@@ -5,12 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import PagerView from 'react-native-pager-view'
 import { ClockCounterClockwise, Lightning, MapPin } from 'phosphor-react-native'
 
-import { useBoardStore } from '@/src/store/boardStore'
-import { useBleStore } from '@/src/store/bleStore'
-import { usePermissions } from '@/src/ble/usePermissions'
-import { HistoryScreen } from '@/src/screens/HistoryScreen'
-import { CenterScreen } from '@/src/screens/CenterScreen'
-import { MapScreen } from '@/src/screens/MapScreen'
+import { useBoardStore } from '@/store/boardStore'
+import { useBleStore } from '@/store/bleStore'
+import { usePermissions } from '@/ble/usePermissions'
+import { HistoryScreen } from '@/screens/HistoryScreen'
+import { CenterScreen } from '@/screens/CenterScreen'
+import { MapScreen } from '@/screens/MapScreen'
 
 const TABS = [
   { label: 'History', Icon: ClockCounterClockwise },

@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, Pressable } from 'react-native'
 import MapView, { Circle, Marker, UrlTile, type Region } from 'react-native-maps'
 import { ArrowUp, Crosshair, CrosshairSimple, X } from 'phosphor-react-native'
-import { useBleStore } from '@/src/store/bleStore'
-import { useMapStore } from '@/src/store/mapStore'
-import { GOOGLE_MAPS_API_KEY, MAPY_TILE_URL_TEMPLATE } from '@/src/config/mapy'
+import { useBleStore } from '@/store/bleStore'
+import { useMapStore } from '@/store/mapStore'
+import { GOOGLE_MAPS_API_KEY, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
 
 export function MapScreen() {
   const gpsFix = useBleStore((s) => s.gpsFix)

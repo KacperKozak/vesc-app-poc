@@ -3,10 +3,10 @@ import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet }
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 
-import { useBleStore } from '@/src/store/bleStore'
-import { usePermissions } from '@/src/ble/usePermissions'
-import { DeviceRow } from '@/src/components/DeviceRow'
-import type { ScannedDevice } from '@/src/store/bleStore'
+import { useBleStore } from '@/store/bleStore'
+import { usePermissions } from '@/ble/usePermissions'
+import { DeviceRow } from '@/components/DeviceRow'
+import type { ScannedDevice } from '@/store/bleStore'
 
 export default function AddBoardScanScreen() {
   const { boardId } = useLocalSearchParams<{ boardId?: string }>()

@@ -3,14 +3,14 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { router } from 'expo-router'
 import { CaretDown, PencilSimple, Power, Star, Trash } from 'phosphor-react-native'
 
-import { useBoardStore } from '@/src/store/boardStore'
-import { useBleStore } from '@/src/store/bleStore'
-import { usePermissions } from '@/src/ble/usePermissions'
-import { BoardMenu, type BoardMenuItem } from '@/src/components/BoardMenu'
-import { BoardSelectorSheet } from '@/src/components/BoardSelectorSheet'
-import { GpsStatusBadge, StatusPill } from '@/src/components/StatusPill'
-import { TelemetryView } from '@/src/components/TelemetryView'
-import type { RecordingInfo } from '@/src/store/bleStore'
+import { useBoardStore } from '@/store/boardStore'
+import { useBleStore } from '@/store/bleStore'
+import { usePermissions } from '@/ble/usePermissions'
+import { BoardMenu, type BoardMenuItem } from '@/components/BoardMenu'
+import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
+import { GpsStatusBadge, StatusPill } from '@/components/StatusPill'
+import { TelemetryView } from '@/components/TelemetryView'
+import type { RecordingInfo } from '@/store/bleStore'
 
 export function CenterScreen() {
   const { boards, activeBoardId, setActiveBoard, starBoard } = useBoardStore()

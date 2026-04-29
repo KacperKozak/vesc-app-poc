@@ -1,12 +1,12 @@
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
 import { Lightning } from 'phosphor-react-native'
-import { useBleStore } from '@/src/store/bleStore'
-import { useMapStore } from '@/src/store/mapStore'
+import { useBleStore } from '@/store/bleStore'
+import { useMapStore } from '@/store/mapStore'
 import { TelemetryCard } from './TelemetryCard'
-import { FAULT_NAMES } from '@/src/vesc/types'
-import { REFLOAT_STATE_NAMES } from '@/src/vesc/refloat'
-import { fmt, fmtSpeed, fmtKm } from '@/src/helpers/format'
-import { haversineM, bearingTo, clockHour, fmtDistance } from '@/src/helpers/geo'
+import { FAULT_NAMES } from '@/vesc/types'
+import { REFLOAT_STATE_NAMES } from '@/vesc/refloat'
+import { fmt, fmtSpeed, fmtKm } from '@/helpers/format'
+import { haversineM, bearingTo, clockHour, fmtDistance } from '@/helpers/geo'
 
 export function TelemetryView() {
   const { refloatValues: v, status, gpsFix } = useBleStore()
