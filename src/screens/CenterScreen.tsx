@@ -1,246 +1,39 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
+import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
-import { CaretDown, PencilSimple, Power, Star, Trash } from 'phosphor-react-native'
-import { useShallow } from 'zustand/react/shallow'
 
-import { useBoardStore } from '@/store/boardStore'
-import { useBleStore } from '@/store/bleStore'
-import { usePermissions } from '@/ble/usePermissions'
-import { BoardMenu, type BoardMenuItem } from '@/components/BoardMenu'
-import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
-import { GpsStatusBadge, StatusPill } from '@/components/StatusPill'
 import { TelemetryView } from '@/components/TelemetryView'
 import { routes } from '@/navigation/routes'
+import type { Board } from '@/db/boards'
 import type { RecordingInfo } from '@/store/bleStore'
 
-export function CenterScreen() {
-  const { boards, activeBoardId, setActiveBoard, starBoard } = useBoardStore(
-    useShallow((s) => ({
-      boards: s.boards,
-      activeBoardId: s.activeBoardId,
-      setActiveBoard: s.setActiveBoard,
-      starBoard: s.starBoard,
-    })),
-  )
-  const {
-    status: bleStatus,
-    sessionMode,
-    devices,
-    recordings,
-    connectedId,
-    recordDebugSession,
-    loadRecordings,
-    startScan,
-    stopScan,
-    connect,
-    disconnect,
-    replayRecording,
-    deleteRecording,
-    setRecordDebugSession,
-  } = useBleStore(
-    useShallow((s) => ({
-      status: s.status,
-      sessionMode: s.sessionMode,
-      devices: s.devices,
-      recordings: s.recordings,
-      connectedId: s.connectedId,
-      recordDebugSession: s.recordDebugSession,
-      loadRecordings: s.loadRecordings,
-      startScan: s.startScan,
-      stopScan: s.stopScan,
-      connect: s.connect,
-      disconnect: s.disconnect,
-      replayRecording: s.replayRecording,
-      deleteRecording: s.deleteRecording,
-      setRecordDebugSession: s.setRecordDebugSession,
-    })),
-  )
-  const { status: permStatus, request } = usePermissions()
-  const [selectorOpen, setSelectorOpen] = useState(false)
-  const [scanEnabled, setScanEnabled] = useState(true)
-  const connectingRef = useRef(false)
+interface CenterScreenProps {
+  bleStatus: string
+  activeBoard: Board | undefined
+  activeReplay: RecordingInfo | undefined
+  onStopScan: () => void
+  onRetryConnect: () => void
+}
 
-  const activeBoard = boards.find((b) => b.id === activeBoardId)
-  const activeReplay =
-    sessionMode === 'replay' && connectedId
-      ? recordings.find((r) => r.path === connectedId)
-      : undefined
-  const replayBoardName = activeReplay
-    ? `${activeReplay.deviceName} (${new Date(activeReplay.startedAt).toLocaleString()})`
-    : null
+export function CenterScreen({
+  bleStatus,
+  activeBoard,
+  activeReplay,
+  onStopScan,
+  onRetryConnect,
+}: CenterScreenProps) {
+  const showTelemetry =
+    !!activeBoard?.bleId || bleStatus === 'connected' || bleStatus === 'connecting'
 
-  useEffect(() => {
-    void request()
-  }, [request])
-
-  // Start scanning whenever intent + conditions align.
-  // bleStatus in deps restarts after external stopScan calls (e.g. addBoard screen),
-  // but scanEnabled gates it so manual Stop/Disconnect don't auto-restart.
-  useEffect(() => {
-    if (!scanEnabled) return
-    if (permStatus !== 'granted') return
-    if (!activeBoard?.bleId) return
-    if (bleStatus !== 'idle') return
-    connectingRef.current = false
-    startScan()
-  }, [scanEnabled, permStatus, activeBoard?.bleId, bleStatus, startScan])
-
-  // Reset intent and clean up when the active board changes or on unmount.
-  useEffect(() => {
-    setScanEnabled(true)
-    connectingRef.current = false
-    return () => {
-      stopScan()
-      void disconnect()
-    }
-  }, [activeBoardId, disconnect, stopScan])
-
-  // Auto-connect when the active board appears in scan results.
-  useEffect(() => {
-    if (!activeBoard?.bleId) return
-    if (bleStatus !== 'scanning') return
-    if (connectingRef.current) return
-    const match = devices.find((d) => d.id === activeBoard.bleId)
-    if (!match) return
-    connectingRef.current = true
-    stopScan()
-    void connect(match.id, activeBoard.name)
-  }, [activeBoard?.bleId, activeBoard?.name, bleStatus, connect, devices, stopScan])
-
-  useEffect(() => {
-    void loadRecordings()
-  }, [loadRecordings])
-
-  const menuItems = useMemo<BoardMenuItem[]>(() => {
-    const items: BoardMenuItem[] = []
-    if (activeBoard && !activeReplay) {
-      items.push({
-        label: 'Edit Board',
-        icon: PencilSimple,
-        onPress: () =>
-          router.push({ pathname: routes.addBoardDetails, params: { boardId: activeBoard.id } }),
-      })
-    }
-    if (activeBoard && !activeBoard.isStarred && !activeReplay) {
-      items.push({
-        label: 'Make main',
-        icon: Star,
-        onPress: () => starBoard(activeBoard.id),
-      })
-    }
-    if (bleStatus === 'connected' || bleStatus === 'connecting') {
-      items.push({
-        label: activeReplay ? 'Stop' : 'Disconnect',
-        icon: Power,
-        onPress: () => {
-          setScanEnabled(false)
-          void disconnect()
-        },
-      })
-      if (activeReplay) {
-        items.push({
-          label: 'Remove recording',
-          icon: Trash,
-          destructive: true,
-          onPress: () =>
-            Alert.alert(
-              'Remove Recording',
-              `Remove "${activeReplay.fileName}"? This cannot be undone.`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Remove',
-                  style: 'destructive',
-                  onPress: () => {
-                    void disconnect().then(() => deleteRecording(activeReplay))
-                  },
-                },
-              ],
-            ),
-        })
-      }
-    }
-    return items
-  }, [activeBoard, activeReplay, bleStatus, deleteRecording, disconnect, starBoard])
-
-  const handleReplay = (recording: RecordingInfo) => {
-    setScanEnabled(false)
-    void replayRecording(recording)
-  }
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.selectorBar}>
-        <Pressable style={styles.selector} onPress={() => setSelectorOpen(true)}>
-          <Text style={styles.selectorText} numberOfLines={1}>
-            {replayBoardName ?? activeBoard?.name ?? 'No board selected'}
-          </Text>
-          <CaretDown size={14} color="#9ca3af" weight="bold" />
-        </Pressable>
-        <GpsStatusBadge />
-        <StatusPill status={bleStatus} />
-        <BoardMenu items={menuItems} />
-      </View>
-
-      {activeBoard?.bleId || bleStatus === 'connected' || bleStatus === 'connecting' ? (
-        <View style={styles.telemetryShell}>
-          <TelemetryView />
-          {activeBoard && bleStatus === 'scanning' && (
-            <View style={[styles.connectionBar, styles.connectionBarScanning]}>
-              <Text style={[styles.connectionText, styles.connectionTextScanning]}>
-                Searching for {activeBoard.name}
-              </Text>
-              <Pressable
-                style={[styles.connectionButton, styles.connectionButtonScanning]}
-                onPress={() => {
-                  setScanEnabled(false)
-                  stopScan()
-                }}
-              >
-                <Text style={styles.connectionButtonText}>Stop</Text>
-              </Pressable>
-            </View>
-          )}
-          {activeBoard && bleStatus === 'idle' && activeBoard.bleId && (
-            <View style={[styles.connectionBar, styles.connectionBarWarning]}>
-              <Text style={[styles.connectionText, styles.connectionTextWarning]}>
-                Board not connected
-              </Text>
-              <Pressable
-                style={[styles.connectionButton, styles.connectionButtonWarning]}
-                onPress={() => {
-                  setScanEnabled(true)
-                  startScan()
-                }}
-              >
-                <Text style={styles.connectionButtonText}>Connect</Text>
-              </Pressable>
-            </View>
-          )}
-          {activeBoard && bleStatus === 'error' && activeBoard.bleId && (
-            <View style={styles.connectionBar}>
-              <Text style={styles.connectionText}>Connection failed</Text>
-              <Pressable
-                style={styles.connectionButton}
-                onPress={() => {
-                  setScanEnabled(true)
-                  startScan()
-                }}
-              >
-                <Text style={styles.connectionButtonText}>Retry</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-      ) : (
-        <View style={styles.body}>
+  if (!showTelemetry) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.empty}>
           {activeBoard ? (
             <>
-              <Text style={styles.bodyTitle}>{activeBoard.name}</Text>
-              <Text style={styles.bodySubtitle}>No device paired</Text>
+              <Text style={styles.emptyTitle}>{activeBoard.name}</Text>
+              <Text style={styles.emptySubtitle}>No device paired</Text>
               <Pressable
-                style={styles.scanStopButton}
+                style={styles.settingsButton}
                 onPress={() =>
                   router.push({
                     pathname: routes.addBoardDetails,
@@ -248,60 +41,143 @@ export function CenterScreen() {
                   })
                 }
               >
-                <Text style={styles.scanStopText}>Open Settings</Text>
+                <Text style={styles.settingsButtonText}>Open Settings</Text>
               </Pressable>
             </>
           ) : (
             <>
-              <Text style={styles.bodyTitle}>No board added yet</Text>
+              <Text style={styles.emptyTitle}>No board added yet</Text>
               <Pressable style={styles.addButton} onPress={() => router.push(routes.addBoardScan)}>
                 <Text style={styles.addButtonText}>+ Add your first board</Text>
               </Pressable>
             </>
           )}
         </View>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.container}>
+      <TelemetryView />
+
+      {activeBoard && bleStatus === 'scanning' && (
+        <ConnectionBar
+          variant="scanning"
+          text={`Searching for ${activeBoard.name}`}
+          buttonText="Stop"
+          onPress={onStopScan}
+        />
       )}
 
-      <BoardSelectorSheet
-        visible={selectorOpen}
-        boards={boards}
-        activeBoardId={activeBoardId}
-        recordings={recordings}
-        recordDebugSession={recordDebugSession}
-        onClose={() => setSelectorOpen(false)}
-        onSelectBoard={(id) => {
-          setActiveBoard(id)
-          setSelectorOpen(false)
-        }}
-        onAddBoard={() => {
-          setSelectorOpen(false)
-          router.push(routes.addBoardScan)
-        }}
-        onReplay={(recording) => {
-          setSelectorOpen(false)
-          handleReplay(recording)
-        }}
-        onToggleRecordDebug={() => setRecordDebugSession(!recordDebugSession)}
-      />
+      {activeBoard && bleStatus === 'idle' && activeBoard.bleId && (
+        <ConnectionBar
+          variant="warning"
+          text="Board not connected"
+          buttonText="Connect"
+          onPress={onRetryConnect}
+        />
+      )}
+
+      {activeBoard && bleStatus === 'error' && activeBoard.bleId && (
+        <ConnectionBar
+          variant="error"
+          text="Connection failed"
+          buttonText="Retry"
+          onPress={onRetryConnect}
+        />
+      )}
     </View>
   )
 }
 
+function ConnectionBar({
+  variant,
+  text,
+  buttonText,
+  onPress,
+}: {
+  variant: 'scanning' | 'warning' | 'error'
+  text: string
+  buttonText: string
+  onPress: () => void
+}) {
+  return (
+    <View style={[styles.bar, barVariants[variant]]}>
+      <Text style={[styles.barText, textVariants[variant]]}>{text}</Text>
+      <Pressable style={[styles.barButton, buttonVariants[variant]]} onPress={onPress}>
+        <Text style={styles.barButtonText}>{buttonText}</Text>
+      </Pressable>
+    </View>
+  )
+}
+
+const barVariants = StyleSheet.create({
+  scanning: { backgroundColor: '#0c1a2e', borderWidth: 1, borderColor: '#1e40af' },
+  warning: { backgroundColor: '#451a03', borderWidth: 1, borderColor: '#92400e' },
+  error: { backgroundColor: '#1e293b' },
+})
+
+const textVariants = StyleSheet.create({
+  scanning: { color: '#60a5fa' },
+  warning: { color: '#fbbf24' },
+  error: { color: '#94a3b8' },
+})
+
+const buttonVariants = StyleSheet.create({
+  scanning: { backgroundColor: '#1d4ed8' },
+  warning: { backgroundColor: '#b45309' },
+  error: { backgroundColor: '#334155' },
+})
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111827' },
-  selectorBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1f2937',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: '#0f172a',
   },
-  selector: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  selectorText: { flex: 1, color: '#f9fafb', fontSize: 16, fontWeight: '600' },
-  telemetryShell: { flex: 1 },
-  connectionBar: {
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  emptyTitle: {
+    color: '#94a3b8',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  addButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#3b82f6',
+    borderRadius: 10,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  settingsButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  settingsButtonText: {
+    color: '#94a3b8',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  bar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -310,49 +186,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: '#1f2937',
     gap: 12,
   },
-  connectionText: { flex: 1, color: '#9ca3af', fontSize: 13, fontWeight: '600' },
-  connectionBarWarning: {
-    backgroundColor: '#451a03',
-    borderWidth: 1,
-    borderColor: '#92400e',
+  barText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
-  connectionTextWarning: { color: '#fbbf24' },
-  connectionButtonWarning: { backgroundColor: '#b45309' },
-  connectionBarScanning: {
-    backgroundColor: '#0c1a2e',
-    borderWidth: 1,
-    borderColor: '#1e40af',
-  },
-  connectionTextScanning: { color: '#60a5fa' },
-  connectionButtonScanning: { backgroundColor: '#1d4ed8' },
-  connectionButton: {
+  barButton: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: '#374151',
   },
-  connectionButtonText: { color: '#f9fafb', fontSize: 13, fontWeight: '700' },
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 12 },
-  bodyTitle: { color: '#9ca3af', fontSize: 16, textAlign: 'center' },
-  bodySubtitle: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
-  addButton: {
-    marginTop: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#3b82f6',
-    borderRadius: 10,
+  barButtonText: {
+    color: '#f1f5f9',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  addButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  scanStopButton: {
-    marginTop: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  scanStopText: { color: '#9ca3af', fontWeight: '600', fontSize: 14 },
 })

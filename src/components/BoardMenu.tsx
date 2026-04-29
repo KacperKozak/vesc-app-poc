@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
 const dropStyles = StyleSheet.create({
   menu: {
     position: 'absolute',
-    backgroundColor: '#1f2937',
+    backgroundColor: '#1e293b',
     borderRadius: 12,
     minWidth: 200,
     shadowColor: '#000',
@@ -98,7 +98,7 @@ const dropStyles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
-  label: { color: '#f9fafb', fontSize: 15 },
+  label: { color: '#f1f5f9', fontSize: 15 },
   destructive: { color: '#f87171' },
-  separator: { height: 1, backgroundColor: '#374151', marginHorizontal: 0 },
+  separator: { height: 1, backgroundColor: '#334155', marginHorizontal: 0 },
 })

@@ -9,11 +9,9 @@ import {
   Text,
   View,
 } from 'react-native'
-import { Database, Record, StopCircle, Trash, WarningCircle } from 'phosphor-react-native'
+import { Database, Trash, WarningCircle } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
-import { useBoardStore } from '@/store/boardStore'
-import { useBleStore } from '@/store/bleStore'
 import {
   useHistoryStore,
   type HistoryGpsSample,
@@ -22,23 +20,11 @@ import {
 } from '@/store/historyStore'
 
 export function HistoryScreen() {
-  const activeBoard = useBoardStore((s) => s.boards.find((b) => b.id === s.activeBoardId))
-  const { telemetryRecordingEnabled, startTelemetryRecording, stopTelemetryRecording } =
-    useBleStore(
-      useShallow((s) => ({
-        telemetryRecordingEnabled: s.telemetryRecordingEnabled,
-        startTelemetryRecording: s.startTelemetryRecording,
-        stopTelemetryRecording: s.stopTelemetryRecording,
-      })),
-    )
   const {
     blocks,
-    liveBlocks,
     selectedBlock,
     samples,
     gpsSamples,
-    liveSamples,
-    liveGpsSamples,
     summary,
     loading,
     loadingSamples,
@@ -46,18 +32,14 @@ export function HistoryScreen() {
     hasMore,
     loadInitial,
     loadMore,
-    refreshLive,
     selectBlock,
     clearHistory,
   } = useHistoryStore(
     useShallow((s) => ({
       blocks: s.blocks,
-      liveBlocks: s.liveBlocks,
       selectedBlock: s.selectedBlock,
       samples: s.samples,
       gpsSamples: s.gpsSamples,
-      liveSamples: s.liveSamples,
-      liveGpsSamples: s.liveGpsSamples,
       summary: s.summary,
       loading: s.loading,
       loadingSamples: s.loadingSamples,
@@ -65,7 +47,6 @@ export function HistoryScreen() {
       hasMore: s.hasMore,
       loadInitial: s.loadInitial,
       loadMore: s.loadMore,
-      refreshLive: s.refreshLive,
       selectBlock: s.selectBlock,
       clearHistory: s.clearHistory,
     })),
@@ -75,38 +56,12 @@ export function HistoryScreen() {
     void loadInitial()
   }, [loadInitial])
 
-  useEffect(() => {
-    void refreshLive()
-    const interval = setInterval(() => {
-      void refreshLive()
-    }, 500)
-    return () => clearInterval(interval)
-  }, [refreshLive])
-
   const confirmClear = useCallback(() => {
     Alert.alert('Clear History', 'Remove all stored telemetry history from this device?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: () => void clearHistory() },
     ])
   }, [clearHistory])
-
-  const toggleRecording = useCallback(() => {
-    if (telemetryRecordingEnabled) {
-      stopTelemetryRecording()
-      return
-    }
-    startTelemetryRecording({
-      deviceId: activeBoard?.bleId ?? activeBoard?.id ?? null,
-      deviceName: activeBoard?.name ?? null,
-    })
-  }, [
-    activeBoard?.bleId,
-    activeBoard?.id,
-    activeBoard?.name,
-    startTelemetryRecording,
-    stopTelemetryRecording,
-    telemetryRecordingEnabled,
-  ])
 
   const totalPoints = (summary?.sampleCount ?? 0) + (summary?.gpsPointCount ?? 0)
 
@@ -121,33 +76,13 @@ export function HistoryScreen() {
               : 'No history recorded yet'}
           </Text>
         </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={[styles.recordButton, telemetryRecordingEnabled && styles.recordButtonActive]}
-            onPress={toggleRecording}
-          >
-            {telemetryRecordingEnabled ? (
-              <StopCircle size={16} color="#052e16" weight="fill" />
-            ) : (
-              <Record size={16} color="#d1d5db" weight="fill" />
-            )}
-            <Text
-              style={[
-                styles.recordButtonText,
-                telemetryRecordingEnabled && styles.recordButtonTextActive,
-              ]}
-            >
-              {telemetryRecordingEnabled ? 'Recording' : 'Record'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.iconButton, !totalPoints && styles.iconButtonDisabled]}
-            disabled={!totalPoints}
-            onPress={confirmClear}
-          >
-            <Trash size={18} color={totalPoints ? '#f87171' : '#4b5563'} weight="bold" />
-          </Pressable>
-        </View>
+        <Pressable
+          style={[styles.clearButton, !totalPoints && styles.clearButtonDisabled]}
+          disabled={!totalPoints}
+          onPress={confirmClear}
+        >
+          <Trash size={18} color={totalPoints ? '#f87171' : '#4b5563'} weight="bold" />
+        </Pressable>
       </View>
 
       {error && (
@@ -159,13 +94,6 @@ export function HistoryScreen() {
         </View>
       )}
 
-      <LiveCollectionCard
-        summary={summary}
-        blocks={liveBlocks}
-        boardSamples={liveSamples}
-        gpsSamples={liveGpsSamples}
-      />
-
       <FlatList
         data={blocks}
         keyExtractor={(item) => item.id}
@@ -174,7 +102,7 @@ export function HistoryScreen() {
           <RefreshControl
             refreshing={loading && blocks.length === 0}
             onRefresh={() => void loadInitial()}
-            tintColor="#f9fafb"
+            tintColor="#f1f5f9"
           />
         }
         onEndReached={() => {
@@ -211,82 +139,6 @@ export function HistoryScreen() {
           />
         )}
       />
-    </View>
-  )
-}
-
-function LiveCollectionCard({
-  summary,
-  blocks,
-  boardSamples,
-  gpsSamples,
-}: {
-  summary: { sampleCount: number; gpsPointCount: number; lastAtMs: number | null } | null
-  blocks: TelemetryHistoryBlock[]
-  boardSamples: TelemetrySample[]
-  gpsSamples: HistoryGpsSample[]
-}) {
-  const lastAt = summary?.lastAtMs ?? null
-  const ageMs = lastAt ? Date.now() - lastAt : null
-  const active = ageMs != null && ageMs < 15_000
-  const boardCount = blocks.reduce((total, block) => total + block.sampleCount, 0)
-  const gpsCount = blocks.reduce((total, block) => total + block.gpsPointCount, 0)
-  const latestBlock = blocks[0]
-  const latestSpeed = latestBlock
-    ? latestBlock.maxAbsSpeedKmh || latestBlock.maxGpsSpeedKmh || 0
-    : 0
-  const currentBucketStart = Date.now() - (Date.now() % 60_000)
-  const blocksByStart = new Map(blocks.map((block) => [block.bucketStartMs, block]))
-  const barSlots = Array.from({ length: 10 }, (_, index) => {
-    const bucketStartMs = currentBucketStart - (9 - index) * 60_000
-    const block = blocksByStart.get(bucketStartMs)
-    return {
-      bucketStartMs,
-      points: block ? block.sampleCount + block.gpsPointCount : 0,
-    }
-  })
-  const maxBucketPoints = Math.max(1, ...barSlots.map((slot) => slot.points))
-
-  return (
-    <View style={styles.liveCard}>
-      <View style={styles.liveTop}>
-        <View style={styles.liveTitleRow}>
-          <View style={[styles.liveDot, active && styles.liveDotActive]} />
-          <Text style={styles.liveTitle}>{active ? 'Collecting now' : 'Latest window'}</Text>
-        </View>
-        <Text style={styles.liveAge}>
-          {ageMs == null ? '-' : `${Math.max(0, Math.round(ageMs / 1000))}s ago`}
-        </Text>
-      </View>
-      <View style={styles.liveBars}>
-        {barSlots.map((slot) => {
-          const activeSlot = slot.bucketStartMs === currentBucketStart
-          const height =
-            slot.points > 0 ? Math.max(5, Math.round((slot.points / maxBucketPoints) * 34)) : 5
-          return (
-            <View key={slot.bucketStartMs} style={styles.liveBarWrap}>
-              <View
-                style={[
-                  styles.liveBar,
-                  slot.points === 0 && styles.liveBarEmpty,
-                  activeSlot && styles.liveBarActive,
-                  { height },
-                ]}
-              />
-            </View>
-          )
-        })}
-      </View>
-      <Text style={styles.liveBarsLabel}>Last 10 minutes, saved points per minute</Text>
-      <View style={styles.metricsRow}>
-        <Metric label="10 min board" value={String(boardCount)} />
-        <Metric label="10 min GPS" value={String(gpsCount)} />
-        <Metric label="Top speed" value={`${latestSpeed.toFixed(1)} km/h`} />
-        <Metric
-          label="Total"
-          value={String((summary?.sampleCount ?? 0) + (summary?.gpsPointCount ?? 0))}
-        />
-      </View>
     </View>
   )
 }
@@ -445,7 +297,7 @@ function formatDuration(ms: number): string {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111827' },
+  container: { flex: 1, backgroundColor: '#0f172a' },
   header: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -454,38 +306,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: { color: '#f9fafb', fontSize: 22, fontWeight: '800' },
-  subtitle: { color: '#6b7280', fontSize: 13, marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  recordButton: {
-    height: 36,
-    paddingHorizontal: 12,
-    borderRadius: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#1f2937',
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  recordButtonActive: {
-    backgroundColor: '#22c55e',
-    borderColor: '#22c55e',
-  },
-  recordButtonText: { color: '#d1d5db', fontSize: 12, fontWeight: '800' },
-  recordButtonTextActive: { color: '#052e16' },
-  iconButton: {
+  title: { color: '#f1f5f9', fontSize: 22, fontWeight: '800' },
+  subtitle: { color: '#64748b', fontSize: 13, marginTop: 2 },
+  clearButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f2937',
+    backgroundColor: '#1e293b',
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#334155',
   },
-  iconButtonDisabled: { opacity: 0.55 },
+  clearButtonDisabled: { opacity: 0.55 },
   errorBar: {
     marginHorizontal: 12,
     marginBottom: 8,
@@ -499,49 +332,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: { color: '#fecaca', fontSize: 12, flex: 1 },
-  liveCard: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#172033',
-    borderWidth: 1,
-    borderColor: '#30415d',
-    gap: 10,
-  },
-  liveTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  liveTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4b5563' },
-  liveDotActive: { backgroundColor: '#22c55e' },
-  liveTitle: { color: '#f9fafb', fontSize: 14, fontWeight: '800' },
-  liveAge: { color: '#9ca3af', fontSize: 12, fontVariant: ['tabular-nums'] },
-  liveBars: {
-    height: 38,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 4,
-    paddingHorizontal: 2,
-  },
-  liveBarWrap: { flex: 1, justifyContent: 'flex-end' },
-  liveBar: { borderRadius: 3, backgroundColor: '#3b82f6' },
-  liveBarActive: { backgroundColor: '#22c55e' },
-  liveBarEmpty: { backgroundColor: '#374151' },
-  liveEmptyBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: '#374151' },
-  liveBarsLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', marginTop: -6 },
   list: { padding: 12, paddingBottom: 28 },
   emptyList: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyState: { alignItems: 'center', gap: 8 },
-  emptyTitle: { color: '#f9fafb', fontSize: 16, fontWeight: '700' },
-  emptyText: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
+  emptyTitle: { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
+  emptyText: { color: '#64748b', fontSize: 13, textAlign: 'center' },
   footerLoader: { paddingVertical: 16 },
   boundaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
-  boundaryLine: { width: 18, height: 1, backgroundColor: '#374151' },
-  boundaryText: { color: '#9ca3af', fontSize: 12, fontWeight: '700' },
+  boundaryLine: { width: 18, height: 1, backgroundColor: '#334155' },
+  boundaryText: { color: '#94a3b8', fontSize: 12, fontWeight: '700' },
   block: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#1e293b',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#273548',
+    borderColor: '#334155',
     padding: 12,
     marginBottom: 8,
     gap: 10,
@@ -549,34 +353,34 @@ const styles = StyleSheet.create({
   blockSelected: { borderColor: '#3b82f6' },
   blockTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   blockTitleWrap: { flex: 1, minWidth: 0 },
-  blockTitle: { color: '#f9fafb', fontSize: 16, fontWeight: '700' },
-  blockTime: { color: '#6b7280', fontSize: 12, marginTop: 2 },
+  blockTitle: { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
+  blockTime: { color: '#64748b', fontSize: 12, marginTop: 2 },
   speedPill: {
     minWidth: 72,
     height: 42,
     borderRadius: 8,
-    backgroundColor: '#111827',
+    backgroundColor: '#0f172a',
     alignItems: 'center',
     justifyContent: 'center',
   },
   speedValue: {
-    color: '#f9fafb',
+    color: '#f1f5f9',
     fontSize: 16,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
-  speedUnit: { color: '#6b7280', fontSize: 10 },
+  speedUnit: { color: '#64748b', fontSize: 10 },
   metricsRow: { flexDirection: 'row', gap: 6 },
   metric: { flex: 1, minWidth: 0, gap: 2 },
-  metricLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700' },
-  metricValue: { color: '#d1d5db', fontSize: 12, fontVariant: ['tabular-nums'] },
+  metricLabel: { color: '#64748b', fontSize: 10, fontWeight: '700' },
+  metricValue: { color: '#cbd5e1', fontSize: 12, fontVariant: ['tabular-nums'] },
   faultText: { color: '#fca5a5', fontSize: 12, fontWeight: '700' },
-  detail: { borderTopWidth: 1, borderTopColor: '#374151', paddingTop: 8, gap: 6 },
-  detailEmpty: { color: '#6b7280', fontSize: 12 },
+  detail: { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8, gap: 6 },
+  detailEmpty: { color: '#64748b', fontSize: 12 },
   sampleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sampleTime: { color: '#6b7280', fontSize: 12, width: 52, fontVariant: ['tabular-nums'] },
+  sampleTime: { color: '#64748b', fontSize: 12, width: 52, fontVariant: ['tabular-nums'] },
   sampleValue: {
-    color: '#d1d5db',
+    color: '#cbd5e1',
     fontSize: 12,
     flex: 1,
     fontVariant: ['tabular-nums'],

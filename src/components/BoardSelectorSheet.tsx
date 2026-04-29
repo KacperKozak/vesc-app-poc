@@ -1,8 +1,31 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import {
+  CaretRight,
+  CheckCircle,
+  Lightning,
+  Plus,
+  Star,
+  VideoCamera,
+  RadioButton,
+  Record,
+} from 'phosphor-react-native'
 
 import type { Board } from '@/db/boards'
 import type { RecordingInfo } from '@/store/bleStore'
+
+interface BoardSelectorSheetProps {
+  visible: boolean
+  boards: Board[]
+  activeBoardId: string | null
+  recordings: RecordingInfo[]
+  recordDebugSession: boolean
+  onClose: () => void
+  onSelectBoard: (id: string) => void
+  onAddBoard: () => void
+  onReplay: (recording: RecordingInfo) => void
+  onToggleRecordDebug: () => void
+}
 
 export function BoardSelectorSheet({
   visible,
@@ -15,71 +38,88 @@ export function BoardSelectorSheet({
   onAddBoard,
   onReplay,
   onToggleRecordDebug,
-}: {
-  visible: boolean
-  boards: Board[]
-  activeBoardId: string | null
-  recordings: RecordingInfo[]
-  recordDebugSession: boolean
-  onClose: () => void
-  onSelectBoard: (id: string) => void
-  onAddBoard: () => void
-  onReplay: (recording: RecordingInfo) => void
-  onToggleRecordDebug: () => void
-}) {
+}: BoardSelectorSheetProps) {
   const insets = useSafeAreaInsets()
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose} />
-      <View style={[styles.modalSheet, { paddingBottom: insets.bottom || 16 }]}>
-        <View style={styles.modalHandle} />
-        <Text style={styles.modalTitle}>Boards</Text>
-        <ScrollView bounces={false}>
-          {boards.map((board) => (
-            <Pressable
-              key={board.id}
-              style={styles.boardRow}
-              onPress={() => onSelectBoard(board.id)}
-            >
-              <Text style={styles.boardStar}>{board.isStarred ? '★' : '☆'}</Text>
-              <Text
-                style={[styles.boardName, board.id === activeBoardId && styles.boardNameActive]}
-              >
-                {board.name}
-              </Text>
-              {board.id === activeBoardId && <Text style={styles.boardCheck}>✓</Text>}
-            </Pressable>
-          ))}
+      <Pressable style={styles.overlay} onPress={onClose} />
+      <View style={[styles.sheet, { paddingBottom: insets.bottom || 20 }]}>
+        <View style={styles.handle} />
 
-          <Pressable style={styles.addBoardRow} onPress={onAddBoard}>
-            <Text style={styles.addBoardText}>+ Add new board</Text>
+        <Text style={styles.sectionTitle}>Your Boards</Text>
+        <ScrollView bounces={false} style={styles.scroll}>
+          {boards.map((board) => {
+            const isActive = board.id === activeBoardId
+            return (
+              <Pressable
+                key={board.id}
+                style={[styles.boardRow, isActive && styles.boardRowActive]}
+                onPress={() => onSelectBoard(board.id)}
+              >
+                <View style={[styles.boardIcon, isActive && styles.boardIconActive]}>
+                  <Lightning
+                    size={16}
+                    color={isActive ? '#3b82f6' : '#6b7280'}
+                    weight={isActive ? 'fill' : 'regular'}
+                  />
+                </View>
+                <View style={styles.boardInfo}>
+                  <Text style={[styles.boardName, isActive && styles.boardNameActive]}>
+                    {board.name}
+                  </Text>
+                  {board.isStarred && (
+                    <View style={styles.starBadge}>
+                      <Star size={10} color="#facc15" weight="fill" />
+                      <Text style={styles.starText}>Main</Text>
+                    </View>
+                  )}
+                </View>
+                {isActive && <CheckCircle size={20} color="#3b82f6" weight="fill" />}
+              </Pressable>
+            )
+          })}
+
+          <Pressable style={styles.addRow} onPress={onAddBoard}>
+            <View style={styles.addIcon}>
+              <Plus size={16} color="#3b82f6" weight="bold" />
+            </View>
+            <Text style={styles.addText}>Add new board</Text>
           </Pressable>
 
           {recordings.length > 0 && (
             <>
-              <View style={styles.modalDivider} />
-              <Text style={styles.modalSectionTitle}>Recordings</Text>
+              <View style={styles.divider} />
+              <Text style={styles.sectionTitle}>Recordings</Text>
               {recordings.map((r) => (
-                <Pressable key={r.path} style={styles.simRow} onPress={() => onReplay(r)}>
-                  <View style={styles.simInfo}>
-                    <Text style={styles.simName}>{r.deviceName}</Text>
-                    <Text style={styles.simMeta}>
+                <Pressable key={r.path} style={styles.recordingRow} onPress={() => onReplay(r)}>
+                  <View style={styles.recordingIcon}>
+                    <VideoCamera size={14} color="#a78bfa" weight="fill" />
+                  </View>
+                  <View style={styles.recordingInfo}>
+                    <Text style={styles.recordingName} numberOfLines={1}>
+                      {r.deviceName}
+                    </Text>
+                    <Text style={styles.recordingMeta}>
                       {new Date(r.startedAt).toLocaleString()} · {Math.ceil(r.sizeBytes / 1024)} KB
                     </Text>
                   </View>
-                  <Text style={styles.simChevron}>›</Text>
+                  <CaretRight size={16} color="#4b5563" weight="bold" />
                 </Pressable>
               ))}
             </>
           )}
 
-          <View style={styles.modalDivider} />
-          <Pressable style={styles.debugToggleRow} onPress={onToggleRecordDebug}>
-            <View style={[styles.checkbox, recordDebugSession && styles.checkboxOn]}>
-              {recordDebugSession && <Text style={styles.checkboxMark}>✓</Text>}
-            </View>
-            <Text style={styles.debugToggleText}>Record next session</Text>
+          <View style={styles.divider} />
+          <Pressable style={styles.debugRow} onPress={onToggleRecordDebug}>
+            {recordDebugSession ? (
+              <Record size={20} color="#3b82f6" weight="fill" />
+            ) : (
+              <RadioButton size={20} color="#4b5563" weight="regular" />
+            )}
+            <Text style={[styles.debugText, recordDebugSession && styles.debugTextActive]}>
+              Record next session
+            </Text>
           </Pressable>
         </ScrollView>
       </View>
@@ -88,89 +128,156 @@ export function BoardSelectorSheet({
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalSheet: {
-    backgroundColor: '#1f2937',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  sheet: {
+    backgroundColor: '#131c2e',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: '80%',
   },
-  modalHandle: {
+  handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#4b5563',
+    backgroundColor: '#334155',
     alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
+    marginTop: 12,
+    marginBottom: 8,
   },
-  modalTitle: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  scroll: {
+    paddingBottom: 8,
   },
-  modalDivider: { height: 1, backgroundColor: '#374151', marginTop: 4 },
-  modalSectionTitle: {
-    color: '#6b7280',
+  sectionTitle: {
+    color: '#64748b',
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#1e293b',
+    marginHorizontal: 20,
+    marginTop: 8,
   },
   boardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  boardStar: { color: '#facc15', fontSize: 16 },
-  boardName: { flex: 1, color: '#9ca3af', fontSize: 16 },
-  boardNameActive: { color: '#f9fafb', fontWeight: '600' },
-  boardCheck: { color: '#3b82f6', fontSize: 16, fontWeight: '700' },
-  addBoardRow: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
-    marginTop: 4,
-  },
-  addBoardText: { color: '#3b82f6', fontSize: 16, fontWeight: '600' },
-  simRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginHorizontal: 12,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     gap: 12,
   },
-  simInfo: { flex: 1 },
-  simName: { color: '#f9fafb', fontSize: 14, fontWeight: '600' },
-  simMeta: { color: '#6b7280', fontSize: 11, marginTop: 2 },
-  simChevron: { color: '#6b7280', fontSize: 20 },
-  debugToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 12,
+  boardRowActive: {
+    backgroundColor: '#1e293b',
   },
-  debugToggleText: { color: '#9ca3af', fontSize: 15 },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: '#4b5563',
+  boardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#1e293b',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxOn: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  checkboxMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  boardIconActive: {
+    backgroundColor: '#172554',
+  },
+  boardInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  boardName: {
+    color: '#94a3b8',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  boardNameActive: {
+    color: '#f1f5f9',
+  },
+  starBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  starText: {
+    color: '#facc15',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  addIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#334155',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addText: {
+    color: '#3b82f6',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  recordingIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#1e1338',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingInfo: {
+    flex: 1,
+  },
+  recordingName: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  recordingMeta: {
+    color: '#64748b',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  debugText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  debugTextActive: {
+    color: '#94a3b8',
+  },
 })

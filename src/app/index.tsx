@@ -9,10 +9,14 @@ import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
 import { usePermissions } from '@/ble/usePermissions'
 import { useBleAppLifecycle } from '@/hooks/useBleAppLifecycle'
+import { useBoardConnection } from '@/hooks/useBoardConnection'
 import { HistoryScreen } from '@/screens/HistoryScreen'
 import { CenterScreen } from '@/screens/CenterScreen'
 import { MapScreen } from '@/screens/MapScreen'
 import { MainPager, type MainPagerHandle } from '@/components/MainPager'
+import { TopBar } from '@/components/TopBar'
+import { LiveStatusBar } from '@/components/LiveStatusBar'
+import { RecordFAB } from '@/components/RecordFAB'
 
 const TABS = [
   { label: 'History', Icon: ClockCounterClockwise },
@@ -34,6 +38,8 @@ export default function MainScreen() {
     })),
   )
   const { status: permStatus, request } = usePermissions()
+
+  const connection = useBoardConnection()
 
   useBleAppLifecycle()
 
@@ -90,16 +96,44 @@ export default function MainScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <MainPager ref={pagerRef} page={page} onPageChange={setPage}>
-        <HistoryScreen key="history" />
-        <CenterScreen key="center" />
-        <MapScreen key="map" />
-      </MainPager>
+      <TopBar
+        boards={connection.boards}
+        activeBoardId={connection.activeBoardId}
+        activeBoard={connection.activeBoard}
+        replayBoardName={connection.replayBoardName}
+        bleStatus={connection.bleStatus}
+        recordings={connection.recordings}
+        recordDebugSession={connection.recordDebugSession}
+        menuItems={connection.menuItems}
+        onSelectBoard={connection.handleSelectBoard}
+        onAddBoard={connection.handleAddBoard}
+        onReplay={connection.handleReplay}
+        onToggleRecordDebug={() => connection.setRecordDebugSession(!connection.recordDebugSession)}
+      />
+
+      <LiveStatusBar />
+
+      <View style={styles.pagerWrap}>
+        <MainPager ref={pagerRef} page={page} onPageChange={setPage}>
+          <HistoryScreen key="history" />
+          <CenterScreen
+            key="center"
+            bleStatus={connection.bleStatus}
+            activeBoard={connection.activeBoard}
+            activeReplay={connection.activeReplay}
+            onStopScan={connection.handleStopScan}
+            onRetryConnect={connection.handleRetryConnect}
+          />
+          <MapScreen key="map" />
+        </MainPager>
+
+        <RecordFAB />
+      </View>
 
       <SafeAreaView edges={['bottom']} style={styles.tabBar}>
         {TABS.map(({ label, Icon }, i) => {
           const active = page === i
-          const color = active ? '#f9fafb' : '#6b7280'
+          const color = active ? '#f1f5f9' : '#64748b'
           return (
             <Pressable key={label} style={styles.tab} onPress={() => pagerRef.current?.setPage(i)}>
               <Icon size={22} color={color} weight={active ? 'fill' : 'regular'} />
@@ -116,13 +150,16 @@ export default function MainScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#0f172a',
+  },
+  pagerWrap: {
+    flex: 1,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#1f2937',
+    backgroundColor: '#0f172a',
     borderTopWidth: 1,
-    borderTopColor: '#374151',
+    borderTopColor: '#1e293b',
   },
   tab: {
     flex: 1,
@@ -131,12 +168,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabText: {
-    color: '#6b7280',
+    color: '#64748b',
     fontSize: 12,
     fontWeight: '600',
   },
   tabTextActive: {
-    color: '#f9fafb',
+    color: '#f1f5f9',
   },
   tabIndicator: {
     width: 4,

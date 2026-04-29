@@ -191,7 +191,7 @@ export function TelemetryView() {
 }
 
 const styles = StyleSheet.create({
-  statusText: { color: '#9ca3af', fontSize: 16 },
+  statusText: { color: '#94a3b8', fontSize: 16 },
   grid: { padding: 12, paddingBottom: 32 },
   inlineStatus: {
     minHeight: 76,
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: 16 },
   sectionLabel: {
-    color: '#4b5563',
+    color: '#475569',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.2,
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', marginBottom: 4 },
   cardWide: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#1e293b',
     borderRadius: 10,
     padding: 14,
     flex: 1,
@@ -220,12 +220,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardLabel: {
-    color: '#9ca3af',
+    color: '#94a3b8',
     fontSize: 11,
     fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  bigValue: { color: '#f9fafb', fontSize: 48, fontFamily: 'monospace', fontWeight: '700' },
-  bigUnit: { color: '#6b7280', fontSize: 20, fontWeight: '400' },
+  bigValue: { color: '#f1f5f9', fontSize: 48, fontFamily: 'monospace', fontWeight: '700' },
+  bigUnit: { color: '#64748b', fontSize: 20, fontWeight: '400' },
 })

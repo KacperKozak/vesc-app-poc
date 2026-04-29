@@ -34,7 +34,7 @@ export const TelemetryCard = React.memo(function TelemetryCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#1e293b',
     borderRadius: 10,
     padding: 14,
     flex: 1,
@@ -52,25 +52,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
   },
   label: {
-    color: '#9ca3af',
+    color: '#94a3b8',
     fontSize: 11,
     fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   value: {
-    color: '#f9fafb',
+    color: '#f1f5f9',
     fontSize: 24,
     fontFamily: 'monospace',
     fontWeight: '600',
   },
   unit: {
-    color: '#6b7280',
+    color: '#64748b',
     fontSize: 14,
     fontWeight: '400',
   },
   sub: {
-    color: '#6b7280',
+    color: '#64748b',
     fontSize: 11,
     fontWeight: '500',
   },
