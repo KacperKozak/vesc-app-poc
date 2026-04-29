@@ -1,6 +1,7 @@
 package expo.modules.vescble
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -262,6 +263,7 @@ class VescForegroundService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_STOP_FROM_NOTIFICATION) {
                 stopCurrentSession(emitDisconnected = true)
+                closeAppTask()
                 stopSelf()
             }
         }
@@ -886,7 +888,7 @@ class VescForegroundService : Service() {
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Disconnect",
+                "Exit",
                 buildStopIntent(),
             )
             .build()
@@ -910,6 +912,16 @@ class VescForegroundService : Service() {
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+    }
+
+    private fun closeAppTask() {
+        try {
+            getSystemService(ActivityManager::class.java)
+                ?.appTasks
+                ?.forEach { it.finishAndRemoveTask() }
+        } catch (e: Exception) {
+            Log.w(TAG, "App task cleanup failed: ${e.message}")
+        }
     }
 
     private fun writeCccd(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor) {
