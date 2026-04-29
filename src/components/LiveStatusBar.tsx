@@ -43,6 +43,7 @@ export function LiveStatusBar() {
   const boardCount = liveDataBuckets.reduce((total, b) => total + b.boardCount, 0)
   const gpsCount = liveDataBuckets.reduce((total, b) => total + b.gpsCount, 0)
   const { slots, currentBucketStart } = buildBucketSlots(liveDataBuckets, nowMs)
+  const maxSlotPoints = Math.max(1, ...slots.map((s) => s.points))
 
   return (
     <View style={styles.container}>
@@ -53,17 +54,23 @@ export function LiveStatusBar() {
         </Text>
         <View style={styles.separator} />
         {!expanded && (
-          <View style={styles.miniDots}>
-            {slots.map((slot) => (
-              <View
-                key={slot.bucketStartMs}
-                style={[
-                  styles.miniDot,
-                  slot.points > 0 && styles.miniDotFilled,
-                  slot.bucketStartMs === currentBucketStart && styles.miniDotCurrent,
-                ]}
-              />
-            ))}
+          <View style={styles.miniBars}>
+            {slots.map((slot) => {
+              const height =
+                slot.points > 0 ? Math.max(5, Math.round((slot.points / maxSlotPoints) * 14)) : 4
+              return (
+                <View key={slot.bucketStartMs} style={styles.miniBarSlot}>
+                  <View
+                    style={[
+                      styles.miniBar,
+                      slot.points > 0 && styles.miniBarFilled,
+                      slot.bucketStartMs === currentBucketStart && styles.miniBarCurrent,
+                      { height },
+                    ]}
+                  />
+                </View>
+              )
+            })}
           </View>
         )}
         <View style={styles.spacer} />
@@ -167,21 +174,26 @@ const styles = StyleSheet.create({
     height: 10,
     backgroundColor: '#334155',
   },
-  miniDots: {
+  miniBars: {
+    height: 16,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+    alignItems: 'flex-end',
+    gap: 4,
   },
-  miniDot: {
-    width: 4,
-    height: 4,
+  miniBarSlot: {
+    width: 3,
+    height: 16,
+    justifyContent: 'flex-end',
+  },
+  miniBar: {
+    width: 3,
     borderRadius: 2,
     backgroundColor: '#1e293b',
   },
-  miniDotFilled: {
+  miniBarFilled: {
     backgroundColor: '#3b82f6',
   },
-  miniDotCurrent: {
+  miniBarCurrent: {
     backgroundColor: '#22c55e',
   },
   spacer: { flex: 1 },

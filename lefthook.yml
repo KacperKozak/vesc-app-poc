@@ -10,4 +10,4 @@ pre-commit:
     lint:
       run: bun run lint
     test:
-      run: bun test
+      run: bun run test
