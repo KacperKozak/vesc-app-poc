@@ -19,7 +19,6 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 private const val TAG = "TelemetryStore"
-private const val BUCKET_SIZE_MS = 60_000L
 private const val KEYFRAME_INTERVAL_MS = 60_000L
 private const val GAP_BOUNDARY_MS = 90_000L
 private const val FLUSH_FRAME_COUNT = 25
@@ -27,8 +26,6 @@ private const val FLUSH_DELAY_MS = 5_000L
 private const val MAX_PENDING_FRAMES = 1_000
 private const val DEFAULT_HISTORY_LIMIT = 100
 private const val DEFAULT_SAMPLE_LIMIT = 2_000
-private const val UNKNOWN_DEVICE_ID = ""
-private const val UNKNOWN_DEVICE_NAME = "VESC Board"
 
 data class TelemetryLocationCapture(
   val latitude: Double,
@@ -173,7 +170,7 @@ class TelemetryRepository private constructor(context: Context) {
   ): Boolean {
     val state = LocationState.from(location, deviceId, deviceName)
     synchronized(lock) {
-      val key = deviceId ?: UNKNOWN_DEVICE_ID
+      val key = deviceId ?: UNKNOWN_TELEMETRY_DEVICE_ID
       val previous = lastLocationByDevice[key]
       if (previous != null &&
         previous.locationTimestampMs == state.locationTimestampMs &&
@@ -242,7 +239,7 @@ class TelemetryRepository private constructor(context: Context) {
     val buckets = dao.getHistoryBuckets(fromMs, toMs, beforeMs, deviceId, limit)
     if (buckets.isEmpty()) return@withContext emptyList()
     val markerFrom = buckets.minOf { it.bucketStartMs } - GAP_BOUNDARY_MS
-    val markerTo = buckets.maxOf { it.bucketStartMs } + BUCKET_SIZE_MS
+    val markerTo = buckets.maxOf { it.bucketStartMs } + TELEMETRY_BUCKET_SIZE_MS
     val markers = dao.getMarkers(markerFrom, markerTo, deviceId)
     buckets.map { bucket ->
       val marker = markers.lastOrNull {
@@ -262,7 +259,7 @@ class TelemetryRepository private constructor(context: Context) {
         "endAtMs" to bucket.lastSampleAtMs,
         "bucketStartMs" to bucket.bucketStartMs,
         "deviceId" to bucket.deviceId.ifBlank { null },
-        "deviceName" to (bucket.deviceName ?: UNKNOWN_DEVICE_NAME),
+        "deviceName" to (bucket.deviceName ?: UNKNOWN_TELEMETRY_DEVICE_NAME),
         "sampleCount" to bucket.sampleCount,
         "gpsPointCount" to bucket.gpsPointCount,
         "preciseGpsPointCount" to bucket.preciseGpsPointCount,
@@ -380,41 +377,15 @@ class TelemetryRepository private constructor(context: Context) {
       dao.insertBatch(
         frames = frames.map { it.frame },
         locations = locations.map { it.location },
-        buckets = buildBuckets(
-          telemetryStates = frames.map { it.state },
-          locationStates = locations.map { it.state },
+        buckets = buildTelemetryBuckets(
+          telemetryPoints = frames.map { it.state.toBucketPoint() },
+          locationPoints = locations.map { it.state.toBucketPoint() },
         ),
         markers = markers,
       )
     } catch (e: Exception) {
       Log.w(TAG, "Telemetry flush failed: ${e.message}")
     }
-  }
-
-  private fun buildBuckets(
-    telemetryStates: List<FullTelemetryState>,
-    locationStates: List<LocationState>,
-  ): Collection<TelemetryMinuteBucketEntity> {
-    val buckets = linkedMapOf<Pair<Long, String>, MutableBucket>()
-    for (state in telemetryStates) {
-      val bucketStart = state.capturedAtMs - (state.capturedAtMs % BUCKET_SIZE_MS)
-      val deviceId = state.deviceId ?: UNKNOWN_DEVICE_ID
-      val key = bucketStart to deviceId
-      val bucket = buckets.getOrPut(key) {
-        MutableBucket(bucketStart, deviceId, state.deviceName)
-      }
-      bucket.add(state)
-    }
-    for (state in locationStates) {
-      val bucketStart = state.capturedAtMs - (state.capturedAtMs % BUCKET_SIZE_MS)
-      val deviceId = state.deviceId ?: UNKNOWN_DEVICE_ID
-      val key = bucketStart to deviceId
-      val bucket = buckets.getOrPut(key) {
-        MutableBucket(bucketStart, deviceId, state.deviceName)
-      }
-      bucket.addLocation(state)
-    }
-    return buckets.values.map { it.toEntity() }
   }
 
   companion object {
@@ -438,82 +409,6 @@ private data class PendingLocation(
   val location: HistoryLocationEntity,
   val state: LocationState,
 )
-
-private class MutableBucket(
-  private val bucketStartMs: Long,
-  private val deviceId: String,
-  private var deviceName: String?,
-) {
-  private var sampleCount = 0
-  private var firstSampleAtMs = Long.MAX_VALUE
-  private var lastSampleAtMs = Long.MIN_VALUE
-  private var sumAbsSpeedCentiKmh = 0L
-  private var maxAbsSpeedCentiKmh = 0
-  private var minBatteryVoltageMv: Int? = null
-  private var maxMotorCurrentAbsMa = 0
-  private var maxBatteryCurrentAbsMa = 0
-  private var maxDutyAbsPermille = 0
-  private var faultCount = 0
-  private var firstOdometerCm: Long? = null
-  private var lastOdometerCm: Long? = null
-  private var gpsPointCount = 0
-  private var preciseGpsPointCount = 0
-  private var gpsDistanceCm = 0L
-  private var maxGpsSpeedCentiMps: Int? = null
-
-  fun add(state: FullTelemetryState) {
-    sampleCount++
-    if (state.deviceName != null) deviceName = state.deviceName
-    firstSampleAtMs = minOf(firstSampleAtMs, state.capturedAtMs)
-    lastSampleAtMs = maxOf(lastSampleAtMs, state.capturedAtMs)
-    val absSpeed = abs(state.speedCentiKmh)
-    sumAbsSpeedCentiKmh += absSpeed.toLong()
-    maxAbsSpeedCentiKmh = maxOf(maxAbsSpeedCentiKmh, absSpeed)
-    minBatteryVoltageMv = minBatteryVoltageMv?.let { minOf(it, state.batteryVoltageMv) } ?: state.batteryVoltageMv
-    maxMotorCurrentAbsMa = maxOf(maxMotorCurrentAbsMa, abs(state.motorCurrentMa))
-    maxBatteryCurrentAbsMa = maxOf(maxBatteryCurrentAbsMa, abs(state.batteryCurrentMa))
-    maxDutyAbsPermille = maxOf(maxDutyAbsPermille, abs(state.dutyPermille))
-    if (state.hasFault) faultCount++
-    if (firstOdometerCm == null) firstOdometerCm = state.odometerCm
-    if (state.odometerCm != null) lastOdometerCm = state.odometerCm
-  }
-
-  fun addLocation(state: LocationState) {
-    gpsPointCount++
-    if (state.precise) preciseGpsPointCount++
-    if (state.deviceName != null) deviceName = state.deviceName
-    firstSampleAtMs = minOf(firstSampleAtMs, state.capturedAtMs)
-    lastSampleAtMs = maxOf(lastSampleAtMs, state.capturedAtMs)
-    gpsDistanceCm += state.distanceFromPreviousCm ?: 0L
-    maxGpsSpeedCentiMps = when {
-      maxGpsSpeedCentiMps == null -> state.gpsSpeedCentiMps
-      state.gpsSpeedCentiMps == null -> maxGpsSpeedCentiMps
-      else -> maxOf(maxGpsSpeedCentiMps ?: 0, state.gpsSpeedCentiMps)
-    }
-  }
-
-  fun toEntity(): TelemetryMinuteBucketEntity = TelemetryMinuteBucketEntity(
-    bucketStartMs = bucketStartMs,
-    deviceId = deviceId,
-    deviceName = deviceName,
-    sampleCount = sampleCount,
-    firstSampleAtMs = firstSampleAtMs,
-    lastSampleAtMs = lastSampleAtMs,
-    sumAbsSpeedCentiKmh = sumAbsSpeedCentiKmh,
-    maxAbsSpeedCentiKmh = maxAbsSpeedCentiKmh,
-    minBatteryVoltageMv = minBatteryVoltageMv,
-    maxMotorCurrentAbsMa = maxMotorCurrentAbsMa,
-    maxBatteryCurrentAbsMa = maxBatteryCurrentAbsMa,
-    maxDutyAbsPermille = maxDutyAbsPermille,
-    faultCount = faultCount,
-    firstOdometerCm = firstOdometerCm,
-    lastOdometerCm = lastOdometerCm,
-    gpsPointCount = gpsPointCount,
-    preciseGpsPointCount = preciseGpsPointCount,
-    gpsDistanceCm = gpsDistanceCm,
-    maxGpsSpeedCentiMps = maxGpsSpeedCentiMps,
-  )
-}
 
 private data class LocationState(
   val capturedAtMs: Long,
@@ -544,6 +439,15 @@ private data class LocationState(
     locationTimestampMs = locationTimestampMs,
     precise = precise,
     distanceFromPreviousCm = distanceFromPreviousCm,
+  )
+
+  fun toBucketPoint(): BucketLocationPoint = BucketLocationPoint(
+    capturedAtMs = capturedAtMs,
+    deviceId = deviceId,
+    deviceName = deviceName,
+    precise = precise,
+    distanceFromPreviousCm = distanceFromPreviousCm,
+    gpsSpeedCentiMps = gpsSpeedCentiMps,
   )
 
   companion object {
@@ -650,7 +554,7 @@ private data class FullTelemetryState(
     "id" to id,
     "capturedAtMs" to capturedAtMs,
     "deviceId" to deviceId,
-    "deviceName" to (deviceName ?: UNKNOWN_DEVICE_NAME),
+    "deviceName" to (deviceName ?: UNKNOWN_TELEMETRY_DEVICE_NAME),
     "speedKmh" to speedCentiKmh / 100.0,
     "batteryVoltage" to batteryVoltageMv / 1000.0,
     "motorCurrent" to motorCurrentMa / 1000.0,
@@ -672,6 +576,19 @@ private data class FullTelemetryState(
     "faultCode" to faultCode,
     "latitude" to location?.latitudeE7?.let { it / 10_000_000.0 },
     "longitude" to location?.longitudeE7?.let { it / 10_000_000.0 },
+  )
+
+  fun toBucketPoint(): BucketTelemetryPoint = BucketTelemetryPoint(
+    capturedAtMs = capturedAtMs,
+    deviceId = deviceId,
+    deviceName = deviceName,
+    speedCentiKmh = speedCentiKmh,
+    batteryVoltageMv = batteryVoltageMv,
+    motorCurrentMa = motorCurrentMa,
+    batteryCurrentMa = batteryCurrentMa,
+    dutyPermille = dutyPermille,
+    hasFault = hasFault,
+    odometerCm = odometerCm,
   )
 
   companion object {
@@ -822,7 +739,7 @@ private fun HistoryLocationEntity.toMap(): Map<String, Any?> = mapOf(
   "id" to id,
   "capturedAtMs" to capturedAtMs,
   "deviceId" to deviceId,
-  "deviceName" to (deviceName ?: UNKNOWN_DEVICE_NAME),
+  "deviceName" to (deviceName ?: UNKNOWN_TELEMETRY_DEVICE_NAME),
   "latitude" to latitudeE7 / 10_000_000.0,
   "longitude" to longitudeE7 / 10_000_000.0,
   "speedMps" to gpsSpeedCentiMps?.let { it / 100.0 },
