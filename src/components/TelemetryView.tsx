@@ -1,17 +1,27 @@
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
 import { useBleStore } from '@/src/store/bleStore'
+import { useMapStore } from '@/src/store/mapStore'
 import { TelemetryCard } from './TelemetryCard'
 import { FAULT_NAMES } from '@/src/vesc/types'
 import { REFLOAT_STATE_NAMES } from '@/src/vesc/refloat'
 import { fmt, fmtSpeed, fmtKm } from '@/src/helpers/format'
+import { haversineM, bearingTo, clockHour, fmtDistance } from '@/src/helpers/geo'
 
 export function TelemetryView() {
   const { refloatValues: v, status, gpsFix } = useBleStore()
+  const { targetLocation } = useMapStore()
   const stateCompat = v ? v.state & 0xf : 0
   const stateName = v ? (REFLOAT_STATE_NAMES[stateCompat] ?? `STATE_${stateCompat}`) : '—'
   const hasFault = v?.hasFault ?? false
   const faultName = v?.hasFault ? (FAULT_NAMES[v.faultCode] ?? `CODE_${v.faultCode}`) : stateName
   const speedSign = v && v.erpm < 0 ? '-' : ''
+  const targetDistanceM = gpsFix && targetLocation ? haversineM(gpsFix, targetLocation) : null
+  const targetBearing = gpsFix && targetLocation ? bearingTo(gpsFix, targetLocation) : null
+  const targetClock =
+    gpsFix?.bearingDeg != null && targetBearing != null
+      ? clockHour(gpsFix.bearingDeg, targetBearing)
+      : null
+
   const gpsAgeSec = gpsFix ? Math.max(0, (Date.now() - gpsFix.timestamp) / 1000) : null
   const gpsStatus = !gpsFix
     ? 'Waiting'
@@ -23,6 +33,27 @@ export function TelemetryView() {
 
   return (
     <ScrollView contentContainerStyle={styles.grid}>
+      {targetLocation && (
+        <>
+          <Text style={styles.sectionLabel}>TARGET</Text>
+          <View style={styles.row}>
+            <TelemetryCard
+              label="Distance"
+              value={targetDistanceM != null ? fmtDistance(targetDistanceM) : '—'}
+            />
+            <TelemetryCard
+              label="Direction"
+              value={
+                targetClock != null
+                  ? `${targetClock} o'clock`
+                  : targetBearing != null
+                    ? `${Math.round(targetBearing)}°`
+                    : '—'
+              }
+            />
+          </View>
+        </>
+      )}
       <Text style={styles.sectionLabel}>GPS</Text>
       <View style={styles.row}>
         <TelemetryCard
