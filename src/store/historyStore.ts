@@ -37,6 +37,8 @@ interface HistoryActions {
 }
 
 const PAGE_SIZE = 100
+let liveRefreshInFlight = false
+let liveRefreshVersion = 0
 
 export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) => ({
   blocks: [],
@@ -78,6 +80,9 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
   },
 
   async refreshLive() {
+    if (liveRefreshInFlight) return
+    liveRefreshInFlight = true
+    const version = ++liveRefreshVersion
     try {
       const now = Date.now()
       const fromMs = now - 10 * 60_000
@@ -86,6 +91,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         getTelemetryHistory({ fromMs, toMs: now, limit: 10 }),
         getHistoryRange({ fromMs, toMs: now, limit: 120 }),
       ])
+      if (version !== liveRefreshVersion) return
       set((state) => {
         const known = new Map(state.blocks.map((b) => [b.id, b]))
         for (const block of liveBlocks) {
@@ -102,6 +108,8 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
       })
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) })
+    } finally {
+      liveRefreshInFlight = false
     }
   },
 

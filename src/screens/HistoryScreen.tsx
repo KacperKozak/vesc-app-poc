@@ -180,8 +180,8 @@ function LiveCollectionCard({
   const lastAt = summary?.lastAtMs ?? null
   const ageMs = lastAt ? Date.now() - lastAt : null
   const active = ageMs != null && ageMs < 15_000
-  const boardCount = boardSamples.length
-  const gpsCount = gpsSamples.length
+  const boardCount = blocks.reduce((total, block) => total + block.sampleCount, 0)
+  const gpsCount = blocks.reduce((total, block) => total + block.gpsPointCount, 0)
   const latestBlock = blocks[0]
   const latestSpeed = latestBlock
     ? latestBlock.maxAbsSpeedKmh || latestBlock.maxGpsSpeedKmh || 0
