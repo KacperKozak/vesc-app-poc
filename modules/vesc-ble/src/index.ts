@@ -41,7 +41,7 @@ export interface LocationEvent {
 }
 
 export type SessionStatus = 'idle' | 'connecting' | 'connected' | 'error'
-export type SessionMode = 'ble' | 'replay'
+export type SessionMode = 'ble' | 'replay' | 'gps'
 
 export interface TelemetryEvent {
   location?: LocationEvent | null

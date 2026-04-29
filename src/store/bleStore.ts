@@ -22,6 +22,10 @@ import {
   type TelemetryEvent,
 } from 'vesc-ble'
 import { type RefloatValues } from '../vesc/types'
+import {
+  shouldResumeGpsMonitoringAfterDisconnect,
+  shouldStopNativeSessionOnDisconnect,
+} from './monitoring'
 
 export interface ScannedDevice {
   id: string
@@ -87,6 +91,7 @@ let sessionSub: EventSubscription | null = null
 let gpsSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 let stopRequestedSub: EventSubscription | null = null
+let gpsTrackingContext: { deviceId?: string | null; deviceName?: string | null } | undefined
 const DEFAULT_BOARD_NAME = 'VESC Board'
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
 
@@ -286,8 +291,13 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   async disconnect() {
+    const sessionMode = get().sessionMode
+    const shouldStopNativeSession = shouldStopNativeSessionOnDisconnect(sessionMode)
+    const shouldResumeGps = shouldResumeGpsMonitoringAfterDisconnect(sessionMode)
     try {
-      await stopSession()
+      if (shouldStopNativeSession) {
+        await stopSession()
+      }
     } catch {
       // Treat native "already stopped" style failures as a completed local teardown.
     } finally {
@@ -305,6 +315,9 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
         lastPacketAt: null,
         avgLatency: null,
       })
+      if (shouldResumeGps) {
+        get().startGpsTracking(gpsTrackingContext)
+      }
     }
   },
 
@@ -338,6 +351,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   startGpsTracking(context) {
+    gpsTrackingContext = context
     if (!gpsSub) {
       gpsSub = addLocationListener((location) => {
         set({ gpsFix: location })
@@ -350,6 +364,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   stopGpsTracking() {
+    gpsTrackingContext = undefined
     nativeStopLocationUpdates()
     gpsSub?.remove()
     gpsSub = null

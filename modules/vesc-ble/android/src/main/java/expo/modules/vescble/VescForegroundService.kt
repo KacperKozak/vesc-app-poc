@@ -16,11 +16,9 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
-import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
@@ -51,11 +49,13 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 private const val TAG = "VescSession"
-private const val CHANNEL_ID = "vesc_monitoring_v2"
+private const val CHANNEL_ID = "vesc_monitoring_v4"
 private const val NOTIFICATION_ID = 1001
 private const val ACTION_START_SESSION = "expo.modules.vescble.ACTION_START_SESSION"
 private const val ACTION_STOP_SESSION = "expo.modules.vescble.ACTION_STOP_SESSION"
-private const val ACTION_STOP_FROM_NOTIFICATION = "expo.modules.vescble.ACTION_STOP_MONITORING"
+private const val ACTION_EXIT_FROM_NOTIFICATION = "expo.modules.vescble.ACTION_EXIT_FROM_NOTIFICATION"
+private const val ACTION_START_GPS_MONITORING = "expo.modules.vescble.ACTION_START_GPS_MONITORING"
+private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP_GPS_MONITORING"
 
 private const val COMM_FW_VERSION = 0
 private const val COMM_FORWARD_CAN = 34
@@ -165,6 +165,8 @@ class VescForegroundService : Service() {
         private var instance: VescForegroundService? = null
         private var pendingStart: PendingStart? = null
         private var pendingStop: PendingStop? = null
+        private var pendingGpsStart: PendingGpsStart? = null
+        private var requestedGpsMonitoring: PendingGpsStart? = null
         private var requestedTelemetryRecordingEnabled = false
 
         fun startSession(
@@ -194,6 +196,35 @@ class VescForegroundService : Service() {
             instance?.consumePendingStop()
         }
 
+        fun startGpsMonitoring(
+            context: Context,
+            deviceId: String?,
+            deviceName: String?,
+        ) {
+            val start = PendingGpsStart(deviceId, deviceName)
+            requestedGpsMonitoring = start
+            pendingGpsStart = start
+            val intent = Intent(context, VescForegroundService::class.java).apply {
+                action = ACTION_START_GPS_MONITORING
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+            instance?.consumePendingGpsStart()
+        }
+
+        fun stopGpsMonitoring(context: Context) {
+            requestedGpsMonitoring = null
+            pendingGpsStart = null
+            val intent = Intent(context, VescForegroundService::class.java).apply {
+                action = ACTION_STOP_GPS_MONITORING
+            }
+            context.startService(intent)
+            instance?.stopGpsMonitoring()
+        }
+
         fun setTelemetryRecordingEnabled(context: Context, enabled: Boolean) {
             requestedTelemetryRecordingEnabled = enabled
             instance?.setTelemetryRecordingEnabled(enabled)
@@ -221,6 +252,7 @@ class VescForegroundService : Service() {
             "deviceName" to null,
             "canId" to null,
             "telemetry" to null,
+            "location" to null,
             "error" to null,
         )
     }
@@ -232,6 +264,7 @@ class VescForegroundService : Service() {
     )
 
     private data class PendingStop(val onSuccess: () -> Unit)
+    private data class PendingGpsStart(val deviceId: String?, val deviceName: String?)
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val packetReassembler = VescPacketReassembler()
@@ -259,6 +292,7 @@ class VescForegroundService : Service() {
     private var telemetryStore: TelemetryRepository? = null
     private var locationManager: LocationManager? = null
     private var latestLocation: LocationSnapshot? = null
+    private var isStoppingService = false
 
     private val locationListener = LocationListener { location ->
         onLocationUpdated(location)
@@ -267,41 +301,31 @@ class VescForegroundService : Service() {
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
-    private val stopReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_STOP_FROM_NOTIFICATION) {
-                stopCurrentSession(emitDisconnected = true)
-                closeAppTask()
-                stopSelf()
-            }
-        }
-    }
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         instance = this
-        registerStopReceiver()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START_SESSION -> consumePendingStart()
             ACTION_STOP_SESSION -> consumePendingStop()
+            ACTION_EXIT_FROM_NOTIFICATION -> exitFromNotification()
+            ACTION_START_GPS_MONITORING -> consumePendingGpsStart()
+            ACTION_STOP_GPS_MONITORING -> stopGpsMonitoring()
+            else -> if (config == null) stopSelf()
         }
-        return START_STICKY
+        return if (isStoppingService) START_NOT_STICKY else START_STICKY
     }
 
     override fun onDestroy() {
-        stopCurrentSession(emitDisconnected = false)
-        instance = null
-        try {
-            unregisterReceiver(stopReceiver)
-        } catch (_: IllegalArgumentException) {
+        if (!isStoppingService) {
+            stopCurrentSession(emitDisconnected = false)
         }
+        instance = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -320,13 +344,102 @@ class VescForegroundService : Service() {
     private fun consumePendingStop() {
         val stop = pendingStop ?: return
         pendingStop = null
+        if (config?.mode == "gps") {
+            stop.onSuccess()
+            return
+        }
+        val resumeGps = requestedGpsMonitoring
+        if (resumeGps != null && config?.mode != null) {
+            stopCurrentSession(emitDisconnected = true, updateNotification = false)
+            startGpsMonitoring(resumeGps.deviceId, resumeGps.deviceName)
+            stop.onSuccess()
+            return
+        }
+        if (config == null) {
+            isStoppingService = true
+            stop.onSuccess()
+            stopSelf()
+            return
+        }
+        isStoppingService = true
         stopCurrentSession(emitDisconnected = true)
         stop.onSuccess()
         stopSelf()
     }
 
-    private fun beginSession(start: PendingStart) {
+    private fun consumePendingGpsStart() {
+        val start = pendingGpsStart ?: return
+        pendingGpsStart = null
+        startGpsMonitoring(start.deviceId, start.deviceName)
+    }
+
+    private fun exitFromNotification() {
+        isStoppingService = true
+        stopCurrentSession(emitDisconnected = true)
+        closeAppTask()
+        stopSelf()
+    }
+
+    private fun startGpsMonitoring(deviceId: String?, deviceName: String?) {
+        if (config?.mode == "gps") {
+            updateGpsContext(deviceId, deviceName)
+            showNotification(latestLocation?.let { formatGpsNotificationText(it) } ?: "Monitoring GPS")
+            return
+        }
+        if (config?.mode != null && config?.mode != "gps") {
+            updateGpsContext(deviceId, deviceName)
+            return
+        }
+
+        isStoppingService = false
+        stopCurrentSession(emitDisconnected = false, updateNotification = false)
+        config = SessionConfig(
+            mode = "gps",
+            deviceId = deviceId,
+            deviceName = deviceName?.takeIf { it.isNotBlank() } ?: "GPS Monitoring",
+            canId = null,
+            pollIntervalMs = 0L,
+            recordingEnabled = false,
+            telemetryRecordingEnabled = requestedTelemetryRecordingEnabled,
+            recordingPath = null,
+        )
+        canId = null
+        telemetry = null
+        error = null
+        latestLocation = null
+        if (requestedTelemetryRecordingEnabled) {
+            telemetryStore = TelemetryRepository.get(applicationContext)
+            telemetryStore?.recordMarker(
+                "app_stop",
+                config?.deviceId,
+                config?.deviceName,
+                "GPS recording started",
+            )
+        }
+        startLocationUpdates()
+        status = "connected"
+        emitState()
+        startForeground(NOTIFICATION_ID, buildNotification("Monitoring GPS"))
+    }
+
+    private fun stopGpsMonitoring() {
+        if (config?.mode != "gps") return
+        isStoppingService = true
         stopCurrentSession(emitDisconnected = false)
+        stopSelf()
+    }
+
+    private fun updateGpsContext(deviceId: String?, deviceName: String?) {
+        val session = config ?: return
+        config = session.copy(
+            deviceId = deviceId,
+            deviceName = deviceName?.takeIf { it.isNotBlank() } ?: session.deviceName,
+        )
+    }
+
+    private fun beginSession(start: PendingStart) {
+        isStoppingService = false
+        stopCurrentSession(emitDisconnected = false, updateNotification = false)
         config = start.config
         canId = start.config.canId
         error = null
@@ -348,7 +461,7 @@ class VescForegroundService : Service() {
         }
         startLocationUpdates()
         setStatus("connecting")
-        showNotification("Connecting...")
+        startForeground(NOTIFICATION_ID, buildNotification("Connecting..."))
 
         when (start.config.mode) {
             "replay" -> startReplaySession(start)
@@ -705,7 +818,8 @@ class VescForegroundService : Service() {
         return rttHistory.average().roundToInt()
     }
 
-    private fun stopCurrentSession(emitDisconnected: Boolean) {
+    private fun stopCurrentSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
+        val stoppedConfig = config
         stopLocationUpdates()
         cancelCccdTimeout()
         stopPolling()
@@ -714,8 +828,8 @@ class VescForegroundService : Service() {
         finishRecording(if (emitDisconnected) "disconnected" else "stopped")
         telemetryStore?.recordMarker(
             if (emitDisconnected) "disconnected" else "app_stop",
-            config?.deviceId,
-            config?.deviceName,
+            stoppedConfig?.deviceId,
+            stoppedConfig?.deviceName,
         )
         telemetryStore?.flushBlocking()
         telemetryStore = null
@@ -725,7 +839,8 @@ class VescForegroundService : Service() {
         latestLocation = null
         error = null
         status = "idle"
-        showNotification()
+        config = null
+        if (updateNotification && !isStoppingService && stoppedConfig != null) showNotification()
         emitState()
         if (emitDisconnected) emitEvent("onDisconnected", mapOf("status" to 0))
     }
@@ -874,6 +989,7 @@ class VescForegroundService : Service() {
         )
         latestLocation = snapshot
         emitEvent("onLocation", snapshot.toMap())
+        if (config?.mode == "gps") showNotification(formatGpsNotificationText(snapshot))
         if (snapshot.precise) recorder?.recordLocation(snapshot)
     }
 
@@ -888,23 +1004,14 @@ class VescForegroundService : Service() {
         "error" to error,
     )
 
-    private fun registerStopReceiver() {
-        val filter = IntentFilter(ACTION_STOP_FROM_NOTIFICATION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(stopReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(stopReceiver, filter)
-        }
-    }
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "VESC Board Monitoring",
-                NotificationManager.IMPORTANCE_DEFAULT,
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Shows while connected to your VESC board"
+                description = "Shows while monitoring board and GPS data"
                 setSound(null, null)
                 enableVibration(false)
                 setShowBadge(false)
@@ -925,7 +1032,14 @@ class VescForegroundService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(buildOpenAppIntent())
             .setOngoing(true)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(
+                androidx.core.app.NotificationCompat.FOREGROUND_SERVICE_DEFERRED,
+            )
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
                 "Exit",
@@ -935,10 +1049,12 @@ class VescForegroundService : Service() {
     }
 
     private fun buildStopIntent(): PendingIntent {
-        val intent = Intent(ACTION_STOP_FROM_NOTIFICATION).apply { setPackage(packageName) }
-        return PendingIntent.getBroadcast(
+        val intent = Intent(this, VescForegroundService::class.java).apply {
+            action = ACTION_EXIT_FROM_NOTIFICATION
+        }
+        return PendingIntent.getService(
             this,
-            0,
+            1,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -988,6 +1104,11 @@ class VescForegroundService : Service() {
             values.dutyCycle * 100.0,
             values.batteryVoltage,
         )
+    }
+
+    private fun formatGpsNotificationText(location: LocationSnapshot): String {
+        val speedKmh = (location.speedMps ?: 0.0) * 3.6
+        return String.format("GPS %.1f km/h", abs(speedKmh))
     }
 
     private fun recordTelemetry(values: RefloatTelemetry) {

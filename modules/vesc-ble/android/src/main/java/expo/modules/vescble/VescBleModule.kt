@@ -8,9 +8,6 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -19,29 +16,21 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import expo.modules.vescble.telemetry.TelemetryLocationCapture
 import expo.modules.vescble.telemetry.TelemetryRepository
 import kotlinx.coroutines.runBlocking
 
 private const val TAG = "VescBle"
 private const val DEFAULT_BOARD_NAME = "VESC Board"
 private const val NUS_SERVICE_UUID_STRING = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
-private const val MAX_RECORDING_ACCURACY_M = 20.0
 private val VESC_NAME_PREFIXES = listOf("vesc", "float wheel", "floatwheel", "onewheel")
 
 @SuppressLint("MissingPermission") // permissions are requested at the JS/RN layer
 class VescBleModule : Module() {
   private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
   private var scanCallback: ScanCallback? = null
-  private var locationManager: LocationManager? = null
   private var locationContextDeviceId: String? = null
   private var locationContextDeviceName: String? = null
-  private var telemetryRecordingEnabled: Boolean = false
   private val mainHandler = Handler(Looper.getMainLooper())
-
-  private val locationListener = LocationListener { location ->
-    sendLocation(location)
-  }
 
   private val context: Context get() = appContext.reactContext
     ?: throw IllegalStateException("No React context")
@@ -181,71 +170,16 @@ class VescBleModule : Module() {
     }
     locationContextDeviceId = options?.get("deviceId") as? String
     locationContextDeviceName = options?.get("deviceName") as? String
-    val lm = (context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager) ?: return
-    if (locationManager != null) return
-    locationManager = lm
-    try {
-      lm.requestLocationUpdates(
-        LocationManager.GPS_PROVIDER,
-        1000L,
-        0f,
-        locationListener,
-        Looper.getMainLooper(),
-      )
-      lm.requestLocationUpdates(
-        LocationManager.NETWORK_PROVIDER,
-        2000L,
-        0f,
-        locationListener,
-        Looper.getMainLooper(),
-      )
-    } catch (e: Exception) {
-      Log.w(TAG, "Location updates failed: ${e.message}")
-    }
+    VescForegroundService.startGpsMonitoring(
+      context.applicationContext,
+      locationContextDeviceId,
+      locationContextDeviceName,
+    )
   }
 
   private fun stopLocationUpdates() {
-    val lm = locationManager ?: return
-    try {
-      lm.removeUpdates(locationListener)
-    } catch (_: Exception) {
-    }
-    locationManager = null
+    VescForegroundService.stopGpsMonitoring(context.applicationContext)
     TelemetryRepository.get(context.applicationContext).flushBlocking()
-  }
-
-  private fun sendLocation(location: Location) {
-    val precise = location.hasAccuracy() && location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
-    val serviceActive = VescForegroundService.currentState()["status"] != "idle"
-    val saved = if (serviceActive || !telemetryRecordingEnabled) {
-      false
-    } else {
-      TelemetryRepository.get(context.applicationContext).recordLocation(
-        TelemetryLocationCapture(
-          latitude = location.latitude,
-          longitude = location.longitude,
-          speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
-          bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
-          accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-          altitudeM = if (location.hasAltitude()) location.altitude else null,
-          timestamp = location.time,
-          precise = precise,
-        ),
-        deviceId = locationContextDeviceId,
-        deviceName = locationContextDeviceName,
-      )
-    }
-    sendEvent("onLocation", mapOf(
-      "latitude" to location.latitude,
-      "longitude" to location.longitude,
-      "speedMps" to if (location.hasSpeed()) location.speed.toDouble() else null,
-      "bearingDeg" to if (location.hasBearing()) location.bearing.toDouble() else null,
-      "accuracyM" to if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-      "altitudeM" to if (location.hasAltitude()) location.altitude else null,
-      "timestamp" to location.time,
-      "precise" to precise,
-      "saved" to saved,
-    ))
   }
 
   private fun startSession(options: Map<String, Any?>, promise: Promise?) {
@@ -288,7 +222,6 @@ class VescBleModule : Module() {
   }
 
   private fun setTelemetryRecordingEnabled(enabled: Boolean) {
-    telemetryRecordingEnabled = enabled
     VescForegroundService.setTelemetryRecordingEnabled(context.applicationContext, enabled)
     if (!enabled) {
       TelemetryRepository.get(context.applicationContext).flushBlocking()
