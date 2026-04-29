@@ -186,7 +186,17 @@ function LiveCollectionCard({
   const latestSpeed = latestBlock
     ? latestBlock.maxAbsSpeedKmh || latestBlock.maxGpsSpeedKmh || 0
     : 0
-  const maxBucketPoints = Math.max(1, ...blocks.map((b) => b.sampleCount + b.gpsPointCount))
+  const currentBucketStart = Date.now() - (Date.now() % 60_000)
+  const blocksByStart = new Map(blocks.map((block) => [block.bucketStartMs, block]))
+  const barSlots = Array.from({ length: 10 }, (_, index) => {
+    const bucketStartMs = currentBucketStart - (9 - index) * 60_000
+    const block = blocksByStart.get(bucketStartMs)
+    return {
+      bucketStartMs,
+      points: block ? block.sampleCount + block.gpsPointCount : 0,
+    }
+  })
+  const maxBucketPoints = Math.max(1, ...barSlots.map((slot) => slot.points))
 
   return (
     <View style={styles.liveCard}>
@@ -200,28 +210,23 @@ function LiveCollectionCard({
         </Text>
       </View>
       <View style={styles.liveBars}>
-        {blocks.length ? (
-          blocks
-            .slice()
-            .reverse()
-            .map((block) => {
-              const points = block.sampleCount + block.gpsPointCount
-              return (
-                <View key={block.id} style={styles.liveBarWrap}>
-                  <View
-                    style={[
-                      styles.liveBar,
-                      {
-                        height: Math.max(5, Math.round((points / maxBucketPoints) * 34)),
-                      },
-                    ]}
-                  />
-                </View>
-              )
-            })
-        ) : (
-          <View style={styles.liveEmptyBar} />
-        )}
+        {barSlots.map((slot) => {
+          const activeSlot = slot.bucketStartMs === currentBucketStart
+          const height =
+            slot.points > 0 ? Math.max(5, Math.round((slot.points / maxBucketPoints) * 34)) : 5
+          return (
+            <View key={slot.bucketStartMs} style={styles.liveBarWrap}>
+              <View
+                style={[
+                  styles.liveBar,
+                  slot.points === 0 && styles.liveBarEmpty,
+                  activeSlot && styles.liveBarActive,
+                  { height },
+                ]}
+              />
+            </View>
+          )
+        })}
       </View>
       <Text style={styles.liveBarsLabel}>Last 10 minutes, saved points per minute</Text>
       <View style={styles.metricsRow}>
@@ -451,6 +456,8 @@ const styles = StyleSheet.create({
   },
   liveBarWrap: { flex: 1, justifyContent: 'flex-end' },
   liveBar: { borderRadius: 3, backgroundColor: '#3b82f6' },
+  liveBarActive: { backgroundColor: '#22c55e' },
+  liveBarEmpty: { backgroundColor: '#374151' },
   liveEmptyBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: '#374151' },
   liveBarsLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', marginTop: -6 },
   list: { padding: 12, paddingBottom: 28 },
