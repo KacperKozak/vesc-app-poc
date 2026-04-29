@@ -8,7 +8,7 @@ interface Props {
 }
 
 /** A single row in the device scan list. */
-export function DeviceRow({ name, rssi, onPress }: Props) {
+export const DeviceRow = React.memo(function DeviceRow({ name, rssi, onPress }: Props) {
   const signalColor = rssi > -60 ? '#4ade80' : rssi > -75 ? '#facc15' : '#f87171'
 
   return (
@@ -23,7 +23,7 @@ export function DeviceRow({ name, rssi, onPress }: Props) {
       <Text style={styles.chevron}>›</Text>
     </Pressable>
   )
-}
+})
 
 const styles = StyleSheet.create({
   row: {

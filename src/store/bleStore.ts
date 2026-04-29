@@ -14,9 +14,11 @@ import {
   addSessionStateListener,
   addTelemetryListener,
   addLocationListener,
+  addStopRequestedListener,
   type RecordingInfo,
   type SessionMode,
   type LocationEvent,
+  type TelemetryEvent,
 } from 'vesc-ble'
 import { type RefloatValues } from '../vesc/types'
 
@@ -64,6 +66,11 @@ interface BleActions {
   stopGpsTracking: () => void
 }
 
+type BleStore = BleState & BleActions
+type BleSet = {
+  (partial: Partial<BleStore> | ((state: BleStore) => Partial<BleStore>), replace?: false): void
+}
+
 // ---------------------------------------------------------------------------
 // Native session subscriptions
 // ---------------------------------------------------------------------------
@@ -72,6 +79,7 @@ let telemetrySub: EventSubscription | null = null
 let sessionSub: EventSubscription | null = null
 let gpsSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
+let stopRequestedSub: EventSubscription | null = null
 const DEFAULT_BOARD_NAME = 'VESC Board'
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
 
@@ -86,6 +94,38 @@ function friendlyDeviceName(id: string, name?: string): string {
   const candidate = name?.trim()
   if (candidate && !MAC_ADDRESS_RE.test(candidate)) return candidate
   return DEFAULT_BOARD_NAME
+}
+
+function telemetryToRefloatValues(telemetry: TelemetryEvent): Partial<BleState> {
+  const { avgLatency, lastPacketAt, stateName: _stateName, location, ...refloatValues } = telemetry
+  return {
+    refloatValues: refloatValues as RefloatValues,
+    ...(location ? { gpsFix: location } : {}),
+    lastPacketAt,
+    avgLatency,
+  }
+}
+
+function installSessionSubscriptions(
+  set: BleSet,
+  fallbackMode: SessionMode,
+  fallbackDeviceId: string,
+): void {
+  removeSessionSubscriptions()
+  telemetrySub = addTelemetryListener((telemetry) => {
+    set((s) => ({
+      ...telemetryToRefloatValues(telemetry),
+      rxCount: s.rxCount + 1,
+    }))
+  })
+  sessionSub = addSessionStateListener((session) => {
+    set({
+      status: session.status === 'error' ? 'error' : session.status,
+      sessionMode: session.mode ?? fallbackMode,
+      connectedId: session.deviceId ?? fallbackDeviceId,
+      error: session.error ?? undefined,
+    })
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +150,11 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   // ---- actions ----
 
   startScan() {
+    const currentStatus = get().status
+    if (currentStatus === 'connecting' || currentStatus === 'connected') {
+      return
+    }
+
     set({ status: 'scanning', devices: [], error: undefined })
 
     scanSub?.remove()
@@ -118,21 +163,38 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       const rssi = device.rssi ?? -99
 
       set((state) => {
-        // Deduplicate by id, update RSSI if already present
         const existing = state.devices.findIndex((d) => d.id === device.id)
         if (existing !== -1) {
           const updated = [...state.devices]
           updated[existing] = { id: device.id, name, rssi }
+          updated.sort((a, b) => b.rssi - a.rssi)
           return { devices: updated }
         }
-        return { devices: [...state.devices, { id: device.id, name, rssi }] }
+        return {
+          devices: [...state.devices, { id: device.id, name, rssi }].sort(
+            (a, b) => b.rssi - a.rssi,
+          ),
+        }
       })
     })
-    nativeScan()
+    try {
+      nativeScan()
+    } catch (err) {
+      scanSub?.remove()
+      scanSub = null
+      set({
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   },
 
   stopScan() {
-    nativeStopScan()
+    try {
+      nativeStopScan()
+    } catch {
+      // Native scan may already be stopped after permission or lifecycle changes.
+    }
     scanSub?.remove()
     scanSub = null
     set((state) => ({
@@ -153,29 +215,17 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       avgLatency: null,
     })
 
-    removeSessionSubscriptions()
-    telemetrySub = addTelemetryListener((telemetry) => {
-      const {
-        avgLatency,
-        lastPacketAt,
-        stateName: _stateName,
-        location,
-        ...refloatValues
-      } = telemetry
-      set((s) => ({
-        refloatValues: refloatValues as RefloatValues,
-        ...(location ? { gpsFix: location } : {}),
-        lastPacketAt,
-        avgLatency,
-        rxCount: s.rxCount + 1,
-      }))
-    })
-    sessionSub = addSessionStateListener((session) => {
+    installSessionSubscriptions(set, 'ble', id)
+    stopRequestedSub?.remove()
+    stopRequestedSub = addStopRequestedListener(() => {
+      removeSessionSubscriptions()
+      void get().loadRecordings()
       set({
-        status: session.status === 'error' ? 'error' : session.status,
-        sessionMode: session.mode,
-        connectedId: session.deviceId,
-        error: session.error ?? undefined,
+        status: 'idle',
+        sessionMode: null,
+        connectedId: null,
+        refloatValues: null,
+        error: undefined,
       })
     })
 
@@ -210,31 +260,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       avgLatency: null,
     })
 
-    removeSessionSubscriptions()
-    telemetrySub = addTelemetryListener((telemetry) => {
-      const {
-        avgLatency,
-        lastPacketAt,
-        stateName: _stateName,
-        location,
-        ...refloatValues
-      } = telemetry
-      set((s) => ({
-        refloatValues: refloatValues as RefloatValues,
-        ...(location ? { gpsFix: location } : {}),
-        lastPacketAt,
-        avgLatency,
-        rxCount: s.rxCount + 1,
-      }))
-    })
-    sessionSub = addSessionStateListener((session) => {
-      set({
-        status: session.status === 'error' ? 'error' : session.status,
-        sessionMode: session.mode ?? 'replay',
-        connectedId: session.deviceId ?? recording.path,
-        error: session.error ?? undefined,
-      })
-    })
+    installSessionSubscriptions(set, 'replay', recording.path)
 
     try {
       await startSession({
@@ -251,19 +277,26 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   async disconnect() {
-    await stopSession()
-    removeSessionSubscriptions()
-    await get().loadRecordings()
-    set({
-      status: 'idle',
-      sessionMode: null,
-      connectedId: null,
-      refloatValues: null,
-      error: undefined,
-      rxCount: 0,
-      lastPacketAt: null,
-      avgLatency: null,
-    })
+    try {
+      await stopSession()
+    } catch {
+      // Treat native "already stopped" style failures as a completed local teardown.
+    } finally {
+      removeSessionSubscriptions()
+      stopRequestedSub?.remove()
+      stopRequestedSub = null
+      await get().loadRecordings()
+      set({
+        status: 'idle',
+        sessionMode: null,
+        connectedId: null,
+        refloatValues: null,
+        error: undefined,
+        rxCount: 0,
+        lastPacketAt: null,
+        avgLatency: null,
+      })
+    }
   },
 
   setRecordDebugSession(enabled: boolean) {

@@ -12,8 +12,10 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams, useNavigation } from 'expo-router'
+import { useShallow } from 'zustand/react/shallow'
 
 import { useBoardStore } from '@/store/boardStore'
+import { routes } from '@/navigation/routes'
 
 export default function BoardDetailsScreen() {
   const { bleId, bleName, boardId } = useLocalSearchParams<{
@@ -21,7 +23,14 @@ export default function BoardDetailsScreen() {
     bleName?: string
     boardId?: string
   }>()
-  const { boards, addBoard, updateBoard, removeBoard } = useBoardStore()
+  const { boards, addBoard, updateBoard, removeBoard } = useBoardStore(
+    useShallow((s) => ({
+      boards: s.boards,
+      addBoard: s.addBoard,
+      updateBoard: s.updateBoard,
+      removeBoard: s.removeBoard,
+    })),
+  )
   const navigation = useNavigation()
 
   const editingBoard = boardId ? boards.find((b) => b.id === boardId) : undefined
@@ -61,7 +70,7 @@ export default function BoardDetailsScreen() {
 
   const handleOpenPairing = () => {
     router.push({
-      pathname: '/add-board/scan',
+      pathname: routes.addBoardScan,
       params: editingBoard ? { boardId: editingBoard.id } : undefined,
     })
   }

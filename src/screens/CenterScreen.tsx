@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import { router } from 'expo-router'
 import { CaretDown, PencilSimple, Power, Star, Trash } from 'phosphor-react-native'
+import { useShallow } from 'zustand/react/shallow'
 
 import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
@@ -10,10 +11,18 @@ import { BoardMenu, type BoardMenuItem } from '@/components/BoardMenu'
 import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
 import { GpsStatusBadge, StatusPill } from '@/components/StatusPill'
 import { TelemetryView } from '@/components/TelemetryView'
+import { routes } from '@/navigation/routes'
 import type { RecordingInfo } from '@/store/bleStore'
 
 export function CenterScreen() {
-  const { boards, activeBoardId, setActiveBoard, starBoard } = useBoardStore()
+  const { boards, activeBoardId, setActiveBoard, starBoard } = useBoardStore(
+    useShallow((s) => ({
+      boards: s.boards,
+      activeBoardId: s.activeBoardId,
+      setActiveBoard: s.setActiveBoard,
+      starBoard: s.starBoard,
+    })),
+  )
   const {
     status: bleStatus,
     sessionMode,
@@ -29,7 +38,24 @@ export function CenterScreen() {
     replayRecording,
     deleteRecording,
     setRecordDebugSession,
-  } = useBleStore()
+  } = useBleStore(
+    useShallow((s) => ({
+      status: s.status,
+      sessionMode: s.sessionMode,
+      devices: s.devices,
+      recordings: s.recordings,
+      connectedId: s.connectedId,
+      recordDebugSession: s.recordDebugSession,
+      loadRecordings: s.loadRecordings,
+      startScan: s.startScan,
+      stopScan: s.stopScan,
+      connect: s.connect,
+      disconnect: s.disconnect,
+      replayRecording: s.replayRecording,
+      deleteRecording: s.deleteRecording,
+      setRecordDebugSession: s.setRecordDebugSession,
+    })),
+  )
   const { status: permStatus, request } = usePermissions()
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [scanEnabled, setScanEnabled] = useState(true)
@@ -49,7 +75,7 @@ export function CenterScreen() {
   }, [request])
 
   // Start scanning whenever intent + conditions align.
-  // bleStatus in deps restarts after external stopScan calls (e.g. add-board screen),
+  // bleStatus in deps restarts after external stopScan calls (e.g. addBoard screen),
   // but scanEnabled gates it so manual Stop/Disconnect don't auto-restart.
   useEffect(() => {
     if (!scanEnabled) return
@@ -93,7 +119,7 @@ export function CenterScreen() {
         label: 'Edit Board',
         icon: PencilSimple,
         onPress: () =>
-          router.push({ pathname: '/add-board/details', params: { boardId: activeBoard.id } }),
+          router.push({ pathname: routes.addBoardDetails, params: { boardId: activeBoard.id } }),
       })
     }
     if (activeBoard && !activeBoard.isStarred && !activeReplay) {
@@ -217,7 +243,7 @@ export function CenterScreen() {
                 style={styles.scanStopButton}
                 onPress={() =>
                   router.push({
-                    pathname: '/add-board/details',
+                    pathname: routes.addBoardDetails,
                     params: { boardId: activeBoard.id },
                   })
                 }
@@ -228,7 +254,7 @@ export function CenterScreen() {
           ) : (
             <>
               <Text style={styles.bodyTitle}>No board added yet</Text>
-              <Pressable style={styles.addButton} onPress={() => router.push('/add-board/scan')}>
+              <Pressable style={styles.addButton} onPress={() => router.push(routes.addBoardScan)}>
                 <Text style={styles.addButtonText}>+ Add your first board</Text>
               </Pressable>
             </>
@@ -249,7 +275,7 @@ export function CenterScreen() {
         }}
         onAddBoard={() => {
           setSelectorOpen(false)
-          router.push('/add-board/scan')
+          router.push(routes.addBoardScan)
         }}
         onReplay={(recording) => {
           setSelectorOpen(false)

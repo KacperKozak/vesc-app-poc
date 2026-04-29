@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BackHandler, ToastAndroid, View, Text, Pressable, StyleSheet } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import PagerView from 'react-native-pager-view'
 import { ClockCounterClockwise, Lightning, MapPin } from 'phosphor-react-native'
+import { useShallow } from 'zustand/react/shallow'
 
 import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
 import { usePermissions } from '@/ble/usePermissions'
+import { useBleAppLifecycle } from '@/hooks/useBleAppLifecycle'
 import { HistoryScreen } from '@/screens/HistoryScreen'
 import { CenterScreen } from '@/screens/CenterScreen'
 import { MapScreen } from '@/screens/MapScreen'
+import { MainPager, type MainPagerHandle } from '@/components/MainPager'
 
 const TABS = [
   { label: 'History', Icon: ClockCounterClockwise },
@@ -20,11 +22,15 @@ const TABS = [
 
 export default function MainScreen() {
   const [page, setPage] = useState(1)
-  const pagerRef = useRef<PagerView>(null)
+  const pagerRef = useRef<MainPagerHandle>(null)
   const backPressedOnce = useRef(false)
   const load = useBoardStore((s) => s.load)
-  const startGpsTracking = useBleStore((s) => s.startGpsTracking)
+  const { startGpsTracking } = useBleStore(
+    useShallow((s) => ({ startGpsTracking: s.startGpsTracking })),
+  )
   const { status: permStatus, request } = usePermissions()
+
+  useBleAppLifecycle()
 
   useEffect(() => {
     load()
@@ -62,16 +68,11 @@ export default function MainScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <PagerView
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={1}
-        onPageSelected={(e) => setPage(e.nativeEvent.position)}
-      >
+      <MainPager ref={pagerRef} page={page} onPageChange={setPage}>
         <HistoryScreen key="history" />
         <CenterScreen key="center" />
         <MapScreen key="map" />
-      </PagerView>
+      </MainPager>
 
       <SafeAreaView edges={['bottom']} style={styles.tabBar}>
         {TABS.map(({ label, Icon }, i) => {
@@ -94,9 +95,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-  },
-  pager: {
-    flex: 1,
   },
   tabBar: {
     flexDirection: 'row',

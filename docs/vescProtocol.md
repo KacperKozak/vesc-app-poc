@@ -1,6 +1,6 @@
 # VESC Protocol
 
-→ [index](./index.md) | [architecture](./architecture.md) | [refloat-alldata](./refloat-alldata.md)
+→ [index](./index.md) | [architecture](./architecture.md) | [refloatAlldata](./refloatAlldata.md)
 
 ## Packet framing
 

@@ -2,17 +2,25 @@ import { useEffect } from 'react'
 import { View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
+import { useShallow } from 'zustand/react/shallow'
 
 import { useBleStore } from '@/store/bleStore'
 import { usePermissions } from '@/ble/usePermissions'
 import { DeviceRow } from '@/components/DeviceRow'
+import { routes } from '@/navigation/routes'
 import type { ScannedDevice } from '@/store/bleStore'
 
 export default function AddBoardScanScreen() {
   const { boardId } = useLocalSearchParams<{ boardId?: string }>()
   const { status, request } = usePermissions()
-  const { devices, startScan, stopScan } = useBleStore()
-  const isScanning = useBleStore((s) => s.status === 'scanning')
+  const { devices, startScan, stopScan, isScanning } = useBleStore(
+    useShallow((s) => ({
+      devices: s.devices,
+      startScan: s.startScan,
+      stopScan: s.stopScan,
+      isScanning: s.status === 'scanning',
+    })),
+  )
 
   useEffect(() => {
     void request()
@@ -28,7 +36,7 @@ export default function AddBoardScanScreen() {
   const handleSelect = (device: ScannedDevice) => {
     stopScan()
     router.push({
-      pathname: '/add-board/details',
+      pathname: routes.addBoardDetails,
       params: { boardId, bleId: device.id, bleName: device.name },
     })
   }
@@ -36,10 +44,10 @@ export default function AddBoardScanScreen() {
   const handleSkip = () => {
     stopScan()
     if (boardId) {
-      router.push({ pathname: '/add-board/details', params: { boardId } })
+      router.push({ pathname: routes.addBoardDetails, params: { boardId } })
       return
     }
-    router.push('/add-board/details')
+    router.push(routes.addBoardDetails)
   }
 
   return (

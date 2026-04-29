@@ -12,7 +12,13 @@ interface Props {
 }
 
 /** A single telemetry value tile. */
-export function TelemetryCard({ label, value, unit, sub, alert = false }: Props) {
+export const TelemetryCard = React.memo(function TelemetryCard({
+  label,
+  value,
+  unit,
+  sub,
+  alert = false,
+}: Props) {
   return (
     <View style={styles.card}>
       {alert && <View style={styles.alertDot} />}
@@ -24,7 +30,7 @@ export function TelemetryCard({ label, value, unit, sub, alert = false }: Props)
       </Text>
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   card: {

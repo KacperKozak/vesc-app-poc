@@ -1,6 +1,6 @@
 # Refloat COMMAND_GET_ALLDATA
 
-→ [index](./index.md) | [vesc-protocol](./vesc-protocol.md)
+→ [index](./index.md) | [vescProtocol](./vescProtocol.md)
 
 Source: [`lukash/refloat`](https://github.com/lukash/refloat) `src/main.c` → `cmd_send_all_data()`
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, ActivityIndicator, Animated, StyleSheet, type ViewStyle } from 'react-native'
 import { Lightning, NavigationArrow, WarningCircle } from 'phosphor-react-native'
+import { useShallow } from 'zustand/react/shallow'
 import { useBleStore } from '@/store/bleStore'
 
 const COLORS: Record<string, { bg: string; text: string }> = {
@@ -12,7 +13,9 @@ const COLORS: Record<string, { bg: string; text: string }> = {
 }
 
 export function StatusPill({ status, style }: { status: string; style?: ViewStyle }) {
-  const { lastPacketAt, avgLatency } = useBleStore()
+  const { lastPacketAt, avgLatency } = useBleStore(
+    useShallow((s) => ({ lastPacketAt: s.lastPacketAt, avgLatency: s.avgLatency })),
+  )
   const pulseOpacity = useRef(new Animated.Value(0.35)).current
   const [isStale, setIsStale] = useState(false)
 

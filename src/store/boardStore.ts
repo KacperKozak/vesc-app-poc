@@ -8,6 +8,10 @@ import {
 import { create } from 'zustand'
 
 function generateId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
@@ -17,6 +21,7 @@ function generateId(): string {
 interface BoardState {
   boards: Board[]
   activeBoardId: string | null
+  hasLoaded: boolean
 }
 
 interface BoardActions {
@@ -31,12 +36,19 @@ interface BoardActions {
 export const useBoardStore = create<BoardState & BoardActions>((set, get) => ({
   boards: [],
   activeBoardId: null,
+  hasLoaded: false,
 
   load() {
     const boards = getBoards()
+    const { activeBoardId, hasLoaded } = get()
+    const activeBoardExists = boards.some((b) => b.id === activeBoardId)
     set({
       boards,
-      activeBoardId: boards.find((b) => b.isStarred)?.id ?? boards[0]?.id ?? null,
+      hasLoaded: true,
+      activeBoardId:
+        hasLoaded && activeBoardExists
+          ? activeBoardId
+          : (boards.find((b) => b.isStarred)?.id ?? boards[0]?.id ?? null),
     })
   },
 
@@ -84,6 +96,6 @@ export const useBoardStore = create<BoardState & BoardActions>((set, get) => ({
   starBoard(id) {
     const updated = get().boards.map((b) => ({ ...b, isStarred: b.id === id }))
     updated.forEach((b) => dbUpdate(b))
-    set({ boards: updated })
+    set({ boards: updated, activeBoardId: id })
   },
 }))

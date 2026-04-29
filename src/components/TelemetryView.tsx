@@ -1,5 +1,6 @@
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
 import { Lightning } from 'phosphor-react-native'
+import { useShallow } from 'zustand/react/shallow'
 import { useBleStore } from '@/store/bleStore'
 import { useMapStore } from '@/store/mapStore'
 import { TelemetryCard } from './TelemetryCard'
@@ -9,8 +10,18 @@ import { fmt, fmtSpeed, fmtKm } from '@/helpers/format'
 import { haversineM, bearingTo, clockHour, fmtDistance } from '@/helpers/geo'
 
 export function TelemetryView() {
-  const { refloatValues: v, status, gpsFix } = useBleStore()
-  const { targetLocation } = useMapStore()
+  const {
+    refloatValues: v,
+    status,
+    gpsFix,
+  } = useBleStore(
+    useShallow((s) => ({
+      refloatValues: s.refloatValues,
+      status: s.status,
+      gpsFix: s.gpsFix,
+    })),
+  )
+  const targetLocation = useMapStore((s) => s.targetLocation)
   const stateCompat = v ? v.state & 0xf : 0
   const stateName = v ? (REFLOAT_STATE_NAMES[stateCompat] ?? `STATE_${stateCompat}`) : '—'
   const hasFault = v?.hasFault ?? false

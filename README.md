@@ -167,6 +167,6 @@ cd android
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [VESC protocol](docs/vesc-protocol.md)
-- [Refloat GET_ALLDATA layout](docs/refloat-alldata.md)
-- [Android BLE notes](docs/ble-android.md)
+- [VESC protocol](docs/vescProtocol.md)
+- [Refloat GET_ALLDATA layout](docs/refloatAlldata.md)
+- [Android BLE notes](docs/bleAndroid.md)

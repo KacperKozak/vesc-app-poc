@@ -1,6 +1,7 @@
-import '../global.css'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+
+import { stackScreens } from '@/navigation/routes'
 
 export default function RootLayout() {
   return (
@@ -13,9 +14,9 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#111827' },
         }}
       >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="add-board/scan" options={{ title: 'Add Board' }} />
-        <Stack.Screen name="add-board/details" options={{ title: 'Board Details' }} />
+        <Stack.Screen name={stackScreens.home} options={{ headerShown: false }} />
+        <Stack.Screen name={stackScreens.addBoardScan} options={{ title: 'Add Board' }} />
+        <Stack.Screen name={stackScreens.addBoardDetails} options={{ title: 'Board Details' }} />
       </Stack>
       <StatusBar style="light" />
     </>
