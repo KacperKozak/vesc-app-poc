@@ -62,7 +62,7 @@ interface BleActions {
   loadRecordings: () => Promise<void>
   deleteRecording: (recording: RecordingInfo) => Promise<void>
   exportRecording: (recording: RecordingInfo) => Promise<string>
-  startGpsTracking: () => void
+  startGpsTracking: (context?: { deviceId?: string | null; deviceName?: string | null }) => void
   stopGpsTracking: () => void
 }
 
@@ -317,13 +317,16 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     return nativeExportRecording(recording.path)
   },
 
-  startGpsTracking() {
+  startGpsTracking(context) {
     if (!gpsSub) {
       gpsSub = addLocationListener((location) => {
         set({ gpsFix: location })
       })
     }
-    nativeStartLocationUpdates()
+    nativeStartLocationUpdates({
+      deviceId: context?.deviceId ?? null,
+      deviceName: context?.deviceName ?? null,
+    })
   },
 
   stopGpsTracking() {

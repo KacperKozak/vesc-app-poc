@@ -29,10 +29,14 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
+import expo.modules.vescble.telemetry.TelemetryCapture
+import expo.modules.vescble.telemetry.TelemetryLocationCapture
+import expo.modules.vescble.telemetry.TelemetryRepository
 import org.json.JSONObject
 import java.io.File
 import java.io.FileWriter
@@ -243,6 +247,7 @@ class VescForegroundService : Service() {
     private var intentionalDisconnect = false
     private var connectAttempt = 0
     private var recorder: VescSessionRecorder? = null
+    private var telemetryStore: TelemetryRepository? = null
     private var locationManager: LocationManager? = null
     private var latestLocation: LocationSnapshot? = null
 
@@ -323,6 +328,7 @@ class VescForegroundService : Service() {
         if (start.config.recordingEnabled && start.config.mode != "replay") {
             recorder = VescSessionRecorder(this, start.config).also { it.start() }
         }
+        telemetryStore = if (start.config.mode == "replay") null else TelemetryRepository.get(applicationContext)
         startLocationUpdates()
         setStatus("connecting")
         showNotification("Connecting...")
@@ -482,6 +488,7 @@ class VescForegroundService : Service() {
         status = "connected"
         emitState()
         emitEvent("onConnected", mapOf("mtu" to 517))
+        telemetryStore?.recordMarker("connected", config?.deviceId, config?.deviceName)
         showNotification("Discovering board...")
         start.onSuccess()
         mainHandler.postDelayed({ sendPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
@@ -512,6 +519,7 @@ class VescForegroundService : Service() {
                 telemetry = parsed
                 showNotification(formatNotificationText(parsed))
                 emitEvent("onTelemetry", parsed.toMap())
+                recordTelemetry(parsed)
                 emitState()
             }
         }
@@ -687,6 +695,13 @@ class VescForegroundService : Service() {
         stopReplayLoop()
         clearGatt(markIntentional = true)
         finishRecording(if (emitDisconnected) "disconnected" else "stopped")
+        telemetryStore?.recordMarker(
+            if (emitDisconnected) "disconnected" else "app_stop",
+            config?.deviceId,
+            config?.deviceName,
+        )
+        telemetryStore?.flushBlocking()
+        telemetryStore = null
         pendingConnect = null
         canId = null
         telemetry = null
@@ -724,6 +739,8 @@ class VescForegroundService : Service() {
         setError(message)
         showNotification(message)
         finishRecording("error")
+        telemetryStore?.flushBlocking()
+        telemetryStore = null
         start.onError(code, message)
     }
 
@@ -737,6 +754,7 @@ class VescForegroundService : Service() {
         status = "error"
         error = message
         recorder?.recordState("error", mapOf("message" to message))
+        telemetryStore?.recordMarker("error", config?.deviceId, config?.deviceName, message)
         emitEvent("onError", mapOf("message" to message))
         emitState()
     }
@@ -787,7 +805,20 @@ class VescForegroundService : Service() {
 
     private fun onLocationUpdated(location: Location) {
         val precise = location.hasAccuracy() && location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
-        val saved = precise && recorder != null
+        val saved = telemetryStore?.recordLocation(
+            TelemetryLocationCapture(
+                latitude = location.latitude,
+                longitude = location.longitude,
+                speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
+                bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
+                accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+                altitudeM = if (location.hasAltitude()) location.altitude else null,
+                timestamp = location.time,
+                precise = precise,
+            ),
+            deviceId = config?.deviceId,
+            deviceName = config?.deviceName,
+        ) ?: false
         val snapshot = LocationSnapshot(
             latitude = location.latitude,
             longitude = location.longitude,
@@ -904,6 +935,52 @@ class VescForegroundService : Service() {
             abs(values.speed),
             values.dutyCycle * 100.0,
             values.batteryVoltage,
+        )
+    }
+
+    private fun recordTelemetry(values: RefloatTelemetry) {
+        val session = config ?: return
+        if (session.mode == "replay") return
+        telemetryStore?.recordTelemetry(
+            TelemetryCapture(
+                capturedAtMs = values.lastPacketAt,
+                elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+                deviceId = session.deviceId,
+                deviceName = session.deviceName,
+                canId = canId,
+                hasFault = values.hasFault,
+                faultCode = values.faultCode,
+                pitch = values.pitch,
+                roll = values.roll,
+                balancePitch = values.balancePitch,
+                balanceCurrent = values.balanceCurrent,
+                speed = values.speed,
+                batteryVoltage = values.batteryVoltage,
+                motorCurrent = values.motorCurrent,
+                batteryCurrent = values.batteryCurrent,
+                erpm = values.erpm,
+                dutyCycle = values.dutyCycle,
+                state = values.state,
+                switchState = values.switchState,
+                adc1 = values.adc1,
+                adc2 = values.adc2,
+                odometer = values.odometer,
+                tempMosfet = values.tempMosfet,
+                tempMotor = values.tempMotor,
+                avgLatency = values.avgLatency,
+                location = values.location?.let {
+                    TelemetryLocationCapture(
+                        latitude = it.latitude,
+                        longitude = it.longitude,
+                        speedMps = it.speedMps,
+                        bearingDeg = it.bearingDeg,
+                        accuracyM = it.accuracyM,
+                        altitudeM = it.altitudeM,
+                        timestamp = it.timestamp,
+                        precise = it.precise,
+                    )
+                },
+            )
         )
     }
 }

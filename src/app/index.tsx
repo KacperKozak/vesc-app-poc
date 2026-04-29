@@ -25,6 +25,7 @@ export default function MainScreen() {
   const pagerRef = useRef<MainPagerHandle>(null)
   const backPressedOnce = useRef(false)
   const load = useBoardStore((s) => s.load)
+  const activeBoard = useBoardStore((s) => s.boards.find((b) => b.id === s.activeBoardId))
   const { startGpsTracking } = useBleStore(
     useShallow((s) => ({ startGpsTracking: s.startGpsTracking })),
   )
@@ -41,8 +42,13 @@ export default function MainScreen() {
   }, [request])
 
   useEffect(() => {
-    if (permStatus === 'granted') startGpsTracking()
-  }, [permStatus, startGpsTracking])
+    if (permStatus === 'granted') {
+      startGpsTracking({
+        deviceId: activeBoard?.bleId ?? activeBoard?.id ?? null,
+        deviceName: activeBoard?.name ?? null,
+      })
+    }
+  }, [activeBoard?.bleId, activeBoard?.id, activeBoard?.name, permStatus, startGpsTracking])
 
   useFocusEffect(
     useCallback(() => {

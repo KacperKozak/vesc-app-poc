@@ -16,8 +16,12 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.Promise
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.vescble.telemetry.TelemetryLocationCapture
+import expo.modules.vescble.telemetry.TelemetryRepository
+import kotlinx.coroutines.runBlocking
 
 private const val TAG = "VescBle"
 private const val DEFAULT_BOARD_NAME = "VESC Board"
@@ -30,6 +34,8 @@ class VescBleModule : Module() {
   private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
   private var scanCallback: ScanCallback? = null
   private var locationManager: LocationManager? = null
+  private var locationContextDeviceId: String? = null
+  private var locationContextDeviceName: String? = null
   private val mainHandler = Handler(Looper.getMainLooper())
 
   private val locationListener = LocationListener { location ->
@@ -62,7 +68,7 @@ class VescBleModule : Module() {
 
     Function("scan") { startScan() }
     Function("stopScan") { stopScanInternal() }
-    Function("startLocationUpdates") { startLocationUpdates() }
+    Function("startLocationUpdates") { options: Map<String, Any?>? -> startLocationUpdates(options) }
     Function("stopLocationUpdates") { stopLocationUpdates() }
     Function("getSessionState") {
       VescForegroundService.currentState()
@@ -86,6 +92,24 @@ class VescBleModule : Module() {
       } catch (e: Exception) {
         promise.reject("EXPORT_FAILED", e.message ?: "Could not export recording", e)
       }
+    }
+    AsyncFunction("getTelemetryHistory") Coroutine { options: Map<String, Any?> ->
+      TelemetryRepository.get(context.applicationContext).getHistory(options)
+    }
+    AsyncFunction("getTelemetrySamples") Coroutine { options: Map<String, Any?> ->
+      TelemetryRepository.get(context.applicationContext).getSamples(options)
+    }
+    AsyncFunction("getHistoryRange") Coroutine { options: Map<String, Any?> ->
+      TelemetryRepository.get(context.applicationContext).getRange(options)
+    }
+    AsyncFunction("getTelemetrySummary") {
+      runBlocking { TelemetryRepository.get(context.applicationContext).getSummary() }
+    }
+    AsyncFunction("deleteTelemetryBefore") Coroutine { beforeMs: Double ->
+      TelemetryRepository.get(context.applicationContext).deleteBefore(beforeMs.toLong())
+    }
+    AsyncFunction("clearTelemetryHistory") {
+      runBlocking { TelemetryRepository.get(context.applicationContext).clearAll() }
     }
   }
 
@@ -146,13 +170,15 @@ class VescBleModule : Module() {
     scanCallback = null
   }
 
-  private fun startLocationUpdates() {
+  private fun startLocationUpdates(options: Map<String, Any?>? = null) {
     val hasFine = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
       PackageManager.PERMISSION_GRANTED
     if (!hasFine) {
       sendEvent("onError", mapOf("message" to "Location permission not granted"))
       return
     }
+    locationContextDeviceId = options?.get("deviceId") as? String
+    locationContextDeviceName = options?.get("deviceName") as? String
     val lm = (context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager) ?: return
     if (locationManager != null) return
     locationManager = lm
@@ -183,10 +209,30 @@ class VescBleModule : Module() {
     } catch (_: Exception) {
     }
     locationManager = null
+    TelemetryRepository.get(context.applicationContext).flushBlocking()
   }
 
   private fun sendLocation(location: Location) {
     val precise = location.hasAccuracy() && location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
+    val serviceActive = VescForegroundService.currentState()["status"] != "idle"
+    val saved = if (serviceActive) {
+      false
+    } else {
+      TelemetryRepository.get(context.applicationContext).recordLocation(
+        TelemetryLocationCapture(
+          latitude = location.latitude,
+          longitude = location.longitude,
+          speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
+          bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
+          accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+          altitudeM = if (location.hasAltitude()) location.altitude else null,
+          timestamp = location.time,
+          precise = precise,
+        ),
+        deviceId = locationContextDeviceId,
+        deviceName = locationContextDeviceName,
+      )
+    }
     sendEvent("onLocation", mapOf(
       "latitude" to location.latitude,
       "longitude" to location.longitude,
@@ -196,7 +242,7 @@ class VescBleModule : Module() {
       "altitudeM" to if (location.hasAltitude()) location.altitude else null,
       "timestamp" to location.time,
       "precise" to precise,
-      "saved" to false,
+      "saved" to saved,
     ))
   }
 
