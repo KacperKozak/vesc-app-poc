@@ -1,3 +1,4 @@
+import { Lightning, NavigationArrow } from 'phosphor-react-native'
 import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useShallow } from 'zustand/react/shallow'
@@ -6,6 +7,7 @@ import { useBleStore } from '@/store/bleStore'
 import { minuteBucketStart } from '@/store/liveMonitor'
 
 type BucketSlot = { bucketStartMs: number; points: number; boardCount: number; gpsCount: number }
+type GpsFix = { timestamp: number; precise: boolean; accuracyM?: number | null }
 
 function buildBucketSlots(
   liveBuckets: { bucketStartMs: number; boardCount: number; gpsCount: number }[],
@@ -23,11 +25,46 @@ function buildBucketSlots(
   return { slots, currentBucketStart }
 }
 
+function bleLabel(status: string, avgLatency: number | null, isStale: boolean): string {
+  if (status === 'connected') {
+    if (isStale) return 'stale'
+    return avgLatency != null ? `${avgLatency}ms` : 'connected'
+  }
+  if (status === 'scanning') return 'scanning'
+  if (status === 'connecting') return 'connecting'
+  if (status === 'error') return 'error'
+  return 'idle'
+}
+
+function bleColor(status: string, isStale: boolean): string {
+  if (status === 'connected') return isStale ? '#ef4444' : '#4ade80'
+  if (status === 'scanning' || status === 'connecting') return '#60a5fa'
+  if (status === 'error') return '#ef4444'
+  return '#475569'
+}
+
+function gpsLabel(gpsFix: GpsFix | null, ageSec: number | null): string {
+  if (!gpsFix) return 'no GPS'
+  if (!gpsFix.precise) return gpsFix.accuracyM != null ? `±${gpsFix.accuracyM.toFixed(0)}m` : 'weak'
+  if (ageSec != null && ageSec > 5) return `${ageSec.toFixed(0)}s old`
+  return gpsFix.accuracyM != null ? `±${gpsFix.accuracyM.toFixed(0)}m` : 'GPS'
+}
+
+function gpsColor(gpsFix: GpsFix | null, ageSec: number | null): string {
+  if (!gpsFix) return '#475569'
+  if (!gpsFix.precise) return '#ef4444'
+  if (ageSec != null && ageSec > 5) return '#facc15'
+  return '#4ade80'
+}
+
 export function LiveStatusBar() {
-  const { liveDataBuckets, liveLastPointAtMs } = useBleStore(
+  const { liveDataBuckets, status, lastPacketAt, avgLatency, gpsFix } = useBleStore(
     useShallow((s) => ({
       liveDataBuckets: s.liveDataBuckets,
-      liveLastPointAtMs: s.liveLastPointAtMs,
+      status: s.status,
+      lastPacketAt: s.lastPacketAt,
+      avgLatency: s.avgLatency,
+      gpsFix: s.gpsFix,
     })),
   )
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -38,62 +75,73 @@ export function LiveStatusBar() {
     return () => clearInterval(interval)
   }, [])
 
-  const ageMs = liveLastPointAtMs ? nowMs - liveLastPointAtMs : null
-  const active = ageMs != null && ageMs < 15_000
+  const isStale = lastPacketAt != null && nowMs - lastPacketAt > 2000
+  const gpsAgeSec = gpsFix ? (nowMs - gpsFix.timestamp) / 1000 : null
+
   const boardTotal = liveDataBuckets.reduce((total, b) => total + b.boardCount, 0)
   const gpsTotal = liveDataBuckets.reduce((total, b) => total + b.gpsCount, 0)
   const { slots, currentBucketStart } = buildBucketSlots(liveDataBuckets, nowMs)
   const maxBoard = Math.max(1, ...slots.map((s) => s.boardCount))
   const maxGps = Math.max(1, ...slots.map((s) => s.gpsCount))
 
+  const boardColor = bleColor(status, isStale)
+  const boardText = bleLabel(status, avgLatency, isStale)
+  const gpsText = gpsLabel(gpsFix, gpsAgeSec)
+  const gpsClr = gpsColor(gpsFix, gpsAgeSec)
+
+  const expandedView = (
+    <ExpandedView
+      slots={slots}
+      currentBucketStart={currentBucketStart}
+      boardText={boardText}
+      boardColor={boardColor}
+      gpsText={gpsText}
+      gpsColor={gpsClr}
+      boardTotal={boardTotal}
+      gpsTotal={gpsTotal}
+    />
+  )
+
   return (
     <View style={styles.container}>
-      <Pressable style={styles.bar} onPress={() => setExpanded(!expanded)}>
-        <View style={[styles.dot, active && styles.dotActive]} />
-        <Text style={styles.label} numberOfLines={1}>
-          {active ? 'Receiving' : 'Idle'}
-        </Text>
-        {!expanded && <View style={styles.separator} />}
-        {!expanded && (
-          <View style={styles.miniSources}>
-            <MiniSource
-              label="Board"
+      {expanded ? (
+        <Pressable onPress={() => setExpanded(false)}>{expandedView}</Pressable>
+      ) : (
+        <Pressable style={styles.bar} onPress={() => setExpanded(true)}>
+          <View style={styles.sources}>
+            <SourceGroup
+              icon={<Lightning size={11} color={boardColor} weight="fill" />}
+              label="Board:"
               slots={slots}
               getValue={(s) => s.boardCount}
               max={maxBoard}
               currentBucketStart={currentBucketStart}
               activeColor="#3b82f6"
               currentColor="#60a5fa"
+              valueText={boardText}
+              valueColor={boardColor}
             />
-            <View style={styles.miniSourceDivider} />
-            <MiniSource
-              label="GPS"
+            <SourceGroup
+              icon={<NavigationArrow size={11} color={gpsClr} weight="fill" />}
+              label="GPS:"
               slots={slots}
               getValue={(s) => s.gpsCount}
               max={maxGps}
               currentBucketStart={currentBucketStart}
               activeColor="#10b981"
               currentColor="#34d399"
+              valueText={gpsText}
+              valueColor={gpsClr}
             />
           </View>
-        )}
-        <View style={styles.spacer} />
-        <Text style={styles.chevron}>{expanded ? '▴' : '▾'}</Text>
-      </Pressable>
-
-      {expanded && (
-        <ExpandedView
-          slots={slots}
-          currentBucketStart={currentBucketStart}
-          boardTotal={boardTotal}
-          gpsTotal={gpsTotal}
-        />
+        </Pressable>
       )}
     </View>
   )
 }
 
-function MiniSource({
+function SourceGroup({
+  icon,
   label,
   slots,
   getValue,
@@ -101,7 +149,10 @@ function MiniSource({
   currentBucketStart,
   activeColor,
   currentColor,
+  valueText,
+  valueColor,
 }: {
+  icon: React.ReactNode
   label: string
   slots: BucketSlot[]
   getValue: (s: BucketSlot) => number
@@ -109,11 +160,14 @@ function MiniSource({
   currentBucketStart: number
   activeColor: string
   currentColor: string
+  valueText: string
+  valueColor: string
 }) {
   const hasData = slots.some((s) => getValue(s) > 0)
   return (
-    <View style={styles.miniSource}>
-      <Text style={styles.miniSourceLabel}>{label}</Text>
+    <View style={styles.sourceGroup}>
+      {icon}
+      <Text style={styles.sourceGroupLabel}>{label}</Text>
       <View style={styles.miniBars}>
         {slots.map((slot) => {
           const count = getValue(slot)
@@ -133,6 +187,7 @@ function MiniSource({
           )
         })}
       </View>
+      <Text style={[styles.sourceGroupValue, { color: valueColor }]}>{valueText}</Text>
     </View>
   )
 }
@@ -140,11 +195,19 @@ function MiniSource({
 function ExpandedView({
   slots,
   currentBucketStart,
+  boardText,
+  boardColor,
+  gpsText,
+  gpsColor,
   boardTotal,
   gpsTotal,
 }: {
   slots: BucketSlot[]
   currentBucketStart: number
+  boardText: string
+  boardColor: string
+  gpsText: string
+  gpsColor: string
   boardTotal: number
   gpsTotal: number
 }) {
@@ -155,6 +218,7 @@ function ExpandedView({
     <View style={styles.expanded}>
       <View style={styles.expandedSources}>
         <SourceChart
+          icon={<Lightning size={10} color="#475569" weight="fill" />}
           label="Board"
           slots={slots}
           getValue={(s) => s.boardCount}
@@ -163,9 +227,12 @@ function ExpandedView({
           activeColor="#3b82f6"
           currentColor="#60a5fa"
           total={boardTotal}
+          statusText={boardText}
+          statusColor={boardColor}
         />
         <View style={styles.expandedDivider} />
         <SourceChart
+          icon={<NavigationArrow size={10} color="#475569" weight="fill" />}
           label="GPS"
           slots={slots}
           getValue={(s) => s.gpsCount}
@@ -174,14 +241,19 @@ function ExpandedView({
           activeColor="#10b981"
           currentColor="#34d399"
           total={gpsTotal}
+          statusText={gpsText}
+          statusColor={gpsColor}
         />
       </View>
-      <Text style={styles.barsLabel}>10 min · points/min</Text>
+      <Text style={styles.barsLabel}>
+        Each bar shows data points collected per minute · last 10 min
+      </Text>
     </View>
   )
 }
 
 function SourceChart({
+  icon,
   label,
   slots,
   getValue,
@@ -190,7 +262,10 @@ function SourceChart({
   activeColor,
   currentColor,
   total,
+  statusText,
+  statusColor,
 }: {
+  icon: React.ReactNode
   label: string
   slots: BucketSlot[]
   getValue: (s: BucketSlot) => number
@@ -199,13 +274,19 @@ function SourceChart({
   activeColor: string
   currentColor: string
   total: number
+  statusText: string
+  statusColor: string
 }) {
   const hasData = total > 0
   return (
     <View style={styles.sourceChart}>
       <View style={styles.sourceChartHeader}>
-        <Text style={styles.sourceChartLabel}>{label}</Text>
-        <Text style={[styles.sourceChartTotal, { color: hasData ? activeColor : '#475569' }]}>
+        <View style={styles.sourceChartTitle}>
+          {icon}
+          <Text style={styles.sourceChartLabel}>{label}</Text>
+        </View>
+        <Text style={[styles.sourceChartStatus, { color: statusColor }]}>{statusText}</Text>
+        <Text style={[styles.sourceChartTotal, { color: hasData ? activeColor : '#334155' }]}>
           {total}
         </Text>
       </View>
@@ -245,39 +326,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 8,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#4b5563',
-  },
-  dotActive: {
-    backgroundColor: '#22c55e',
-  },
-  label: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  separator: {
-    width: 1,
-    height: 10,
-    backgroundColor: '#334155',
-  },
-  miniSources: {
+  sources: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-around',
   },
-  miniSource: {
+  sourceGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
-  miniSourceLabel: {
-    color: '#475569',
-    fontSize: 9,
-    fontWeight: '700',
+  sourceGroupLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
   },
   miniBars: {
     height: 16,
@@ -294,21 +357,20 @@ const styles = StyleSheet.create({
     width: 3,
     borderRadius: 1,
   },
-
-  miniSourceDivider: {
-    width: 1,
-    height: 10,
-    backgroundColor: '#1e293b',
+  sourceGroupValue: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
-  spacer: { flex: 1 },
   chevron: {
     color: '#475569',
     fontSize: 10,
   },
   expanded: {
     paddingHorizontal: 12,
+    paddingTop: 8,
     paddingBottom: 10,
-    gap: 4,
+    gap: 6,
   },
   expandedSources: {
     flexDirection: 'row',
@@ -325,13 +387,24 @@ const styles = StyleSheet.create({
   },
   sourceChartHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 5,
+  },
+  sourceChartTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   sourceChartLabel: {
     color: '#475569',
     fontSize: 9,
     fontWeight: '700',
+  },
+  sourceChartStatus: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   sourceChartTotal: {
     fontSize: 9,
@@ -351,7 +424,6 @@ const styles = StyleSheet.create({
   barFill: {
     borderRadius: 2,
   },
-
   barsLabel: {
     color: '#475569',
     fontSize: 9,

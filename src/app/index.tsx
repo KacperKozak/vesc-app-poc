@@ -100,7 +100,6 @@ export default function MainScreen() {
         activeBoardId={connection.activeBoardId}
         activeBoard={connection.activeBoard}
         replayBoardName={connection.replayBoardName}
-        bleStatus={connection.bleStatus}
         recordings={connection.recordings}
         recordDebugSession={connection.recordDebugSession}
         menuItems={connection.menuItems}

@@ -4,7 +4,6 @@ import { CaretDown } from 'phosphor-react-native'
 
 import { BoardMenu, type BoardMenuItem } from '@/components/BoardMenu'
 import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
-import { GpsStatusBadge, StatusPill } from '@/components/StatusPill'
 import type { Board } from '@/db/boards'
 import type { RecordingInfo } from '@/store/bleStore'
 
@@ -13,7 +12,6 @@ interface TopBarProps {
   activeBoardId: string | null
   activeBoard: Board | undefined
   replayBoardName: string | null
-  bleStatus: string
   recordings: RecordingInfo[]
   recordDebugSession: boolean
   menuItems: BoardMenuItem[]
@@ -28,7 +26,6 @@ export function TopBar({
   activeBoardId,
   activeBoard,
   replayBoardName,
-  bleStatus,
   recordings,
   recordDebugSession,
   menuItems,
@@ -51,11 +48,6 @@ export function TopBar({
           <CaretDown size={12} color="#6b7280" weight="bold" />
         </View>
       </Pressable>
-
-      <View style={styles.pills}>
-        <GpsStatusBadge />
-        <StatusPill status={bleStatus} />
-      </View>
 
       <BoardMenu items={menuItems} />
 
@@ -115,10 +107,5 @@ const styles = StyleSheet.create({
     color: '#f1f5f9',
     fontSize: 15,
     fontWeight: '700',
-  },
-  pills: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
 })
