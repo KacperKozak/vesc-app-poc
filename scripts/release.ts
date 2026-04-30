@@ -21,6 +21,17 @@ async function run(label: string, cmd: string) {
   console.log(`✓ ${label}`)
 }
 
+async function ensureCleanWorkingTree() {
+  const status = await $`git status --porcelain`.cwd(root).text()
+  if (status.trim().length > 0) {
+    console.error('✗ Working tree is not clean. Commit or stash changes before release.')
+    process.exit(1)
+  }
+  console.log('✓ Working tree is clean')
+}
+
+await ensureCleanWorkingTree()
+await run('Push unpushed commits', 'git push')
 await run('TypeScript check', 'bun run ts')
 await run('Tests', 'bun run test')
 await run('Build release APK', 'bun run build:release')
@@ -36,6 +47,7 @@ console.log(`\n→ Version bumped ${oldVersion} → ${newVersion}`)
 
 // Git commit
 await run('Git commit', `git add package.json && git commit -m "${newVersion}"`)
+await run('Push version commit', 'git push')
 
 // Copy APK to Google Drive
 const apkSrc = join(root, 'android/app/build/outputs/apk/release/app-release.apk')
