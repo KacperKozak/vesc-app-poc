@@ -4,6 +4,7 @@ import { CaretDown } from 'phosphor-react-native'
 
 import { BoardMenu, type BoardMenuItem } from '@/components/BoardMenu'
 import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
+import { VibeWheelLogo } from '@/components/VibeWheelLogo'
 import type { Board } from '@/db/boards'
 import type { RecordingInfo } from '@/store/bleStore'
 
@@ -40,6 +41,7 @@ export function TopBar({
 
   return (
     <View style={styles.container}>
+      <VibeWheelLogo size={32} />
       <Pressable style={styles.selector} onPress={() => setSelectorOpen(true)}>
         <View style={styles.selectorContent}>
           <Text style={styles.selectorText} numberOfLines={1}>

@@ -1,5 +1,4 @@
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
-import { Lightning } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 import { useBleStore } from '@/store/bleStore'
 import { useMapStore } from '@/store/mapStore'
@@ -34,15 +33,6 @@ export function TelemetryView() {
       ? clockHour(gpsFix.bearingDeg, targetBearing)
       : null
 
-  const gpsAgeSec = gpsFix ? Math.max(0, (Date.now() - gpsFix.timestamp) / 1000) : null
-  const gpsStatus = !gpsFix
-    ? 'Waiting'
-    : gpsFix.precise
-      ? gpsFix.saved
-        ? 'Saving'
-        : 'Accepted'
-      : 'Rejected'
-
   return (
     <ScrollView contentContainerStyle={styles.grid}>
       {targetLocation && (
@@ -69,20 +59,6 @@ export function TelemetryView() {
           unit={gpsFix?.speedMps != null ? 'km/h' : undefined}
         />
         <TelemetryCard
-          label="Precision"
-          value={gpsFix?.accuracyM != null ? `±${gpsFix.accuracyM.toFixed(1)}` : '—'}
-          unit={gpsFix?.accuracyM != null ? 'm' : undefined}
-          alert={!!gpsFix && !gpsFix.saved}
-        />
-      </View>
-      <View style={styles.row}>
-        <TelemetryCard
-          label="GPS Recording"
-          value={gpsStatus}
-          unit={gpsAgeSec != null ? `${gpsAgeSec.toFixed(0)}s ago` : undefined}
-          alert={gpsStatus === 'Rejected'}
-        />
-        <TelemetryCard
           label="Location"
           value={
             gpsFix ? `${gpsFix.latitude.toFixed(5)}, ${gpsFix.longitude.toFixed(5)}` : 'No fix'
@@ -101,91 +77,105 @@ export function TelemetryView() {
           <Text style={styles.statusText}>Waiting for board telemetry…</Text>
         </View>
       )}
-      {!v && status !== 'connecting' && status !== 'connected' && (
-        <View style={styles.inlineStatus}>
-          <Lightning size={20} color="#4b5563" weight="regular" />
-          <Text style={styles.statusText}>Board telemetry unavailable</Text>
+      <View style={!v && styles.dimmed}>
+        <Text style={styles.sectionLabel}>RIDING</Text>
+        <View style={styles.row}>
+          <View style={styles.cardWide}>
+            <Text style={styles.cardLabel}>Speed</Text>
+            <Text style={styles.bigValue}>
+              {v ? speedSign : ''}
+              {v ? fmtSpeed(v.speed) : '—'}
+              {v != null && <Text style={styles.bigUnit}> km/h</Text>}
+            </Text>
+          </View>
         </View>
-      )}
-      {!v && <View style={styles.bottomSpacer} />}
-      {!v ? null : (
-        <>
-          <Text style={styles.sectionLabel}>RIDING</Text>
-          <View style={styles.row}>
-            <View style={styles.cardWide}>
-              <Text style={styles.cardLabel}>Speed</Text>
-              <Text style={styles.bigValue}>
-                {speedSign}
-                {fmtSpeed(v.speed)}
-                <Text style={styles.bigUnit}> km/h</Text>
-              </Text>
+        <View style={styles.row}>
+          <TelemetryCard
+            label="Pitch"
+            value={v ? fmt(v.pitch) : '—'}
+            unit={v ? '°' : undefined}
+            alert={v ? Math.abs(v.pitch) > 25 : false}
+          />
+          <TelemetryCard
+            label="Roll"
+            value={v ? fmt(v.roll) : '—'}
+            unit={v ? '°' : undefined}
+            alert={v ? Math.abs(v.roll) > 35 : false}
+          />
+        </View>
+        <View style={styles.row}>
+          <TelemetryCard
+            label="State"
+            value={v ? faultName : '—'}
+            alert={v ? hasFault || stateCompat >= 6 : false}
+          />
+          <TelemetryCard
+            label="Footpad"
+            value={v ? `${v.adc1.toFixed(2)} / ${v.adc2.toFixed(2)}` : '—'}
+          />
+        </View>
+        <Text style={styles.sectionLabel}>ELECTRICAL</Text>
+        <View style={styles.row}>
+          <TelemetryCard
+            label="Voltage"
+            value={v ? fmt(v.batteryVoltage) : '—'}
+            unit={v ? 'V' : undefined}
+          />
+          <TelemetryCard
+            label="Batt Current"
+            value={v ? fmt(v.batteryCurrent) : '—'}
+            unit={v ? 'A' : undefined}
+          />
+        </View>
+        <View style={styles.row}>
+          <TelemetryCard
+            label="Motor Current"
+            value={v ? fmt(v.motorCurrent) : '—'}
+            unit={v ? 'A' : undefined}
+          />
+          <TelemetryCard label="ERPM" value={v ? v.erpm.toFixed(0) : '—'} />
+        </View>
+        <View style={styles.row}>
+          <TelemetryCard
+            label="Duty Cycle"
+            value={v ? (v.dutyCycle * 100).toFixed(1) : '—'}
+            unit={v ? '%' : undefined}
+            alert={v ? Math.abs(v.dutyCycle) > 0.85 : false}
+          />
+          <TelemetryCard
+            label="Bal. Pitch"
+            value={v ? fmt(v.balancePitch) : '—'}
+            unit={v ? '°' : undefined}
+          />
+        </View>
+        {v && (v.tempMosfet != null || v.tempMotor != null) && (
+          <>
+            <Text style={styles.sectionLabel}>THERMAL</Text>
+            <View style={styles.row}>
+              <TelemetryCard
+                label="MOSFET Temp"
+                value={v.tempMosfet != null ? fmt(v.tempMosfet) : 'N/A'}
+                unit={v.tempMosfet != null ? '°C' : undefined}
+                alert={(v.tempMosfet ?? 0) > 80}
+              />
+              <TelemetryCard
+                label="Motor Temp"
+                value={v.tempMotor != null && v.tempMotor > 0 ? fmt(v.tempMotor) : 'N/A'}
+                unit={v.tempMotor != null && v.tempMotor > 0 ? '°C' : undefined}
+                alert={(v.tempMotor ?? 0) > 100}
+              />
             </View>
-          </View>
-          <View style={styles.row}>
-            <TelemetryCard
-              label="Pitch"
-              value={fmt(v.pitch)}
-              unit="°"
-              alert={Math.abs(v.pitch) > 25}
-            />
-            <TelemetryCard
-              label="Roll"
-              value={fmt(v.roll)}
-              unit="°"
-              alert={Math.abs(v.roll) > 35}
-            />
-          </View>
-          <View style={styles.row}>
-            <TelemetryCard label="State" value={faultName} alert={hasFault || stateCompat >= 6} />
-            <TelemetryCard label="Footpad" value={`${v.adc1.toFixed(2)} / ${v.adc2.toFixed(2)}`} />
-          </View>
-          <Text style={styles.sectionLabel}>ELECTRICAL</Text>
-          <View style={styles.row}>
-            <TelemetryCard label="Voltage" value={fmt(v.batteryVoltage)} unit="V" />
-            <TelemetryCard label="Batt Current" value={fmt(v.batteryCurrent)} unit="A" />
-          </View>
-          <View style={styles.row}>
-            <TelemetryCard label="Motor Current" value={fmt(v.motorCurrent)} unit="A" />
-            <TelemetryCard label="ERPM" value={v.erpm.toFixed(0)} />
-          </View>
-          <View style={styles.row}>
-            <TelemetryCard
-              label="Duty Cycle"
-              value={(v.dutyCycle * 100).toFixed(1)}
-              unit="%"
-              alert={Math.abs(v.dutyCycle) > 0.85}
-            />
-            <TelemetryCard label="Bal. Pitch" value={fmt(v.balancePitch)} unit="°" />
-          </View>
-          {(v.tempMosfet != null || v.tempMotor != null) && (
-            <>
-              <Text style={styles.sectionLabel}>THERMAL</Text>
-              <View style={styles.row}>
-                <TelemetryCard
-                  label="MOSFET Temp"
-                  value={v.tempMosfet != null ? fmt(v.tempMosfet) : 'N/A'}
-                  unit={v.tempMosfet != null ? '°C' : undefined}
-                  alert={(v.tempMosfet ?? 0) > 80}
-                />
-                <TelemetryCard
-                  label="Motor Temp"
-                  value={v.tempMotor != null && v.tempMotor > 0 ? fmt(v.tempMotor) : 'N/A'}
-                  unit={v.tempMotor != null && v.tempMotor > 0 ? '°C' : undefined}
-                  alert={(v.tempMotor ?? 0) > 100}
-                />
-              </View>
-            </>
-          )}
-          {v.odometer != null && (
-            <>
-              <Text style={styles.sectionLabel}>ODOMETER</Text>
-              <View style={styles.row}>
-                <TelemetryCard label="Total Distance" value={fmtKm(v.odometer)} unit="km" />
-              </View>
-            </>
-          )}
-        </>
-      )}
+          </>
+        )}
+        {v && v.odometer != null && (
+          <>
+            <Text style={styles.sectionLabel}>ODOMETER</Text>
+            <View style={styles.row}>
+              <TelemetryCard label="Total Distance" value={fmtKm(v.odometer)} unit="km" />
+            </View>
+          </>
+        )}
+      </View>
     </ScrollView>
   )
 }
@@ -200,7 +190,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
-  bottomSpacer: { height: 16 },
+  dimmed: { opacity: 0.35 },
   sectionLabel: {
     color: '#475569',
     fontSize: 10,

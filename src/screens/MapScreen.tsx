@@ -9,7 +9,7 @@ import { GOOGLE_MAPS_API_KEY, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
 export function MapScreen() {
   const gpsFix = useBleStore((s) => s.gpsFix)
   const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore()
-  const [mapProvider, setMapProvider] = useState<'mapy' | 'google'>('mapy')
+  const [mapProvider, setMapProvider] = useState<'mapy' | 'google'>('google')
   const [followGps, setFollowGps] = useState(true)
   const [heading, setHeading] = useState(0)
   const [rotationLocked, setRotationLocked] = useState(false)
@@ -156,19 +156,6 @@ export function MapScreen() {
 
       <View style={styles.providerSwitch}>
         <Pressable
-          style={[styles.providerButton, mapProvider === 'mapy' && styles.providerButtonActive]}
-          onPress={() => setMapProvider('mapy')}
-        >
-          <Text
-            style={[
-              styles.providerButtonText,
-              mapProvider === 'mapy' && styles.providerButtonTextActive,
-            ]}
-          >
-            Mapy.cz
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.providerButton, mapProvider === 'google' && styles.providerButtonActive]}
           onPress={() => setMapProvider('google')}
         >
@@ -179,6 +166,19 @@ export function MapScreen() {
             ]}
           >
             Google Maps
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.providerButton, mapProvider === 'mapy' && styles.providerButtonActive]}
+          onPress={() => setMapProvider('mapy')}
+        >
+          <Text
+            style={[
+              styles.providerButtonText,
+              mapProvider === 'mapy' && styles.providerButtonTextActive,
+            ]}
+          >
+            Mapy.cz
           </Text>
         </Pressable>
       </View>
