@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import type { LayoutChangeEvent } from 'react-native'
 import { LineGraph } from 'react-native-graph'
 import MapView, { Marker, Polyline, type LatLng } from 'react-native-maps'
 import { ListBullets, Pause, Play } from 'phosphor-react-native'
@@ -21,6 +22,7 @@ import { HistorySessionSheet } from './HistorySessionSheet'
 const STEP_MS = 5_000
 const SESSION_SAMPLE_LIMIT = 10_000
 const CHART_MAX_POINTS = 220
+const GRAPH_HEIGHT = 54
 
 type MarkerPoint = {
   id: string
@@ -194,6 +196,11 @@ export function HistoryMapPlayer({
   }, [selectedSession, sessions])
 
   const speedRange = useMemo(() => computeSpeedRange(speedPoints), [speedPoints])
+  const currentChartSample = useMemo(() => {
+    if (headTimeMs == null || chartSamples.length === 0) return null
+    const idx = findNearestSampleIndexByTime(chartSamples, headTimeMs)
+    return idx >= 0 ? chartSamples[idx] : null
+  }, [chartSamples, headTimeMs])
   const compactStats = useMemo(
     () => [
       { label: 'Time', value: headTimeMs != null ? formatTime(headTimeMs) : '-' },
@@ -353,6 +360,14 @@ export function HistoryMapPlayer({
               points={speedPoints}
               color="#60a5fa"
               range={speedRange}
+              currentPoint={
+                currentChartSample
+                  ? {
+                      date: new Date(currentChartSample.capturedAtMs),
+                      value: currentChartSample.speedKmh,
+                    }
+                  : null
+              }
               onPointSelected={selectChartPoint}
               onGestureStart={stopPlayback}
             />
@@ -363,6 +378,14 @@ export function HistoryMapPlayer({
               points={dutyPoints}
               color="#34d399"
               range={{ y: { min: -100, max: 100 } }}
+              currentPoint={
+                currentChartSample
+                  ? {
+                      date: new Date(currentChartSample.capturedAtMs),
+                      value: currentChartSample.dutyCycle * 100,
+                    }
+                  : null
+              }
               onPointSelected={selectChartPoint}
               onGestureStart={stopPlayback}
             />
@@ -456,6 +479,110 @@ function computeSpeedRange(points: HistoryChartPoint[]): { y: { min: number; max
   return { y: { min: min - pad, max: max + pad } }
 }
 
+function getGraphPathMarkerStyle(
+  points: HistoryChartPoint[],
+  currentPoint: HistoryChartPoint,
+  range: { y: { min: number; max: number } },
+  width: number,
+  height: number,
+): { left: number; top: number } | null {
+  if (points.length < 2) return null
+  const xMin = points[0].date.getTime()
+  const xMax = points[points.length - 1].date.getTime()
+  if (xMax <= xMin || range.y.max <= range.y.min) return null
+
+  const x = Math.floor(width * ((currentPoint.date.getTime() - xMin) / (xMax - xMin)))
+  const pathPoints = getGraphPathPoints(points, range, width, height)
+  const top = getYForPathX(pathPoints, x)
+  if (top == null) return null
+
+  return { left: Math.max(0, Math.min(width, x)), top: Math.max(0, Math.min(height, top)) }
+}
+
+function getGraphPathPoints(
+  graphData: HistoryChartPoint[],
+  range: { y: { min: number; max: number } },
+  width: number,
+  height: number,
+): Array<{ x: number; y: number }> {
+  const xMin = graphData[0].date.getTime()
+  const xMax = graphData[graphData.length - 1].date.getTime()
+  const xDiff = xMax - xMin
+  const yDiff = range.y.max - range.y.min
+  const endX = Math.floor(width)
+  const result: Array<{ x: number; y: number }> = []
+
+  const getX = (point: HistoryChartPoint) =>
+    Math.floor(width * ((point.date.getTime() - xMin) / xDiff))
+  const getY = (point: HistoryChartPoint) =>
+    height - Math.floor(height * ((point.value - range.y.min) / yDiff))
+  const getGraphDataIndex = (pixel: number) => Math.round((pixel / endX) * (graphData.length - 1))
+  const getNextPixelValue = (pixel: number) =>
+    pixel === endX || pixel + 2 < endX ? pixel + 2 : endX
+
+  for (let pixel = 0; pixel <= endX; pixel = getNextPixelValue(pixel)) {
+    const index = getGraphDataIndex(pixel)
+    if (index === 0 && pixel !== 0) continue
+    if (index === graphData.length - 1 && pixel !== endX) continue
+    if (index !== 0 && index !== graphData.length - 1) {
+      const exactPointX = getX(graphData[index])
+      if (![0, 1].some((additionalPixel) => pixel + additionalPixel === exactPointX)) continue
+    }
+    result.push({ x: pixel, y: getY(graphData[index]) })
+  }
+
+  return result
+}
+
+function getYForPathX(pathPoints: Array<{ x: number; y: number }>, x: number): number | null {
+  if (pathPoints.length === 0) return null
+  if (pathPoints.length === 1) return pathPoints[0].y
+
+  let cursor = pathPoints[0]
+  for (let i = 1; i < pathPoints.length; i += 1) {
+    const point = pathPoints[i]
+    const prev = pathPoints[i - 1]
+    const prevPrev = pathPoints[i - 2]
+    const p0 = prevPrev ?? prev
+    const p1 = prev
+    const cp1 = { x: (2 * p0.x + p1.x) / 3, y: (2 * p0.y + p1.y) / 3 }
+    const cp2 = { x: (p0.x + 2 * p1.x) / 3, y: (p0.y + 2 * p1.y) / 3 }
+    const end = {
+      x: (p0.x + 4 * p1.x + point.x) / 6,
+      y: (p0.y + 4 * p1.y + point.y) / 6,
+    }
+
+    if (x <= end.x || i === pathPoints.length - 1) {
+      return getCubicYAtX(cursor, cp1, cp2, end, x)
+    }
+    cursor = end
+  }
+
+  return pathPoints[pathPoints.length - 1].y
+}
+
+function getCubicYAtX(
+  start: { x: number; y: number },
+  cp1: { x: number; y: number },
+  cp2: { x: number; y: number },
+  end: { x: number; y: number },
+  x: number,
+): number {
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 16; i += 1) {
+    const mid = (lo + hi) / 2
+    if (cubic(start.x, cp1.x, cp2.x, end.x, mid) < x) lo = mid
+    else hi = mid
+  }
+  return cubic(start.y, cp1.y, cp2.y, end.y, (lo + hi) / 2)
+}
+
+function cubic(a: number, b: number, c: number, d: number, t: number): number {
+  const mt = 1 - t
+  return mt * mt * mt * a + 3 * mt * mt * t * b + 3 * mt * t * t * c + t * t * t * d
+}
+
 function HistoryLineChart({
   kind,
   label,
@@ -463,6 +590,7 @@ function HistoryLineChart({
   points,
   color,
   range,
+  currentPoint,
   onPointSelected,
   onGestureStart,
 }: {
@@ -472,28 +600,53 @@ function HistoryLineChart({
   points: HistoryChartPoint[]
   color: string
   range: { y: { min: number; max: number } }
+  currentPoint: HistoryChartPoint | null
   onPointSelected: (point: HistoryChartPoint) => void
   onGestureStart: () => void
 }) {
+  const [chartWidth, setChartWidth] = useState(0)
+  const onGraphLayout = (event: LayoutChangeEvent) => {
+    setChartWidth(Math.round(event.nativeEvent.layout.width))
+  }
+
+  const markerStyle = useMemo(() => {
+    if (!currentPoint || chartWidth < 1) return null
+    return getGraphPathMarkerStyle(points, currentPoint, range, chartWidth, GRAPH_HEIGHT)
+  }, [chartWidth, currentPoint, points, range])
+
   return (
     <View style={[styles.chartCard, kind === 'speed' ? styles.speedChart : styles.dutyChart]}>
       <View style={styles.chartHeader}>
         <Text style={styles.chartLabel}>{label}</Text>
         <Text style={styles.chartValue}>{value}</Text>
       </View>
-      <LineGraph
-        style={styles.graph}
-        points={points}
-        color={color}
-        lineThickness={2}
-        animated
-        enablePanGesture
-        panGestureDelay={0}
-        range={range}
-        onPointSelected={onPointSelected}
-        onGestureStart={onGestureStart}
-        onGestureEnd={() => {}}
-      />
+      <View style={styles.graphWrap} onLayout={onGraphLayout}>
+        <LineGraph
+          style={styles.graph}
+          points={points}
+          color={color}
+          lineThickness={2}
+          animated
+          enablePanGesture
+          panGestureDelay={0}
+          horizontalPadding={0}
+          verticalPadding={0}
+          range={range}
+          onPointSelected={onPointSelected}
+          onGestureStart={onGestureStart}
+          onGestureEnd={() => {}}
+        />
+        {markerStyle && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.currentPointMarker,
+              { borderColor: color },
+              { left: markerStyle.left, top: markerStyle.top },
+            ]}
+          />
+        )}
+      </View>
     </View>
   )
 }
@@ -639,8 +792,21 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   graph: {
-    height: 54,
+    height: GRAPH_HEIGHT,
+  },
+  graphWrap: {
+    height: GRAPH_HEIGHT,
     marginTop: 4,
+  },
+  currentPointMarker: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0f172a',
+    borderWidth: 2,
+    marginLeft: -4,
+    marginTop: -4,
   },
   chartEmpty: {
     color: '#94a3b8',
