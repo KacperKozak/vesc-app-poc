@@ -22,7 +22,7 @@ import {
 } from '@/store/historyStore'
 
 export function HistoryScreen() {
-  const [mode, setMode] = useState<'list' | 'map'>('list')
+  const [mode, setMode] = useState<'list' | 'map'>('map')
   const {
     blocks,
     sessions,

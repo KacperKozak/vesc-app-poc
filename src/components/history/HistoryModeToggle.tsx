@@ -11,16 +11,16 @@ export function HistoryModeToggle({ mode, onChange }: HistoryModeToggleProps) {
   return (
     <View style={styles.wrap}>
       <Pressable
-        style={[styles.button, mode === 'list' && styles.buttonActive]}
-        onPress={() => onChange('list')}
-      >
-        <Text style={[styles.buttonText, mode === 'list' && styles.buttonTextActive]}>List</Text>
-      </Pressable>
-      <Pressable
         style={[styles.button, mode === 'map' && styles.buttonActive]}
         onPress={() => onChange('map')}
       >
         <Text style={[styles.buttonText, mode === 'map' && styles.buttonTextActive]}>Map</Text>
+      </Pressable>
+      <Pressable
+        style={[styles.button, mode === 'list' && styles.buttonActive]}
+        onPress={() => onChange('list')}
+      >
+        <Text style={[styles.buttonText, mode === 'list' && styles.buttonTextActive]}>List</Text>
       </Pressable>
     </View>
   )

@@ -54,6 +54,7 @@ export function HistoryMapPlayer({
   const [sheetVisible, setSheetVisible] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [headTimeMs, setHeadTimeMs] = useState<number | null>(null)
+  const [mapReady, setMapReady] = useState(false)
   const playbackStartRef = useRef<{ realMs: number; headMs: number } | null>(null)
   const mapRef = useRef<MapView>(null)
 
@@ -117,12 +118,20 @@ export function HistoryMapPlayer({
   }, [selectedSession])
 
   useEffect(() => {
-    if (!selectedSession || route.length < 2) return
-    mapRef.current?.fitToCoordinates(route, {
-      edgePadding: { top: 80, right: 40, bottom: 360, left: 40 },
-      animated: true,
-    })
-  }, [route, selectedSession])
+    if (!mapReady || !selectedSession || route.length < 2) return
+    const fit = () => {
+      mapRef.current?.fitToCoordinates(route, {
+        edgePadding: { top: 80, right: 40, bottom: 360, left: 40 },
+        animated: true,
+      })
+    }
+    const frame = requestAnimationFrame(fit)
+    const timer = setTimeout(fit, 120)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timer)
+    }
+  }, [mapReady, route, selectedSession])
 
   useEffect(() => {
     if (!playing || !selectedSession || headTimeMs == null) return
@@ -297,6 +306,7 @@ export function HistoryMapPlayer({
       <MapView
         ref={mapRef}
         style={styles.map}
+        onMapReady={() => setMapReady(true)}
         onPress={(e) =>
           onMapPress(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
         }
