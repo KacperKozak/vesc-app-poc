@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import type { LayoutChangeEvent } from 'react-native'
-import { LineGraph } from 'react-native-graph'
 import MapView, { Marker, Polyline, type LatLng } from 'react-native-maps'
+import Svg, { Circle as SvgCircle, Polyline as SvgPolyline } from 'react-native-svg'
 import { ListBullets, Pause, Play } from 'phosphor-react-native'
 
 import {
@@ -479,108 +479,47 @@ function computeSpeedRange(points: HistoryChartPoint[]): { y: { min: number; max
   return { y: { min: min - pad, max: max + pad } }
 }
 
-function getGraphPathMarkerStyle(
+function getChartPosition(
   points: HistoryChartPoint[],
-  currentPoint: HistoryChartPoint,
+  point: HistoryChartPoint,
   range: { y: { min: number; max: number } },
   width: number,
   height: number,
-): { left: number; top: number } | null {
+): { x: number; y: number } | null {
   if (points.length < 2) return null
   const xMin = points[0].date.getTime()
   const xMax = points[points.length - 1].date.getTime()
-  if (xMax <= xMin || range.y.max <= range.y.min) return null
+  const xSpan = xMax - xMin
+  const ySpan = range.y.max - range.y.min
+  if (xSpan <= 0 || ySpan <= 0) return null
 
-  const x = Math.floor(width * ((currentPoint.date.getTime() - xMin) / (xMax - xMin)))
-  const pathPoints = getGraphPathPoints(points, range, width, height)
-  const top = getYForPathX(pathPoints, x)
-  if (top == null) return null
-
-  return { left: Math.max(0, Math.min(width, x)), top: Math.max(0, Math.min(height, top)) }
-}
-
-function getGraphPathPoints(
-  graphData: HistoryChartPoint[],
-  range: { y: { min: number; max: number } },
-  width: number,
-  height: number,
-): Array<{ x: number; y: number }> {
-  const xMin = graphData[0].date.getTime()
-  const xMax = graphData[graphData.length - 1].date.getTime()
-  const xDiff = xMax - xMin
-  const yDiff = range.y.max - range.y.min
-  const endX = Math.floor(width)
-  const result: Array<{ x: number; y: number }> = []
-
-  const getX = (point: HistoryChartPoint) =>
-    Math.floor(width * ((point.date.getTime() - xMin) / xDiff))
-  const getY = (point: HistoryChartPoint) =>
-    height - Math.floor(height * ((point.value - range.y.min) / yDiff))
-  const getGraphDataIndex = (pixel: number) => Math.round((pixel / endX) * (graphData.length - 1))
-  const getNextPixelValue = (pixel: number) =>
-    pixel === endX || pixel + 2 < endX ? pixel + 2 : endX
-
-  for (let pixel = 0; pixel <= endX; pixel = getNextPixelValue(pixel)) {
-    const index = getGraphDataIndex(pixel)
-    if (index === 0 && pixel !== 0) continue
-    if (index === graphData.length - 1 && pixel !== endX) continue
-    if (index !== 0 && index !== graphData.length - 1) {
-      const exactPointX = getX(graphData[index])
-      if (![0, 1].some((additionalPixel) => pixel + additionalPixel === exactPointX)) continue
-    }
-    result.push({ x: pixel, y: getY(graphData[index]) })
+  const x = width * ((point.date.getTime() - xMin) / xSpan)
+  const y = height - height * ((point.value - range.y.min) / ySpan)
+  return {
+    x: Math.max(0, Math.min(width, x)),
+    y: Math.max(0, Math.min(height, y)),
   }
-
-  return result
 }
 
-function getYForPathX(pathPoints: Array<{ x: number; y: number }>, x: number): number | null {
-  if (pathPoints.length === 0) return null
-  if (pathPoints.length === 1) return pathPoints[0].y
-
-  let cursor = pathPoints[0]
-  for (let i = 1; i < pathPoints.length; i += 1) {
-    const point = pathPoints[i]
-    const prev = pathPoints[i - 1]
-    const prevPrev = pathPoints[i - 2]
-    const p0 = prevPrev ?? prev
-    const p1 = prev
-    const cp1 = { x: (2 * p0.x + p1.x) / 3, y: (2 * p0.y + p1.y) / 3 }
-    const cp2 = { x: (p0.x + 2 * p1.x) / 3, y: (p0.y + 2 * p1.y) / 3 }
-    const end = {
-      x: (p0.x + 4 * p1.x + point.x) / 6,
-      y: (p0.y + 4 * p1.y + point.y) / 6,
-    }
-
-    if (x <= end.x || i === pathPoints.length - 1) {
-      return getCubicYAtX(cursor, cp1, cp2, end, x)
-    }
-    cursor = end
-  }
-
-  return pathPoints[pathPoints.length - 1].y
-}
-
-function getCubicYAtX(
-  start: { x: number; y: number },
-  cp1: { x: number; y: number },
-  cp2: { x: number; y: number },
-  end: { x: number; y: number },
+function findNearestChartPointAtX(
+  points: HistoryChartPoint[],
   x: number,
-): number {
-  let lo = 0
-  let hi = 1
-  for (let i = 0; i < 16; i += 1) {
-    const mid = (lo + hi) / 2
-    if (cubic(start.x, cp1.x, cp2.x, end.x, mid) < x) lo = mid
-    else hi = mid
+  width: number,
+): HistoryChartPoint | null {
+  if (points.length === 0 || width <= 0) return null
+  const xMin = points[0].date.getTime()
+  const xMax = points[points.length - 1].date.getTime()
+  const targetMs = xMin + (Math.max(0, Math.min(width, x)) / width) * (xMax - xMin)
+  let best = points[0]
+  let bestDistance = Math.abs(best.date.getTime() - targetMs)
+  for (const point of points) {
+    const distance = Math.abs(point.date.getTime() - targetMs)
+    if (distance < bestDistance) {
+      best = point
+      bestDistance = distance
+    }
   }
-  return cubic(start.y, cp1.y, cp2.y, end.y, (lo + hi) / 2)
-}
-
-function cubic(a: number, b: number, c: number, d: number, t: number): number {
-  const mt = 1 - t
-  return mt * mt * mt * a + 3 * mt * mt * t * b + 3 * mt * t * t * c + t * t * t * d
+  return best
 }
 
 function HistoryLineChart({
@@ -605,14 +544,48 @@ function HistoryLineChart({
   onGestureStart: () => void
 }) {
   const [chartWidth, setChartWidth] = useState(0)
-  const onGraphLayout = (event: LayoutChangeEvent) => {
+  const onGraphLayout = useCallback((event: LayoutChangeEvent) => {
     setChartWidth(Math.round(event.nativeEvent.layout.width))
-  }
+  }, [])
 
-  const markerStyle = useMemo(() => {
+  const markerPosition = useMemo(() => {
     if (!currentPoint || chartWidth < 1) return null
-    return getGraphPathMarkerStyle(points, currentPoint, range, chartWidth, GRAPH_HEIGHT)
+    return getChartPosition(points, currentPoint, range, chartWidth, GRAPH_HEIGHT)
   }, [chartWidth, currentPoint, points, range])
+  const polylinePoints = useMemo(
+    () =>
+      chartWidth > 0
+        ? points
+            .map((point) => getChartPosition(points, point, range, chartWidth, GRAPH_HEIGHT))
+            .filter((point): point is { x: number; y: number } => point != null)
+            .map((point) => `${point.x},${point.y}`)
+            .join(' ')
+        : '',
+    [chartWidth, points, range],
+  )
+  const selectAtX = useCallback(
+    (x: number) => {
+      const point = findNearestChartPointAtX(points, x, chartWidth)
+      if (!point) return
+      onPointSelected(point)
+    },
+    [chartWidth, onPointSelected, points],
+  )
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          onGestureStart()
+          selectAtX(event.nativeEvent.locationX)
+        },
+        onPanResponderMove: (event) => {
+          selectAtX(event.nativeEvent.locationX)
+        },
+      }),
+    [onGestureStart, selectAtX],
+  )
 
   return (
     <View style={[styles.chartCard, kind === 'speed' ? styles.speedChart : styles.dutyChart]}>
@@ -620,32 +593,27 @@ function HistoryLineChart({
         <Text style={styles.chartLabel}>{label}</Text>
         <Text style={styles.chartValue}>{value}</Text>
       </View>
-      <View style={styles.graphWrap} onLayout={onGraphLayout}>
-        <LineGraph
-          style={styles.graph}
-          points={points}
-          color={color}
-          lineThickness={2}
-          animated
-          enablePanGesture
-          panGestureDelay={0}
-          horizontalPadding={0}
-          verticalPadding={0}
-          range={range}
-          onPointSelected={onPointSelected}
-          onGestureStart={onGestureStart}
-          onGestureEnd={() => {}}
-        />
-        {markerStyle && (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.currentPointMarker,
-              { borderColor: color },
-              { left: markerStyle.left, top: markerStyle.top },
-            ]}
+      <View style={styles.graphWrap} onLayout={onGraphLayout} {...panResponder.panHandlers}>
+        <Svg width="100%" height={GRAPH_HEIGHT} style={styles.graph}>
+          <SvgPolyline
+            points={polylinePoints}
+            fill="none"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
-        )}
+          {markerPosition && (
+            <SvgCircle
+              cx={markerPosition.x}
+              cy={markerPosition.y}
+              r={4}
+              fill="#0f172a"
+              stroke={color}
+              strokeWidth={2}
+            />
+          )}
+        </Svg>
       </View>
     </View>
   )
@@ -797,16 +765,6 @@ const styles = StyleSheet.create({
   graphWrap: {
     height: GRAPH_HEIGHT,
     marginTop: 4,
-  },
-  currentPointMarker: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#0f172a',
-    borderWidth: 2,
-    marginLeft: -4,
-    marginTop: -4,
   },
   chartEmpty: {
     color: '#94a3b8',
