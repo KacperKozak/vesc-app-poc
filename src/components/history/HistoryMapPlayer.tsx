@@ -544,8 +544,13 @@ function HistoryLineChart({
   onGestureStart: () => void
 }) {
   const [chartWidth, setChartWidth] = useState(0)
+  const [chartPageX, setChartPageX] = useState(0)
+  const graphRef = useRef<View>(null)
   const onGraphLayout = useCallback((event: LayoutChangeEvent) => {
     setChartWidth(Math.round(event.nativeEvent.layout.width))
+    graphRef.current?.measure((_x, _y, _width, _height, pageX) => {
+      setChartPageX(pageX)
+    })
   }, [])
 
   const markerPosition = useMemo(() => {
@@ -563,28 +568,28 @@ function HistoryLineChart({
         : '',
     [chartWidth, points, range],
   )
-  const selectAtX = useCallback(
+  const selectAtPageX = useCallback(
     (x: number) => {
-      const point = findNearestChartPointAtX(points, x, chartWidth)
+      const point = findNearestChartPointAtX(points, x - chartPageX, chartWidth)
       if (!point) return
       onPointSelected(point)
     },
-    [chartWidth, onPointSelected, points],
+    [chartPageX, chartWidth, onPointSelected, points],
   )
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (event) => {
+        onStartShouldSetPanResponder: () => chartWidth > 0,
+        onMoveShouldSetPanResponder: () => chartWidth > 0,
+        onPanResponderGrant: (_event, gesture) => {
           onGestureStart()
-          selectAtX(event.nativeEvent.locationX)
+          selectAtPageX(gesture.x0)
         },
-        onPanResponderMove: (event) => {
-          selectAtX(event.nativeEvent.locationX)
+        onPanResponderMove: (_event, gesture) => {
+          selectAtPageX(gesture.moveX)
         },
       }),
-    [onGestureStart, selectAtX],
+    [chartWidth, onGestureStart, selectAtPageX],
   )
 
   return (
@@ -593,7 +598,12 @@ function HistoryLineChart({
         <Text style={styles.chartLabel}>{label}</Text>
         <Text style={styles.chartValue}>{value}</Text>
       </View>
-      <View style={styles.graphWrap} onLayout={onGraphLayout} {...panResponder.panHandlers}>
+      <View
+        ref={graphRef}
+        style={styles.graphWrap}
+        onLayout={onGraphLayout}
+        {...panResponder.panHandlers}
+      >
         <Svg width="100%" height={GRAPH_HEIGHT} style={styles.graph}>
           <SvgPolyline
             points={polylinePoints}
