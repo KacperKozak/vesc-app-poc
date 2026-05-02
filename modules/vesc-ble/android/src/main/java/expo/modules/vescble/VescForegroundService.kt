@@ -1046,6 +1046,9 @@ class VescForegroundService : Service() {
                 buildStopIntent(),
             )
             .build()
+            .apply {
+                flags = flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
+            }
     }
 
     private fun buildStopIntent(): PendingIntent {
