@@ -12,6 +12,7 @@ import {
   deleteRecording as nativeDeleteRecording,
   exportRecording as nativeExportRecording,
   addDeviceListener,
+  addErrorListener,
   addSessionStateListener,
   addTelemetryListener,
   addLocationListener,
@@ -93,6 +94,7 @@ let telemetrySub: EventSubscription | null = null
 let sessionSub: EventSubscription | null = null
 let gpsSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
+let scanErrorSub: EventSubscription | null = null
 let stopRequestedSub: EventSubscription | null = null
 let gpsTrackingContext: { deviceId?: string | null; deviceName?: string | null } | undefined
 const DEFAULT_BOARD_NAME = 'VESC Board'
@@ -109,6 +111,12 @@ function friendlyDeviceName(id: string, name?: string): string {
   const candidate = name?.trim()
   if (candidate && !MAC_ADDRESS_RE.test(candidate)) return candidate
   return DEFAULT_BOARD_NAME
+}
+
+function scannedDeviceName(id: string, name?: string): string {
+  const candidate = name?.trim()
+  if (candidate && !MAC_ADDRESS_RE.test(candidate)) return candidate
+  return `Unknown ${id.slice(-5)}`
 }
 
 function telemetryToRefloatValues(telemetry: TelemetryEvent): Partial<BleState> {
@@ -179,8 +187,12 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     set({ status: 'scanning', devices: [], error: undefined })
 
     scanSub?.remove()
+    scanErrorSub?.remove()
+    scanErrorSub = addErrorListener((event) => {
+      set({ status: 'error', error: event.message })
+    })
     scanSub = addDeviceListener((device) => {
-      const name = device.name || DEFAULT_BOARD_NAME
+      const name = scannedDeviceName(device.id, device.name)
       const rssi = device.rssi ?? -99
 
       set((state) => {
@@ -188,13 +200,10 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
         if (existing !== -1) {
           const updated = [...state.devices]
           updated[existing] = { id: device.id, name, rssi }
-          updated.sort((a, b) => b.rssi - a.rssi)
           return { devices: updated }
         }
         return {
-          devices: [...state.devices, { id: device.id, name, rssi }].sort(
-            (a, b) => b.rssi - a.rssi,
-          ),
+          devices: [...state.devices, { id: device.id, name, rssi }],
         }
       })
     })
@@ -203,6 +212,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     } catch (err) {
       scanSub?.remove()
       scanSub = null
+      scanErrorSub?.remove()
+      scanErrorSub = null
       set({
         status: 'error',
         error: err instanceof Error ? err.message : String(err),
@@ -218,6 +229,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     }
     scanSub?.remove()
     scanSub = null
+    scanErrorSub?.remove()
+    scanErrorSub = null
     set((state) => ({
       status: state.status === 'scanning' ? 'idle' : state.status,
     }))

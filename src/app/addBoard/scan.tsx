@@ -13,9 +13,10 @@ import type { ScannedDevice } from '@/store/bleStore'
 export default function AddBoardScanScreen() {
   const { boardId } = useLocalSearchParams<{ boardId?: string }>()
   const { status, request } = usePermissions()
-  const { devices, startScan, stopScan, isScanning } = useBleStore(
+  const { devices, error, startScan, stopScan, isScanning } = useBleStore(
     useShallow((s) => ({
       devices: s.devices,
+      error: s.error,
       startScan: s.startScan,
       stopScan: s.stopScan,
       isScanning: s.status === 'scanning',
@@ -57,7 +58,12 @@ export default function AddBoardScanScreen() {
         keyExtractor={(d) => d.id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <DeviceRow name={item.name} rssi={item.rssi} onPress={() => handleSelect(item)} />
+          <DeviceRow
+            id={item.id}
+            name={item.name}
+            rssi={item.rssi}
+            onPress={() => handleSelect(item)}
+          />
         )}
         ListHeaderComponent={
           <View style={styles.header}>
@@ -65,9 +71,11 @@ export default function AddBoardScanScreen() {
             <Text style={styles.subtitle}>
               {status === 'denied'
                 ? 'Bluetooth permission required'
-                : isScanning
-                  ? 'Scanning for nearby boards…'
-                  : 'No boards found nearby'}
+                : error
+                  ? error
+                  : isScanning
+                    ? 'Scanning for nearby boards…'
+                    : 'No boards found nearby'}
             </Text>
           </View>
         }

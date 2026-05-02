@@ -28,12 +28,6 @@ export function usePermissions(): {
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ]
 
-      // POST_NOTIFICATIONS is required on Android 13+ to show the foreground
-      // service notification while monitoring in background
-      if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
-        permissions.push('android.permission.POST_NOTIFICATIONS' as Permission)
-      }
-
       const results = await PermissionsAndroid.requestMultiple(permissions)
 
       const allGranted = Object.values(results).every(

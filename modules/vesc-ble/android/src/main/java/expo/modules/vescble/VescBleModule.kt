@@ -21,13 +21,14 @@ import kotlinx.coroutines.runBlocking
 
 private const val TAG = "VescBle"
 private const val DEFAULT_BOARD_NAME = "VESC Board"
-private const val NUS_SERVICE_UUID_STRING = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
-private val VESC_NAME_PREFIXES = listOf("vesc", "float wheel", "floatwheel", "onewheel")
+private const val SCAN_RETRY_LIMIT = 3
 
 @SuppressLint("MissingPermission") // permissions are requested at the JS/RN layer
 class VescBleModule : Module() {
   private var scanner: android.bluetooth.le.BluetoothLeScanner? = null
   private var scanCallback: ScanCallback? = null
+  private var scanRetryCount = 0
+  private var scanRetryRunnable: Runnable? = null
   private var locationContextDeviceId: String? = null
   private var locationContextDeviceName: String? = null
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -56,7 +57,7 @@ class VescBleModule : Module() {
       "onLocation",
     )
 
-    Function("scan") { startScan() }
+    Function("scan") { startScan(resetRetries = true) }
     Function("stopScan") { stopScanInternal() }
     Function("startLocationUpdates") { options: Map<String, Any?>? -> startLocationUpdates(options) }
     Function("stopLocationUpdates") { stopLocationUpdates() }
@@ -104,7 +105,10 @@ class VescBleModule : Module() {
     }
   }
 
-  private fun startScan() {
+  private fun startScan(resetRetries: Boolean = true) {
+    if (resetRetries) {
+      scanRetryCount = 0
+    }
     stopScanInternal()
 
     val s = btAdapter.bluetoothLeScanner ?: run {
@@ -119,9 +123,6 @@ class VescBleModule : Module() {
         val serviceUUIDs = result.scanRecord?.serviceUuids
           ?.map { it.uuid.toString() }
           ?: emptyList()
-        val isKnownName = VESC_NAME_PREFIXES.any { name.lowercase().startsWith(it) }
-        val hasNus = serviceUUIDs.any { it.equals(NUS_SERVICE_UUID_STRING, ignoreCase = true) }
-        if (!isKnownName && !hasNus) return
 
         sendEvent("onDevice", mapOf(
           "id" to device.address,
@@ -137,6 +138,25 @@ class VescBleModule : Module() {
 
       override fun onScanFailed(errorCode: Int) {
         Log.e(TAG, "Scan failed errorCode=$errorCode")
+        scanner = null
+        scanCallback = null
+
+        if (
+          errorCode == ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED &&
+          scanRetryCount < SCAN_RETRY_LIMIT
+        ) {
+          scanRetryCount += 1
+          val delayMs = 750L * scanRetryCount
+          Log.w(TAG, "Retrying scan after registration failure in ${delayMs}ms")
+          val retry = Runnable {
+            scanRetryRunnable = null
+            startScan(resetRetries = false)
+          }
+          scanRetryRunnable = retry
+          mainHandler.postDelayed(retry, delayMs)
+          return
+        }
+
         sendEvent("onError", mapOf("message" to "Scan failed: $errorCode"))
       }
     }
@@ -156,6 +176,8 @@ class VescBleModule : Module() {
   }
 
   private fun stopScanInternal() {
+    scanRetryRunnable?.let { mainHandler.removeCallbacks(it) }
+    scanRetryRunnable = null
     scanner?.stopScan(scanCallback)
     scanner = null
     scanCallback = null

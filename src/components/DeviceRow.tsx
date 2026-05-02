@@ -2,13 +2,14 @@ import React from 'react'
 import { Pressable, View, Text, StyleSheet } from 'react-native'
 
 interface Props {
+  id: string
   name: string
   rssi: number
   onPress: () => void
 }
 
 /** A single row in the device scan list. */
-export const DeviceRow = React.memo(function DeviceRow({ name, rssi, onPress }: Props) {
+export const DeviceRow = React.memo(function DeviceRow({ id, name, rssi, onPress }: Props) {
   const signalColor = rssi > -60 ? '#4ade80' : rssi > -75 ? '#facc15' : '#f87171'
 
   return (
@@ -18,6 +19,7 @@ export const DeviceRow = React.memo(function DeviceRow({ name, rssi, onPress }: 
     >
       <View style={styles.info}>
         <Text style={styles.name}>{name}</Text>
+        <Text style={styles.id}>{id}</Text>
         <Text style={[styles.rssi, { color: signalColor }]}>{rssi} dBm</Text>
       </View>
       <Text style={styles.chevron}>›</Text>
@@ -45,6 +47,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   rssi: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+  },
+  id: {
+    color: '#9ca3af',
     fontSize: 12,
     fontFamily: 'monospace',
   },
