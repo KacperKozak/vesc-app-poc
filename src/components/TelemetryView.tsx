@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, ScrollView, StyleSheet } from 'react-native'
 import { useShallow } from 'zustand/react/shallow'
 import { useBleStore } from '@/store/bleStore'
 import { useMapStore } from '@/store/mapStore'
@@ -9,11 +9,10 @@ import { fmt, fmtSpeed, fmtKm } from '@/helpers/format'
 import { haversineM, bearingTo, clockHour, fmtDistance } from '@/helpers/geo'
 
 export function TelemetryView() {
-  const { recentTelemetry, recentLocations, status } = useBleStore(
+  const { recentTelemetry, recentLocations } = useBleStore(
     useShallow((s) => ({
       recentTelemetry: s.recentTelemetry,
       recentLocations: s.recentLocations,
-      status: s.status,
     })),
   )
   const v = (recentTelemetry.at(-1) ?? null) as RefloatValues | null
@@ -63,18 +62,6 @@ export function TelemetryView() {
           }
         />
       </View>
-      {status === 'connecting' && (
-        <View style={styles.inlineStatus}>
-          <ActivityIndicator size="small" color="#3b82f6" />
-          <Text style={styles.statusText}>Connecting to board…</Text>
-        </View>
-      )}
-      {status === 'connected' && !v && (
-        <View style={styles.inlineStatus}>
-          <ActivityIndicator size="small" color="#4ade80" />
-          <Text style={styles.statusText}>Waiting for board telemetry…</Text>
-        </View>
-      )}
       <View style={!v && styles.dimmed}>
         <Text style={styles.sectionLabel}>RIDING</Text>
         <View style={styles.row}>
@@ -179,15 +166,7 @@ export function TelemetryView() {
 }
 
 const styles = StyleSheet.create({
-  statusText: { color: '#94a3b8', fontSize: 16 },
   grid: { padding: 12, paddingBottom: 32 },
-  inlineStatus: {
-    minHeight: 76,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 10,
-  },
   dimmed: { opacity: 0.35 },
   sectionLabel: {
     color: '#475569',

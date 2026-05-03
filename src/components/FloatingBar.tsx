@@ -1,6 +1,6 @@
 import { RecordIcon, StopCircleIcon } from 'phosphor-react-native'
 import { useCallback } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useShallow } from 'zustand/react/shallow'
 
 import type { Board } from '@/db/boards'
@@ -15,12 +15,6 @@ interface FloatingBarProps {
 }
 
 const ALERT_CONFIG = {
-  scanning: {
-    bg: theme.wheel.bg,
-    border: theme.wheel.border,
-    text: theme.wheel.text,
-    btnBg: theme.wheel.color,
-  },
   warning: {
     bg: theme.warning.bg,
     border: theme.warning.border,
@@ -35,45 +29,45 @@ const ALERT_CONFIG = {
   },
 } as const
 
-function getAlert(
+type SpinnerPill = { kind: 'spinner'; text: string; color: string }
+type ActionPill = {
+  kind: 'action'
+  text: string
+  buttonText: string
+  config: (typeof ALERT_CONFIG)[keyof typeof ALERT_CONFIG]
+  onPress: () => void
+}
+type StatusPill = SpinnerPill | ActionPill
+
+function getStatusPill(
   status: string,
+  hasTelemetry: boolean,
   board: Board | undefined,
   onStopScan: () => void,
   onRetryConnect: () => void,
-) {
+): StatusPill | null {
   if (!board?.bleId) return null
-  if (status === 'scanning') {
+  if (status === 'scanning') return { kind: 'spinner', text: 'Searching…', color: '#3b82f6' }
+  if (status === 'reconnecting') return { kind: 'spinner', text: 'Reconnecting…', color: '#3b82f6' }
+  if (status === 'connecting') return { kind: 'spinner', text: 'Connecting…', color: '#3b82f6' }
+  if (status === 'connected' && !hasTelemetry)
+    return { kind: 'spinner', text: 'Waiting for telemetry…', color: '#4ade80' }
+  if (status === 'idle')
     return {
-      text: `Searching for ${board.name}`,
-      buttonText: 'Stop',
-      config: ALERT_CONFIG.scanning,
-      onPress: onStopScan,
-    }
-  }
-  if (status === 'reconnecting') {
-    return {
-      text: `Reconnecting to ${board.name}`,
-      buttonText: 'Stop',
-      config: ALERT_CONFIG.scanning,
-      onPress: onStopScan,
-    }
-  }
-  if (status === 'idle') {
-    return {
+      kind: 'action',
       text: 'Board not connected',
       buttonText: 'Connect',
       config: ALERT_CONFIG.warning,
       onPress: onRetryConnect,
     }
-  }
-  if (status === 'error') {
+  if (status === 'error')
     return {
+      kind: 'action',
       text: 'Connection failed',
       buttonText: 'Retry',
       config: ALERT_CONFIG.error,
       onPress: onRetryConnect,
     }
-  }
   return null
 }
 
@@ -83,11 +77,12 @@ export function FloatingBar({
   onStopScan,
   onRetryConnect,
 }: FloatingBarProps) {
-  const { recording, start, stop } = useBleStore(
+  const { recording, start, stop, hasTelemetry } = useBleStore(
     useShallow((s) => ({
       recording: s.telemetryRecordingEnabled,
       start: s.startTelemetryRecording,
       stop: s.stopTelemetryRecording,
+      hasTelemetry: s.recentTelemetry.length > 0,
     })),
   )
 
@@ -102,23 +97,32 @@ export function FloatingBar({
     }
   }, [activeBoard?.bleId, activeBoard?.id, activeBoard?.name, recording, start, stop])
 
-  const alert = getAlert(bleStatus, activeBoard, onStopScan, onRetryConnect)
+  const pill = getStatusPill(bleStatus, hasTelemetry, activeBoard, onStopScan, onRetryConnect)
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      {alert && (
+      {pill?.kind === 'spinner' && (
+        <View style={[styles.pill, { borderColor: pill.color + '55' }]}>
+          <ActivityIndicator size="small" color={pill.color} />
+          <Text style={[styles.pillText, { color: pill.color }]} numberOfLines={1}>
+            {pill.text}
+          </Text>
+        </View>
+      )}
+      {pill?.kind === 'action' && (
         <Pressable
           style={[
-            styles.alertPill,
-            { backgroundColor: alert.config.bg, borderColor: alert.config.border },
+            styles.pill,
+            styles.pillAction,
+            { backgroundColor: pill.config.bg, borderColor: pill.config.border },
           ]}
-          onPress={alert.onPress}
+          onPress={pill.onPress}
         >
-          <Text style={[styles.alertText, { color: alert.config.text }]} numberOfLines={1}>
-            {alert.text}
+          <Text style={[styles.pillText, { color: pill.config.text }]} numberOfLines={1}>
+            {pill.text}
           </Text>
-          <View style={[styles.alertButton, { backgroundColor: alert.config.btnBg }]}>
-            <Text style={styles.alertButtonText}>{alert.buttonText}</Text>
+          <View style={[styles.pillButton, { backgroundColor: pill.config.btnBg }]}>
+            <Text style={styles.pillButtonText}>{pill.buttonText}</Text>
           </View>
         </Pressable>
       )}
@@ -145,34 +149,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  alertPill: {
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 44,
-    paddingLeft: 14,
-    paddingRight: 4,
+    paddingHorizontal: 16,
     borderRadius: 22,
     borderWidth: 1,
     gap: 10,
+    backgroundColor: '#0f172a',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
-  alertText: {
+  pillAction: {
+    paddingLeft: 14,
+    paddingRight: 4,
+  },
+  pillText: {
     fontSize: 12,
     fontWeight: '700',
-    maxWidth: 150,
+    maxWidth: 180,
   },
-  alertButton: {
+  pillButton: {
     height: 36,
     paddingHorizontal: 14,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  alertButtonText: {
+  pillButtonText: {
     color: '#f1f5f9',
     fontSize: 12,
     fontWeight: '800',
