@@ -9,6 +9,7 @@
 - [bleAndroid.md](./bleAndroid.md) — BLE connection problems & fixes (custom native module)
 - [vescProtocol.md](./vescProtocol.md) — VESC packet framing, CAN forwarding, Refloat commands
 - [refloatAlldata.md](./refloatAlldata.md) — Refloat `COMMAND_GET_ALLDATA` binary layout
+- [chargingDetection.md](./chargingDetection.md) — charging indicator investigation & findings
 
 ## Status
 

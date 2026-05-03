@@ -11,7 +11,7 @@ Source: [`lukash/refloat`](https://github.com/lukash/refloat) `src/main.c` → `
 ```
 
 Modes: `1` = RT data only, `2` += odometer + temps, `3` += energy counters, `4` += charging.
-We use mode 2.
+We use mode 4.
 
 ## Response payload layout (mode = 2, normal — no fault)
 
