@@ -80,6 +80,8 @@ if (char.uuid == NUS_RX_UUID || char.uuid == NUS_TX_UUID) { emit() }
 
 **status=133 on first connect**: common Android quirk on bonded devices (GATT_ERROR / connection timeout). Native retries and owns reconnect now.
 
+**Silent board reboot**: Android may keep GATT marked connected when telemetry stops. Native treats 2.5s without telemetry during auto-connect as stale, closes GATT, emits `reconnecting`, and retries.
+
 **Competing apps**: nRF Connect and the official board app auto-reconnect in background and can steal the GATT connection. Force-close them before testing.
 
 **Write type**: first 3 writes use `WRITE_TYPE_DEFAULT` (write-with-response) to confirm connectivity. Subsequent writes use `WRITE_TYPE_NO_RESPONSE` for throughput.

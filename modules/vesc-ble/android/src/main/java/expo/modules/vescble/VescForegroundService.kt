@@ -66,6 +66,7 @@ private const val REFLOAT_GET_ALLDATA = 10
 private const val REFLOAT_FAULT_MODE = 69
 private const val MAX_RECORDING_ACCURACY_M = 20.0
 private const val RECENT_WINDOW_MS = 10 * 60 * 1000L
+private const val TELEMETRY_STALE_MS = 2_500L
 
 private val NUS_SERVICE_UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
 private val NUS_TX_UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
@@ -283,10 +284,12 @@ class VescForegroundService : Service() {
     private var connectTimeout: Runnable? = null
     private var pendingConnect: PendingStart? = null
     private var pollRunnable: Runnable? = null
+    private var telemetryStaleRunnable: Runnable? = null
     private var replayStartRunnable: Runnable? = null
     private var replayRunnable: Runnable? = null
     private val replayEventRunnables = mutableListOf<Runnable>()
     private var lastPollAt = 0L
+    private var lastTelemetryAt = 0L
     private var diagWriteCount = 0
     private var intentionalDisconnect = false
     private var connectAttempt = 0
@@ -458,6 +461,7 @@ class VescForegroundService : Service() {
         diagWriteCount = 0
         connectAttempt = 0
         autoReconnectAttempt = 0
+        lastTelemetryAt = 0L
         if (start.config.recordingEnabled && start.config.mode != "replay") {
             recorder = VescSessionRecorder(this, start.config).also { it.start() }
         }
@@ -665,6 +669,8 @@ class VescForegroundService : Service() {
             COMM_CUSTOM_APP_DATA -> {
                 val parsed = parseGetAllData(payload) ?: return
                 telemetry = parsed
+                lastTelemetryAt = parsed.lastPacketAt
+                armTelemetryStaleWatchdog()
                 appendRecentTelemetry(parsed)
                 showNotification(formatNotificationText(parsed))
                 emitEvent("onTelemetry", parsed.toMap())
@@ -678,6 +684,7 @@ class VescForegroundService : Service() {
         val session = config ?: return
         val id = canId ?: return
         stopPolling()
+        armTelemetryStaleWatchdog()
         pollRunnable = object : Runnable {
             override fun run() {
                 lastPollAt = System.currentTimeMillis()
@@ -698,6 +705,24 @@ class VescForegroundService : Service() {
     private fun stopPolling() {
         pollRunnable?.let { mainHandler.removeCallbacks(it) }
         pollRunnable = null
+        telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
+        telemetryStaleRunnable = null
+    }
+
+    private fun armTelemetryStaleWatchdog() {
+        val session = config ?: return
+        if (!session.autoReconnect || session.mode == "replay") return
+        telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
+        val armedAt = lastTelemetryAt
+        telemetryStaleRunnable = Runnable {
+            telemetryStaleRunnable = null
+            val stillStale = lastTelemetryAt == armedAt ||
+                System.currentTimeMillis() - lastTelemetryAt >= TELEMETRY_STALE_MS
+            if (status == "connected" && config?.autoReconnect == true && stillStale) {
+                scheduleAutoReconnect(session, null, "telemetry stale")
+            }
+        }
+        mainHandler.postDelayed(telemetryStaleRunnable!!, TELEMETRY_STALE_MS)
     }
 
     private fun startReplayLoop(events: List<RecordedReplayEvent>) {
@@ -921,6 +946,7 @@ class VescForegroundService : Service() {
         cancelCccdTimeout()
         stopPolling()
         clearGatt(markIntentional = false)
+        lastTelemetryAt = 0L
         status = "reconnecting"
         error = reason
         autoReconnectAttempt += 1
