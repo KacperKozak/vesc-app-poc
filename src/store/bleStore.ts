@@ -175,6 +175,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   telemetryRecordingEnabled: false,
   recordDebugSession: false,
   recordings: [],
+  scanEnabled: true,
 
   // ---- actions ----
 

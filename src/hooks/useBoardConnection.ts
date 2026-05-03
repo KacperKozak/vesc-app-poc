@@ -11,6 +11,8 @@ import { routes } from '@/navigation/routes'
 import type { BoardMenuItem } from '@/components/BoardMenu'
 import type { RecordingInfo } from '@/store/bleStore'
 
+const SCAN_WATCHDOG_MS = 10_000
+
 export function useBoardConnection() {
   const { boards, activeBoardId, setActiveBoard, starBoard } = useBoardStore(
     useShallow((s) => ({
@@ -76,6 +78,12 @@ export function useBoardConnection() {
     startScan()
   }, [scanEnabled, permStatus, activeBoard?.bleId, bleStatus, startScan])
 
+  useEffect(() => {
+    if (bleStatus === 'error' || bleStatus === 'idle') {
+      connectingRef.current = false
+    }
+  }, [bleStatus])
+
   // Reset on board change or unmount
   useEffect(() => {
     setScanEnabled(true)
@@ -97,6 +105,16 @@ export function useBoardConnection() {
     stopScan()
     void connect(match.id, activeBoard.name)
   }, [activeBoard?.bleId, activeBoard?.name, bleStatus, connect, devices, stopScan])
+
+  // Android BLE scans can stall after adapter/GATT errors without reporting onScanFailed.
+  useEffect(() => {
+    if (bleStatus !== 'scanning') return
+    const timer = setTimeout(() => {
+      const status = useBleStore.getState().status
+      if (status === 'scanning') startScan()
+    }, SCAN_WATCHDOG_MS)
+    return () => clearTimeout(timer)
+  }, [bleStatus, devices.length, startScan])
 
   useEffect(() => {
     void loadRecordings()
@@ -174,6 +192,7 @@ export function useBoardConnection() {
   }, [stopScan])
 
   const handleRetryConnect = useCallback(() => {
+    connectingRef.current = false
     setScanEnabled(true)
     startScan()
   }, [startScan])

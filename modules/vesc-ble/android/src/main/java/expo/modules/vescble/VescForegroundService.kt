@@ -279,6 +279,7 @@ class VescForegroundService : Service() {
     private var txChar: BluetoothGattCharacteristic? = null
     private var pendingCccdWrites = 0
     private var cccdTimeout: Runnable? = null
+    private var connectTimeout: Runnable? = null
     private var pendingConnect: PendingStart? = null
     private var pollRunnable: Runnable? = null
     private var replayStartRunnable: Runnable? = null
@@ -500,8 +501,15 @@ class VescForegroundService : Service() {
         }
         pendingConnect = start
         connectAttempt++
+        cancelConnectTimeout()
         val device = bluetoothAdapter.getRemoteDevice(deviceId)
         gatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        connectTimeout = Runnable {
+            if (pendingConnect == start) {
+                failStart(start, "CONNECT_TIMEOUT", "Timed out connecting to board")
+            }
+        }
+        mainHandler.postDelayed(connectTimeout!!, 12_000)
         Log.d(TAG, "connectGatt $deviceId attempt=$connectAttempt")
     }
 
@@ -515,6 +523,7 @@ class VescForegroundService : Service() {
                     val wasConnecting = pendingConnect
                     val wasIntentional = intentionalDisconnect
                     clearGatt(markIntentional = false)
+                    cancelConnectTimeout()
                     stopPolling()
                     if (wasIntentional) {
                         intentionalDisconnect = false
@@ -536,13 +545,9 @@ class VescForegroundService : Service() {
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             Log.d(TAG, "onMtuChanged mtu=$mtu status=$status")
-            try {
-                val refresh = gatt.javaClass.getMethod("refresh")
-                Log.d(TAG, "gatt.refresh() = ${refresh.invoke(gatt)}")
-            } catch (e: Exception) {
-                Log.w(TAG, "gatt.refresh() not available: ${e.message}")
+            if (!gatt.discoverServices()) {
+                failPendingConnect("DISCOVERY_FAILED", "Could not start service discovery")
             }
-            gatt.discoverServices()
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -612,6 +617,7 @@ class VescForegroundService : Service() {
     }
 
     private fun resolveBleConnect() {
+        cancelConnectTimeout()
         cancelCccdTimeout()
         val start = pendingConnect ?: return
         pendingConnect = null
@@ -822,6 +828,7 @@ class VescForegroundService : Service() {
         val stoppedConfig = config
         stopLocationUpdates()
         cancelCccdTimeout()
+        cancelConnectTimeout()
         stopPolling()
         stopReplayLoop()
         clearGatt(markIntentional = true)
@@ -868,6 +875,10 @@ class VescForegroundService : Service() {
 
     private fun failStart(start: PendingStart, code: String, message: String) {
         pendingConnect = null
+        cancelConnectTimeout()
+        cancelCccdTimeout()
+        stopPolling()
+        clearGatt(markIntentional = true)
         setError(message)
         showNotification(message)
         finishRecording("error")
@@ -1097,6 +1108,11 @@ class VescForegroundService : Service() {
     private fun cancelCccdTimeout() {
         cccdTimeout?.let { mainHandler.removeCallbacks(it) }
         cccdTimeout = null
+    }
+
+    private fun cancelConnectTimeout() {
+        connectTimeout?.let { mainHandler.removeCallbacks(it) }
+        connectTimeout = null
     }
 
     private fun formatNotificationText(values: RefloatTelemetry): String {

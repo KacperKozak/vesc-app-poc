@@ -178,7 +178,11 @@ class VescBleModule : Module() {
   private fun stopScanInternal() {
     scanRetryRunnable?.let { mainHandler.removeCallbacks(it) }
     scanRetryRunnable = null
-    scanner?.stopScan(scanCallback)
+    try {
+      scanner?.stopScan(scanCallback)
+    } catch (e: Exception) {
+      Log.w(TAG, "stopScan failed: ${e.message}")
+    }
     scanner = null
     scanCallback = null
   }
