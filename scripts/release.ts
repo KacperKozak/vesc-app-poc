@@ -30,9 +30,20 @@ async function ensureCleanWorkingTree() {
   console.log('✓ Working tree is clean')
 }
 
+async function ensureBranch(branch: string) {
+  const current = await $`git branch --show-current`.cwd(root).text()
+  if (current.trim() !== branch) {
+    console.error(`✗ Must be on "${branch}" branch to release (current: ${current.trim()})`)
+    process.exit(1)
+  }
+  console.log(`✓ On branch "${branch}"`)
+}
+
+await ensureBranch('dev')
 await ensureCleanWorkingTree()
-await run('Push unpushed commits', 'git push')
+await run('Pull latest', 'git pull')
 await run('TypeScript check', 'bun run ts')
+await run('Lint', 'bun run lint')
 await run('Tests', 'bun run test')
 await run('Build release APK', 'bun run build:release')
 
@@ -45,9 +56,18 @@ pkg.version = newVersion
 await Bun.write(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 console.log(`\n→ Version bumped ${oldVersion} → ${newVersion}`)
 
-// Git commit
-await run('Git commit', `git add package.json && git commit -m "${newVersion}"`)
-await run('Push version commit', 'git push')
+// Commit + push version bump on dev
+await run('Commit version bump', `git add package.json && git commit -m "${newVersion}"`)
+await run('Push dev', 'git push')
+
+// Merge dev → main
+await run('Switch to main', 'git checkout main')
+await run('Pull main', 'git pull')
+await run('Merge dev → main', `git merge dev --no-ff -m "release: ${newVersion}"`)
+await run('Push main', 'git push')
+
+// Back to dev
+await run('Switch back to dev', 'git checkout dev')
 
 // Copy APK to Google Drive
 const apkSrc = join(root, 'android/app/build/outputs/apk/release/app-release.apk')
