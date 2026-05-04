@@ -4,7 +4,6 @@ import {
   scan as nativeScan,
   stopScan as nativeStopScan,
   startLocationUpdates as nativeStartLocationUpdates,
-  stopLocationUpdates as nativeStopLocationUpdates,
   setTelemetryRecordingEnabled as nativeSetTelemetryRecordingEnabled,
   startAutoConnect as nativeStartAutoConnect,
   stopAutoConnect as nativeStopAutoConnect,
@@ -25,10 +24,7 @@ import {
   type LocationEvent,
   type TelemetryEvent,
 } from 'vesc-ble'
-import {
-  shouldResumeGpsMonitoringAfterDisconnect,
-  shouldStopNativeSessionOnDisconnect,
-} from './monitoring'
+import { shouldStopNativeSessionOnDisconnect } from './monitoring'
 
 export interface ScannedDevice {
   id: string
@@ -65,13 +61,10 @@ interface BleActions {
   deleteRecording: (recording: RecordingInfo) => Promise<void>
   exportRecording: (recording: RecordingInfo) => Promise<string>
   syncNativeState: () => void
-  startTelemetryRecording: (context?: {
-    deviceId?: string | null
-    deviceName?: string | null
-  }) => void
+  clearRecentTelemetry: () => void
+  startTelemetryRecording: () => void
   stopTelemetryRecording: () => void
   startGpsTracking: (context?: { deviceId?: string | null; deviceName?: string | null }) => void
-  stopGpsTracking: () => void
 }
 
 type BleStore = BleState & BleActions
@@ -85,11 +78,9 @@ type BleSet = {
 
 let telemetrySub: EventSubscription | null = null
 let sessionSub: EventSubscription | null = null
-let gpsSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 let scanErrorSub: EventSubscription | null = null
 let stopRequestedSub: EventSubscription | null = null
-let gpsTrackingContext: { deviceId?: string | null; deviceName?: string | null } | undefined
 const DEFAULT_BOARD_NAME = 'VESC Board'
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
 const RECENT_WINDOW_MS = 10 * 60 * 1000
@@ -250,8 +241,6 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       sessionMode: 'ble',
       connectedId: null,
       error: undefined,
-      recentTelemetry: [],
-      recentLocations: [],
     })
 
     installSessionSubscriptions(set, 'ble', id)
@@ -293,8 +282,6 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       sessionMode: 'replay',
       connectedId: recording.path,
       error: undefined,
-      recentTelemetry: [],
-      recentLocations: [],
     })
 
     installSessionSubscriptions(set, 'replay', recording.path)
@@ -316,7 +303,13 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   async disconnect() {
     const sessionMode = get().sessionMode
     const shouldStopNativeSession = shouldStopNativeSessionOnDisconnect(sessionMode)
-    const shouldResumeGps = shouldResumeGpsMonitoringAfterDisconnect(sessionMode)
+
+    // Remove subscriptions BEFORE the native call so intermediate session-state
+    // events emitted during teardown don't flicker status through multiple values.
+    removeSessionSubscriptions()
+    stopRequestedSub?.remove()
+    stopRequestedSub = null
+
     try {
       if (shouldStopNativeSession) {
         if (sessionMode === 'ble') {
@@ -328,21 +321,13 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     } catch {
       // Treat native "already stopped" style failures as a completed local teardown.
     } finally {
-      removeSessionSubscriptions()
-      stopRequestedSub?.remove()
-      stopRequestedSub = null
       await get().loadRecordings()
       set({
         status: 'idle',
         sessionMode: null,
         connectedId: null,
         error: undefined,
-        recentTelemetry: [],
-        recentLocations: [],
       })
-      if (shouldResumeGps) {
-        get().startGpsTracking(gpsTrackingContext)
-      }
     }
   },
 
@@ -380,34 +365,33 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     })
   },
 
-  startTelemetryRecording(context) {
+  clearRecentTelemetry() {
+    set({ recentTelemetry: [] })
+  },
+
+  startTelemetryRecording() {
     nativeSetTelemetryRecordingEnabled(true)
-    get().startGpsTracking(context)
   },
 
   stopTelemetryRecording() {
     nativeSetTelemetryRecordingEnabled(false)
   },
 
+  // Updates the device context used by the native GPS session (for record tagging).
+  // GPS is always running — this just tells native which board to attribute locations to.
   startGpsTracking(context) {
-    gpsTrackingContext = context
-    if (!gpsSub) {
-      gpsSub = addLocationListener((location) => {
-        set((s) => ({
-          recentLocations: appendByTimestamp(s.recentLocations, location, locationKey),
-        }))
-      })
-    }
     nativeStartLocationUpdates({
       deviceId: context?.deviceId ?? null,
       deviceName: context?.deviceName ?? null,
     })
   },
-
-  stopGpsTracking() {
-    gpsTrackingContext = undefined
-    nativeStopLocationUpdates()
-    gpsSub?.remove()
-    gpsSub = null
-  },
 }))
+
+// GPS listener is always active for the lifetime of the store — no start/stop.
+// The native layer starts GPS automatically with every BLE session (beginSession)
+// and auto-resumes standalone GPS monitoring after disconnect (consumePendingStop).
+addLocationListener((location) => {
+  useBleStore.setState((s) => ({
+    recentLocations: appendByTimestamp(s.recentLocations, location, locationKey),
+  }))
+})

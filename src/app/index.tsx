@@ -33,7 +33,7 @@ export default function MainScreen() {
     useShallow((s) => ({
       telemetryRecordingEnabled: s.telemetryRecordingEnabled,
       startGpsTracking: s.startGpsTracking,
-      startTelemetryRecording: s.startTelemetryRecording,
+      startTelemetryRecording: s.startTelemetryRecording, // no-arg now
     })),
   )
   const { status: permStatus, request } = usePermissions()
@@ -58,7 +58,7 @@ export default function MainScreen() {
       }
       startGpsTracking(context)
       if (telemetryRecordingEnabled) {
-        startTelemetryRecording(context)
+        startTelemetryRecording()
       }
     }
   }, [

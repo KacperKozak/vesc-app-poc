@@ -33,6 +33,7 @@ export function useBoardConnection() {
     replayRecording,
     deleteRecording,
     setRecordDebugSession,
+    clearRecentTelemetry,
   } = useBleStore(
     useShallow((s) => ({
       status: s.status,
@@ -47,6 +48,7 @@ export function useBoardConnection() {
       replayRecording: s.replayRecording,
       deleteRecording: s.deleteRecording,
       setRecordDebugSession: s.setRecordDebugSession,
+      clearRecentTelemetry: s.clearRecentTelemetry,
     })),
   )
   const { status: permStatus } = usePermissions()
@@ -73,11 +75,12 @@ export function useBoardConnection() {
   // Reset on board change or unmount
   useEffect(() => {
     setAutoConnectEnabled(true)
+    clearRecentTelemetry()
     return () => {
       stopScan()
       void disconnect()
     }
-  }, [activeBoardId, disconnect, stopScan])
+  }, [activeBoardId, clearRecentTelemetry, disconnect, stopScan])
 
   useEffect(() => {
     void loadRecordings()

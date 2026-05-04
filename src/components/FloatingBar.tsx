@@ -29,7 +29,7 @@ const ALERT_CONFIG = {
   },
 } as const
 
-type SpinnerPill = { kind: 'spinner'; text: string; color: string }
+type SpinnerPill = { kind: 'spinner'; text: string; color: string; onPress: () => void }
 type ActionPill = {
   kind: 'action'
   text: string
@@ -47,11 +47,19 @@ function getStatusPill(
   onRetryConnect: () => void,
 ): StatusPill | null {
   if (!board?.bleId) return null
-  if (status === 'scanning') return { kind: 'spinner', text: 'Searching…', color: '#3b82f6' }
-  if (status === 'reconnecting') return { kind: 'spinner', text: 'Reconnecting…', color: '#3b82f6' }
-  if (status === 'connecting') return { kind: 'spinner', text: 'Connecting…', color: '#3b82f6' }
+  if (status === 'scanning')
+    return { kind: 'spinner', text: 'Searching…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'reconnecting')
+    return { kind: 'spinner', text: 'Reconnecting…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'connecting')
+    return { kind: 'spinner', text: 'Connecting…', color: '#3b82f6', onPress: onStopScan }
   if (status === 'connected' && !hasTelemetry)
-    return { kind: 'spinner', text: 'Waiting for telemetry…', color: '#4ade80' }
+    return {
+      kind: 'spinner',
+      text: 'Waiting for telemetry…',
+      color: '#4ade80',
+      onPress: onStopScan,
+    }
   if (status === 'idle')
     return {
       kind: 'action',
@@ -90,12 +98,9 @@ export function FloatingBar({
     if (recording) {
       stop()
     } else {
-      start({
-        deviceId: activeBoard?.bleId ?? activeBoard?.id ?? null,
-        deviceName: activeBoard?.name ?? null,
-      })
+      start()
     }
-  }, [activeBoard?.bleId, activeBoard?.id, activeBoard?.name, recording, start, stop])
+  }, [recording, start, stop])
 
   const pill = getStatusPill(bleStatus, hasTelemetry, activeBoard, onStopScan, onRetryConnect)
 
@@ -107,13 +112,15 @@ export function FloatingBar({
           <Text style={[styles.pillText, { color: pill.color }]} numberOfLines={1}>
             {pill.text}
           </Text>
+          <Pressable style={styles.pillButton} onPress={pill.onPress}>
+            <Text style={styles.pillButtonText}>Cancel</Text>
+          </Pressable>
         </View>
       )}
       {pill?.kind === 'action' && (
         <Pressable
           style={[
             styles.pill,
-            styles.pillAction,
             { backgroundColor: pill.config.bg, borderColor: pill.config.border },
           ]}
           onPress={pill.onPress}
@@ -153,7 +160,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 44,
-    paddingHorizontal: 16,
+    paddingLeft: 14,
+    paddingRight: 4,
     borderRadius: 22,
     borderWidth: 1,
     gap: 10,
@@ -163,10 +171,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  pillAction: {
-    paddingLeft: 14,
-    paddingRight: 4,
   },
   pillText: {
     fontSize: 12,

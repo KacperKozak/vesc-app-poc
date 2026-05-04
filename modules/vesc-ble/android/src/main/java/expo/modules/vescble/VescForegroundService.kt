@@ -338,6 +338,7 @@ class VescForegroundService : Service() {
         if (!isStoppingService) {
             stopCurrentSession(emitDisconnected = false)
         }
+        stopLocationUpdates()
         instance = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -869,7 +870,6 @@ class VescForegroundService : Service() {
 
     private fun stopCurrentSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
         val stoppedConfig = config
-        stopLocationUpdates()
         autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
         autoReconnectRunnable = null
         stopReconnectScan()
@@ -890,8 +890,6 @@ class VescForegroundService : Service() {
         canId = null
         telemetry = null
         latestLocation = null
-        recentTelemetry.clear()
-        recentLocations.clear()
         error = null
         status = "idle"
         config = null
