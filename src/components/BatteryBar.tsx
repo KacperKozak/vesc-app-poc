@@ -38,8 +38,9 @@ export function BatteryBar({ percent, voltage, series, hint, alert = false }: Pr
           <Text style={styles.hint}>{hint}</Text>
         ) : null}
       </View>
-      <Text style={[styles.percent, { color }]} numberOfLines={1}>
-        {percent != null ? `${Math.round(percent)}%` : '—'}
+      <Text style={styles.percent} numberOfLines={1}>
+        {percent != null ? Math.round(percent) : '—'}
+        {percent != null ? <Text style={styles.percentUnit}> %</Text> : null}
       </Text>
     </View>
   )
@@ -75,10 +76,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   percent: {
+    color: '#f1f5f9',
     fontSize: 22,
     fontFamily: 'monospace',
     fontWeight: '700',
     lineHeight: 24,
+  },
+  percentUnit: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '500',
   },
   voltage: {
     color: '#64748b',
