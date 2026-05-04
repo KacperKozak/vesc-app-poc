@@ -33,8 +33,9 @@ jobs:
           java-version: 17
       - run: bun install
       - name: Build Android
-        run: bun run build:release
-        working-directory: android
+        run: |
+          bun run build:release
+        working-directory: ${{ github.workspace }}/android
       - uses: actions/upload-artifact@v4
         with:
           name: app-release
