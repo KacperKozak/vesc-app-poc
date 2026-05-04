@@ -1117,21 +1117,29 @@ class VescForegroundService : Service() {
     }
 
     private fun onLocationUpdated(location: Location) {
-        val precise = location.hasAccuracy() && location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
-        val saved = telemetryStore?.recordLocation(
-            TelemetryLocationCapture(
-                latitude = location.latitude,
-                longitude = location.longitude,
-                speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
-                bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
-                accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-                altitudeM = if (location.hasAltitude()) location.altitude else null,
-                timestamp = location.time,
-                precise = precise,
-            ),
-            deviceId = config?.deviceId,
-            deviceName = config?.deviceName,
-        ) ?: false
+        val provider = location.provider
+        val precise = provider == LocationManager.GPS_PROVIDER &&
+            location.hasAccuracy() &&
+            location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
+        val capture = TelemetryLocationCapture(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
+            bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
+            accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+            altitudeM = if (location.hasAltitude()) location.altitude else null,
+            timestamp = location.time,
+            precise = precise,
+        )
+        val saved = if (precise) {
+            telemetryStore?.recordLocation(
+                capture,
+                deviceId = config?.deviceId,
+                deviceName = config?.deviceName,
+            ) ?: false
+        } else {
+            false
+        }
         val snapshot = LocationSnapshot(
             latitude = location.latitude,
             longitude = location.longitude,
@@ -1336,7 +1344,7 @@ class VescForegroundService : Service() {
                 tempMosfet = values.tempMosfet,
                 tempMotor = values.tempMotor,
                 avgLatency = values.avgLatency,
-                location = values.location?.let {
+                location = values.location?.takeIf { it.precise }?.let {
                     TelemetryLocationCapture(
                         latitude = it.latitude,
                         longitude = it.longitude,

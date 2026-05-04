@@ -58,18 +58,18 @@ export function HistoryMapPlayer({
   const playbackStartRef = useRef<{ realMs: number; headMs: number } | null>(null)
   const mapRef = useRef<MapView>(null)
 
-  const route = useMemo<LatLng[]>(
-    () =>
-      sessionGpsSamples.map((point) => ({
-        latitude: point.latitude,
-        longitude: point.longitude,
-      })),
-    [sessionGpsSamples],
-  )
-
   const routeByTime = useMemo(
     () => [...sessionGpsSamples].sort((a, b) => a.capturedAtMs - b.capturedAtMs),
     [sessionGpsSamples],
+  )
+
+  const route = useMemo<LatLng[]>(
+    () =>
+      routeByTime.map((point) => ({
+        latitude: point.latitude,
+        longitude: point.longitude,
+      })),
+    [routeByTime],
   )
   const boardByTime = useMemo(
     () => [...sessionSamples].sort((a, b) => a.capturedAtMs - b.capturedAtMs),
