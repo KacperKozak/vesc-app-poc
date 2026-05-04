@@ -28,7 +28,9 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - name: Build Android and iOS
-        run: bunx eas-cli build --platform all --profile production --non-interactive
+      - name: Build Android
+        run: bunx eas-cli build --platform android --profile production --non-interactive
+      - name: Build iOS (simulator)
+        run: bunx eas-cli build --platform ios --profile development-simulator --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
