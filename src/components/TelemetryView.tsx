@@ -2,11 +2,13 @@ import { useMemo } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useShallow } from 'zustand/react/shallow'
 
-import { Sparkline, type SparklinePoint } from '@/components/charts/Sparkline'
+import { BatteryBar } from '@/components/BatteryBar'
+import { SpeedGauge } from '@/components/charts/SpeedGauge'
+import { type SparklinePoint } from '@/components/charts/Sparkline'
 import { TelemetryCard } from '@/components/TelemetryCard'
 import { theme } from '@/constants/theme'
-import { estimateBatteryPercent, fmtBatteryPercent } from '@/helpers/battery'
-import { fmt, fmtKm, fmtSpeed } from '@/helpers/format'
+import { estimateBatteryPercent } from '@/helpers/battery'
+import { fmt, fmtKm } from '@/helpers/format'
 import { bearingTo, clockHour, fmtDistance, haversineM } from '@/helpers/geo'
 import { emaSeries } from '@/helpers/smoothing'
 import { useBleStore } from '@/store/bleStore'
@@ -15,63 +17,9 @@ import { useMapStore } from '@/store/mapStore'
 import { REFLOAT_STATE_NAMES } from '@/vesc/refloat'
 import { FAULT_NAMES, type RefloatValues } from '@/vesc/types'
 
-interface BigStatProps {
-  label: string
-  value: string
-  unit?: string
-  /** Tiny meta-text, top-right of card header (e.g. "Set min/max V…"). */
-  hint?: string
-  /** Prominent secondary value rendered under the main number (e.g. GPS speed). */
-  secondary?: string
-  alert?: boolean
-  series?: SparklinePoint[]
-  seriesColor?: string
-  /** Pass to render max-marker + badge. Omit for clean line only. */
-  fmtMax?: (value: number) => string
-  /** Fixed Y range — overrides auto-range. */
-  range?: { min: number; max: number }
-  /** Min Y span for auto-range (smooths small jitter). */
-  minSpan?: number
-}
-
-function BigStat({
-  label,
-  value,
-  unit,
-  hint,
-  secondary,
-  alert = false,
-  series,
-  seriesColor,
-  fmtMax,
-  range,
-  minSpan,
-}: BigStatProps) {
-  return (
-    <View style={[styles.bigCard, alert && styles.bigCardAlert]}>
-      {alert && <View style={styles.alertDot} />}
-      <View style={styles.bigHeader}>
-        <Text style={styles.bigLabel}>{label}</Text>
-        {hint ? <Text style={styles.bigHint}>{hint}</Text> : null}
-      </View>
-      <Text style={styles.bigValue} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
-        {unit ? <Text style={styles.bigUnit}> {unit}</Text> : null}
-      </Text>
-      {secondary ? <Text style={styles.bigSecondary}>{secondary}</Text> : null}
-      {series && series.length > 1 ? (
-        <Sparkline
-          points={series}
-          color={seriesColor ?? theme.wheel.color}
-          height={26}
-          fmtMax={fmtMax}
-          range={range}
-          minSpan={minSpan}
-        />
-      ) : null}
-    </View>
-  )
-}
+// Voltage sag smoothing: 20s half-life dampens throttle-burst dips while
+// still tracking real drain over a ~1 min window.
+const BATTERY_SMOOTH_HALF_LIFE_MS = 20_000
 
 export function TelemetryView() {
   const { recentTelemetry, recentLocations } = useBleStore(
@@ -86,12 +34,7 @@ export function TelemetryView() {
   const v = (recentTelemetry.at(-1) ?? null) as RefloatValues | null
   const gpsFix = recentLocations.at(-1) ?? null
 
-  // Battery voltage smoothing — counters voltage sag under load.
-  // 20s half-life: smooths spikes during throttle bursts but still tracks
-  // genuine drain over a ~1 min window.
-  const BATTERY_SMOOTH_HALF_LIFE_MS = 20_000
-
-  // Series (last 10 min — store already trims this window)
+  // Last-10-min series — store already trims this window.
   const series = useMemo(() => {
     const speed: SparklinePoint[] = []
     const rawVoltage: SparklinePoint[] = []
@@ -139,8 +82,7 @@ export function TelemetryView() {
   const hasFault = v?.hasFault ?? false
   const faultName = v?.hasFault ? (FAULT_NAMES[v.faultCode] ?? `CODE_${v.faultCode}`) : stateName
 
-  // Use smoothed voltage so the big number / % don't bounce with sag.
-  // Falls back to raw if smoothing produced nothing yet (single sample).
+  // Use smoothed voltage so the indicator doesn't bounce with sag.
   const smoothVoltage = series.smoothVoltage.at(-1)?.value ?? v?.batteryVoltage ?? null
   const batteryPct =
     smoothVoltage != null
@@ -153,7 +95,6 @@ export function TelemetryView() {
   const batteryConfigured = activeBoard?.minVoltage != null && activeBoard?.maxVoltage != null
 
   const gpsSpeedKmh = gpsFix?.speedMps != null ? gpsFix.speedMps * 3.6 : null
-  const speedSecondary = gpsSpeedKmh != null ? `GPS ${gpsSpeedKmh.toFixed(1)} km/h` : undefined
 
   // Target-location helpers (kept; unrelated to ride stats)
   const targetDistanceM = gpsFix && targetLocation ? haversineM(gpsFix, targetLocation) : null
@@ -193,79 +134,65 @@ export function TelemetryView() {
       )}
 
       <View style={!v && styles.dimmed}>
-        {/* HERO — speed */}
-        <BigStat
-          label="Speed"
-          value={v ? fmtSpeed(v.speed) : '—'}
-          unit={v ? 'km/h' : undefined}
-          secondary={speedSecondary}
-          series={series.speed}
-          seriesColor={theme.wheel.color}
-          fmtMax={(value) => `${value.toFixed(0)} km/h`}
-          minSpan={10}
-        />
-
-        {/* PRIMARY STATS */}
-        <BigStat
-          label="Battery"
-          value={
-            batteryConfigured
-              ? fmtBatteryPercent(batteryPct)
-              : smoothVoltage != null
-                ? fmt(smoothVoltage)
-                : '—'
-          }
-          unit={batteryConfigured ? '%' : smoothVoltage != null ? 'V' : undefined}
-          secondary={
-            batteryConfigured && smoothVoltage != null ? `${fmt(smoothVoltage)} V` : undefined
-          }
+        {/* TOP — compact battery indicator */}
+        <BatteryBar
+          percent={batteryConfigured ? batteryPct : null}
+          voltage={smoothVoltage}
+          series={batteryConfigured ? series.battery : undefined}
           hint={!batteryConfigured ? 'Set min/max V in board settings' : undefined}
           alert={batteryAlert}
-          series={batteryConfigured ? series.battery : undefined}
-          seriesColor={theme.gps.color}
-          range={{ min: 0, max: 100 }}
         />
 
-        <BigStat
-          label="Duty Cycle"
-          value={v ? dutyAbsPct.toFixed(1) : '—'}
-          unit={v ? '%' : undefined}
-          alert={dutyAlert}
-          series={series.duty}
-          seriesColor={theme.bran.color}
-          fmtMax={(value) => `${value.toFixed(0)}%`}
-          range={{ min: 0, max: 100 }}
+        {/* HERO — speedometer with GPS line below */}
+        <SpeedGauge
+          value={v ? Math.abs(v.speed) : null}
+          gpsValue={gpsSpeedKmh}
+          series={series.speed}
+          max={50}
         />
 
-        <BigStat
-          label="Motor Temp"
-          value={v?.tempMotor != null && v.tempMotor > 0 ? fmt(v.tempMotor) : 'N/A'}
-          unit={v?.tempMotor != null && v.tempMotor > 0 ? '°C' : undefined}
-          alert={motorTempAlert}
-          series={series.motorTemp}
-          seriesColor={theme.warning.color}
-          fmtMax={(value) => `${value.toFixed(0)}°C`}
-          minSpan={30}
-        />
+        {/* PRIMARY TILES — 2 col, with sparklines */}
+        <View style={styles.row}>
+          <TelemetryCard
+            label="Duty Cycle"
+            value={v ? dutyAbsPct.toFixed(1) : '—'}
+            unit={v ? '%' : undefined}
+            alert={dutyAlert}
+            series={series.duty}
+            seriesColor={theme.bran.color}
+            fmtMax={(value) => `${value.toFixed(0)}%`}
+            range={{ min: 0, max: 100 }}
+          />
+          <TelemetryCard
+            label="Motor Temp"
+            value={v?.tempMotor != null && v.tempMotor > 0 ? fmt(v.tempMotor) : 'N/A'}
+            unit={v?.tempMotor != null && v.tempMotor > 0 ? '°C' : undefined}
+            alert={motorTempAlert}
+            series={series.motorTemp}
+            seriesColor={theme.warning.color}
+            fmtMax={(value) => `${value.toFixed(0)}°C`}
+            minSpan={30}
+          />
+        </View>
+        <View style={styles.row}>
+          <TelemetryCard
+            label="Controller Temp"
+            value={v?.tempMosfet != null ? fmt(v.tempMosfet) : 'N/A'}
+            unit={v?.tempMosfet != null ? '°C' : undefined}
+            alert={ctrlTempAlert}
+            series={series.ctrlTemp}
+            seriesColor={theme.warning.color}
+            fmtMax={(value) => `${value.toFixed(0)}°C`}
+            minSpan={30}
+          />
+          <TelemetryCard
+            label="Total Distance"
+            value={v?.odometer != null ? fmtKm(v.odometer) : '—'}
+            unit={v?.odometer != null ? 'km' : undefined}
+          />
+        </View>
 
-        <BigStat
-          label="Controller Temp"
-          value={v?.tempMosfet != null ? fmt(v.tempMosfet) : 'N/A'}
-          unit={v?.tempMosfet != null ? '°C' : undefined}
-          alert={ctrlTempAlert}
-          series={series.ctrlTemp}
-          seriesColor={theme.warning.color}
-          fmtMax={(value) => `${value.toFixed(0)}°C`}
-          minSpan={30}
-        />
-
-        <BigStat
-          label="Total Distance"
-          value={v?.odometer != null ? fmtKm(v.odometer) : '—'}
-          unit={v?.odometer != null ? 'km' : undefined}
-        />
-
-        {/* SECONDARY TILES */}
+        {/* SECONDARY */}
         <Text style={styles.sectionLabel}>OTHER</Text>
         <View style={styles.row}>
           <TelemetryCard
@@ -319,61 +246,4 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   row: { flexDirection: 'row', marginBottom: 4 },
-  bigCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 14,
-    marginHorizontal: 4,
-    marginBottom: 6,
-    gap: 4,
-  },
-  bigCardAlert: {
-    borderWidth: 1,
-    borderColor: theme.error.border,
-  },
-  alertDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.error.color,
-  },
-  bigHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  bigLabel: {
-    color: '#94a3b8',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  bigHint: {
-    color: '#64748b',
-    fontSize: 10,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-  },
-  bigValue: {
-    color: '#f1f5f9',
-    fontSize: 38,
-    fontFamily: 'monospace',
-    fontWeight: '700',
-  },
-  bigUnit: {
-    color: '#64748b',
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  bigSecondary: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: 'monospace',
-    marginTop: -2,
-  },
 })
