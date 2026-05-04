@@ -1117,17 +1117,18 @@ class VescForegroundService : Service() {
     }
 
     private fun onLocationUpdated(location: Location) {
-        val provider = location.provider
-        val precise = provider == LocationManager.GPS_PROVIDER &&
-            location.hasAccuracy() &&
-            location.accuracy.toDouble() <= MAX_RECORDING_ACCURACY_M
+        val speedMps = if (location.hasSpeed()) location.speed.toDouble() else null
+        val bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null
+        val accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null
+        val altitudeM = if (location.hasAltitude()) location.altitude else null
+        val precise = isRecordableGpsLocation(location, accuracyM)
         val capture = TelemetryLocationCapture(
             latitude = location.latitude,
             longitude = location.longitude,
-            speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
-            bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
-            accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-            altitudeM = if (location.hasAltitude()) location.altitude else null,
+            speedMps = speedMps,
+            bearingDeg = bearingDeg,
+            accuracyM = accuracyM,
+            altitudeM = altitudeM,
             timestamp = location.time,
             precise = precise,
         )
@@ -1143,10 +1144,10 @@ class VescForegroundService : Service() {
         val snapshot = LocationSnapshot(
             latitude = location.latitude,
             longitude = location.longitude,
-            speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
-            bearingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
-            accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-            altitudeM = if (location.hasAltitude()) location.altitude else null,
+            speedMps = speedMps,
+            bearingDeg = bearingDeg,
+            accuracyM = accuracyM,
+            altitudeM = altitudeM,
             timestamp = location.time,
             precise = precise,
             saved = saved,
@@ -1157,6 +1158,11 @@ class VescForegroundService : Service() {
         if (config?.mode == "gps") showNotification(formatGpsNotificationText(snapshot))
         if (snapshot.precise) recorder?.recordLocation(snapshot)
     }
+
+    private fun isRecordableGpsLocation(location: Location, accuracyM: Double?): Boolean =
+        location.provider == LocationManager.GPS_PROVIDER &&
+            accuracyM != null &&
+            accuracyM <= MAX_RECORDING_ACCURACY_M
 
     private fun sessionStateMap(includeRecent: Boolean = false): Map<String, Any?> {
         val state = mutableMapOf<String, Any?>(
