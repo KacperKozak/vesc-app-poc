@@ -1,3 +1,6 @@
+output:
+  - failure
+
 pre-commit:
   parallel: true
   commands:
@@ -6,8 +9,14 @@ pre-commit:
       run: bunx oxfmt {staged_files}
       stage_fixed: true
     typecheck:
+      glob: '*.{js,jsx,ts,tsx}'
       run: bun run ts
     lint:
+      glob: '*.{js,jsx,ts,tsx,json}'
       run: bun run lint
-    test:
-      run: bun run test
+    test-bun:
+      glob: '*.{js,jsx,ts,tsx}'
+      run: bun run test:bun
+    test-android:
+      glob: 'modules/vesc-ble/android/**/*.{kt,kts}'
+      run: bun run test:android
