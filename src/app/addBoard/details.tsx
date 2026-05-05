@@ -153,7 +153,6 @@ export default function BoardDetailsScreen() {
             onChangeText={setName}
             placeholder="e.g. FloBoard Pro"
             placeholderTextColor="#4b5563"
-            autoFocus
             returnKeyType="next"
           />
 
