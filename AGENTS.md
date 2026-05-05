@@ -13,6 +13,16 @@ Always use **bun** for all package management and script execution:
 
 Do **not** use `npm`, `yarn`, `npx`, or `pnpm`.
 
+## Architecture Discipline
+
+This is a PoC, but keep it sharp:
+
+- Native owns durable truth and long-lived work; JS renders state and sends intents.
+- Design for lifecycle breaks: reloads, backgrounding, process death, and restart.
+- Prefer clear architecture over compatibility, shortcuts, or hidden assumptions.
+- Make one focused stability change at a time when isolating bugs.
+- Remove unused code when replacing a path; do not keep dead code for later.
+
 ## Icons
 
 Use **`phosphor-react-native`** for all icons. Do **not** use emoji or unicode characters as icon substitutes.
