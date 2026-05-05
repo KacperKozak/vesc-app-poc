@@ -63,6 +63,9 @@ class VescBleModule : Module() {
     Function("reloadAlertRules") {
       VescForegroundService.reloadAlertRules(context.applicationContext)
     }
+    Function("previewAlertSound") { soundType: String ->
+      VescForegroundService.previewAlertSound(context.applicationContext, soundType)
+    }
     Function("getSessionState") {
       VescForegroundService.currentState()
     }

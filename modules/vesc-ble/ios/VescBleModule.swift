@@ -95,6 +95,10 @@ public class VescBleModule: Module {
       // no-op in iOS simulator mock
     }
 
+    Function("previewAlertSound") { (_: String) in
+      // no-op in iOS simulator mock
+    }
+
     // MARK: Session
 
     Function("getSessionState") {

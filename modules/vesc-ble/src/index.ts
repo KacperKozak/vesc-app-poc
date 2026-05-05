@@ -51,7 +51,7 @@ export interface Board {
   maxVoltage: number | null
 }
 
-export type AlertSoundType = 'default'
+export type AlertSoundType = 'default' | 'urgent' | 'pulse'
 
 export interface AlertRule {
   id: string
@@ -268,6 +268,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   stopLocationUpdates(): void
   setTelemetryRecordingEnabled(enabled: boolean): void
   reloadAlertRules(): void
+  previewAlertSound(soundType: AlertSoundType): void
   startAutoConnect(options: Extract<StartSessionOptions, { mode: 'ble' }>): Promise<void>
   stopAutoConnect(): Promise<void>
   startSession(options: StartSessionOptions): Promise<void>
@@ -336,6 +337,10 @@ export function setTelemetryRecordingEnabled(enabled: boolean): void {
 /** Tell the Android foreground service to re-read alert rules from native storage. */
 export function reloadAlertRules(): void {
   native.reloadAlertRules()
+}
+
+export function previewAlertSound(soundType: AlertSoundType): void {
+  native.previewAlertSound(soundType)
 }
 
 /** Start native-owned saved-board connection with background reconnect. */

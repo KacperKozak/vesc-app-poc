@@ -248,6 +248,28 @@ class VescForegroundService : Service() {
             }
         }
 
+        fun previewAlertSound(context: Context, soundType: String) {
+            instance?.playAlertTone(soundType, null) ?: playStandaloneAlertTone(soundType)
+        }
+
+        private fun playStandaloneAlertTone(soundType: String) {
+            try {
+                val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+                val tone = when (soundType) {
+                    "urgent" -> ToneGenerator.TONE_CDMA_ABBR_ALERT
+                    "pulse"  -> ToneGenerator.TONE_PROP_BEEP
+                    else     -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
+                }
+                tg.startTone(tone, 350)
+                if (soundType == "urgent") {
+                    Handler(Looper.getMainLooper()).postDelayed({ tg.startTone(tone, 350) }, 380)
+                }
+                Handler(Looper.getMainLooper()).postDelayed({ tg.release() }, if (soundType == "urgent") 900 else 500)
+            } catch (e: Exception) {
+                Log.w(TAG, "Alert preview failed: ${e.message}")
+            }
+        }
+
         fun currentState(): Map<String, Any?> = instance?.sessionStateMap(includeRecent = true) ?: idleState()
 
         fun listRecordings(context: Context): List<Map<String, Any?>> {
@@ -1295,17 +1317,30 @@ class VescForegroundService : Service() {
             val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
             if (rangeDepth != null) {
                 val durationMs = (140L + (760L * rangeDepth)).toInt()
-                tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, durationMs)
+                tg.startTone(rangeTone(soundType), durationMs)
                 mainHandler.postDelayed({ tg.release() }, durationMs + 120L)
                 return
             }
-            tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450)
-            mainHandler.postDelayed({ tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450) }, 500)
-            mainHandler.postDelayed({ tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 450) }, 1_000)
+            val tone = alertTone(soundType)
+            tg.startTone(tone, 450)
+            mainHandler.postDelayed({ tg.startTone(tone, 450) }, 500)
+            mainHandler.postDelayed({ tg.startTone(tone, 450) }, 1_000)
             mainHandler.postDelayed({ tg.release() }, 1_600)
         } catch (e: Exception) {
             Log.w(TAG, "Alert tone failed: ${e.message}")
         }
+    }
+
+    private fun alertTone(soundType: String): Int = when (soundType) {
+        "urgent" -> ToneGenerator.TONE_CDMA_ABBR_ALERT
+        "pulse"  -> ToneGenerator.TONE_PROP_BEEP
+        else     -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
+    }
+
+    private fun rangeTone(soundType: String): Int = when (soundType) {
+        "urgent" -> ToneGenerator.TONE_CDMA_ABBR_ALERT
+        "pulse"  -> ToneGenerator.TONE_PROP_BEEP
+        else     -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
     }
 
     private fun vibrate(rangeDepth: Double?) {

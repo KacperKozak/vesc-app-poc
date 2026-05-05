@@ -12,7 +12,14 @@ import {
 } from 'react-native'
 
 import { theme } from '@/constants/theme'
-import { useAlertsStore } from '@/store/alertsStore'
+import { type AlertSoundType, useAlertsStore } from '@/store/alertsStore'
+import { previewAlertSound } from 'vesc-ble'
+
+const ALERT_SOUND_OPTIONS: { label: string; value: AlertSoundType }[] = [
+  { label: 'Default', value: 'default' },
+  { label: 'Urgent', value: 'urgent' },
+  { label: 'Pulse', value: 'pulse' },
+]
 
 interface Props {
   title: string
@@ -25,12 +32,13 @@ interface AddModalProps {
   visible: boolean
   unit: string
   onClose(): void
-  onAdd(threshold: number, thresholdMax: number | null): void
+  onAdd(threshold: number, thresholdMax: number | null, soundType: AlertSoundType): void
 }
 
 function AddAlertModal({ visible, unit, onClose, onAdd }: AddModalProps) {
   const [thresholdText, setThresholdText] = useState('')
   const [maxText, setMaxText] = useState('')
+  const [soundType, setSoundType] = useState<AlertSoundType>('default')
 
   function handleAdd() {
     const threshold = Number.parseFloat(thresholdText)
@@ -39,12 +47,13 @@ function AddAlertModal({ visible, unit, onClose, onAdd }: AddModalProps) {
     const max = parsedMax != null && Number.isFinite(parsedMax) ? parsedMax : null
     setThresholdText('')
     setMaxText('')
-    onAdd(threshold, max)
+    onAdd(threshold, max, soundType)
   }
 
   function handleClose() {
     setThresholdText('')
     setMaxText('')
+    setSoundType('default')
     onClose()
   }
 
@@ -106,6 +115,31 @@ function AddAlertModal({ visible, unit, onClose, onAdd }: AddModalProps) {
               </View>
             </View>
 
+            <View style={styles.modalField}>
+              <Text style={styles.fieldLabel}>SOUND</Text>
+              <View style={styles.soundRow}>
+                {ALERT_SOUND_OPTIONS.map((option) => {
+                  const selected = soundType === option.value
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.soundOption, selected && styles.soundOptionActive]}
+                      onPress={() => {
+                        setSoundType(option.value)
+                        previewAlertSound(option.value)
+                      }}
+                    >
+                      <Text
+                        style={[styles.soundOptionText, selected && styles.soundOptionTextActive]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            </View>
+
             <TouchableOpacity style={styles.confirmButton} onPress={handleAdd}>
               <Text style={styles.confirmText}>Add</Text>
             </TouchableOpacity>
@@ -151,6 +185,7 @@ function AlertsSection({ controlId, unit }: AlertsSectionProps) {
                 ? `${rule.threshold} - ${rule.thresholdMax}${unit ? ` ${unit}` : ''}`
                 : `${rule.threshold}${unit ? ` ${unit}` : ''}`}
             </Text>
+            <Text style={styles.ruleMeta}>{rule.soundType}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => void remove(rule.id)} hitSlop={8}>
             <TrashIcon size={16} color={theme.error.color} weight="fill" />
@@ -165,8 +200,8 @@ function AlertsSection({ controlId, unit }: AlertsSectionProps) {
         visible={modalVisible}
         unit={unit}
         onClose={() => setModalVisible(false)}
-        onAdd={(threshold, thresholdMax) => {
-          add(controlId, threshold, thresholdMax)
+        onAdd={(threshold, thresholdMax, soundType) => {
+          add(controlId, threshold, thresholdMax, soundType)
           setModalVisible(false)
         }}
       />
@@ -262,6 +297,11 @@ const styles = StyleSheet.create({
   ruleTextDisabled: {
     color: '#475569',
   },
+  ruleMeta: {
+    color: '#64748b',
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,6 +362,31 @@ const styles = StyleSheet.create({
     color: '#f1f5f9',
     fontSize: 20,
     fontWeight: '600',
+  },
+  soundRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  soundOption: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+    paddingVertical: 10,
+  },
+  soundOptionActive: {
+    borderColor: theme.wheel.color,
+    backgroundColor: '#123044',
+  },
+  soundOptionText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  soundOptionTextActive: {
+    color: '#f1f5f9',
   },
   unitLabel: {
     color: '#94a3b8',
