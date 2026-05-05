@@ -21,6 +21,7 @@ import {
   addStopRequestedListener,
   type RecordingInfo,
   type SessionMode,
+  type SessionStateEvent,
   type LocationEvent,
   type TelemetryEvent,
 } from 'vesc-ble'
@@ -40,6 +41,8 @@ export type BleStatus = 'idle' | 'scanning' | 'connecting' | 'connected' | 'reco
 interface BleState {
   status: BleStatus
   sessionMode: SessionMode | null
+  gpsStatus: 'idle' | 'active'
+  nativeStateReady: boolean
   devices: ScannedDevice[]
   connectedId: string | null
   error: string | undefined
@@ -119,6 +122,24 @@ function appendByTimestamp<T>(items: T[], item: T, key: (value: T) => number): T
   return [...items, item].filter((value) => key(value) >= oldest).sort((a, b) => key(a) - key(b))
 }
 
+function isBoardMode(mode: SessionMode | null | undefined): boolean {
+  return mode === 'ble' || mode === 'replay'
+}
+
+function boardStatusFromSession(session: SessionStateEvent): BleStatus {
+  if (session.boardStatus) return session.boardStatus
+  if (!isBoardMode(session.mode)) return 'idle'
+  return session.status as BleStatus
+}
+
+function boardConnectedIdFromSession(
+  session: SessionStateEvent,
+  fallbackDeviceId: string,
+): string | null {
+  if (!isBoardMode(session.mode)) return null
+  return session.deviceId ?? fallbackDeviceId
+}
+
 function installSessionSubscriptions(
   set: BleSet,
   fallbackMode: SessionMode,
@@ -137,19 +158,28 @@ function installSessionSubscriptions(
     })
   })
   sessionSub = addSessionStateListener((session) => {
-    set((s) => ({
-      status: (session.status === 'error' ? 'error' : session.status) as BleStatus,
-      sessionMode: session.mode ?? fallbackMode,
-      connectedId: session.deviceId ?? fallbackDeviceId,
-      error: session.error ?? undefined,
-      telemetryRecordingEnabled: session.telemetryRecordingEnabled ?? false,
-      ...(session.recentTelemetry || session.recentLocations
-        ? {
-            recentTelemetry: session.recentTelemetry ?? s.recentTelemetry,
-            recentLocations: session.recentLocations ?? s.recentLocations,
-          }
-        : {}),
-    }))
+    const boardStatus = boardStatusFromSession(session)
+    set((s) => {
+      const hasRecentTelemetry = session.recentTelemetry != null
+      const hasRecentLocations = session.recentLocations != null
+      const shouldClearTelemetry = boardStatus === 'idle' || boardStatus === 'connecting'
+
+      return {
+        status: boardStatus,
+        sessionMode: session.mode ?? fallbackMode,
+        gpsStatus: session.gpsStatus ?? 'idle',
+        nativeStateReady: true,
+        connectedId: boardConnectedIdFromSession(session, fallbackDeviceId),
+        error: session.error ?? undefined,
+        telemetryRecordingEnabled: session.telemetryRecordingEnabled ?? false,
+        recentTelemetry: hasRecentTelemetry
+          ? session.recentTelemetry!
+          : shouldClearTelemetry
+            ? []
+            : s.recentTelemetry,
+        recentLocations: hasRecentLocations ? session.recentLocations! : s.recentLocations,
+      }
+    })
   })
 }
 
@@ -161,6 +191,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   // ---- state ----
   status: 'idle',
   sessionMode: null,
+  gpsStatus: 'idle',
+  nativeStateReady: false,
   devices: [],
   connectedId: null,
   error: undefined,
@@ -236,24 +268,14 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
 
   async connect(id: string, name?: string) {
     get().stopScan()
-    set({
-      status: 'connecting',
-      sessionMode: 'ble',
-      connectedId: null,
-      error: undefined,
-    })
+    set({ connectedId: null, error: undefined, recentTelemetry: [] })
 
     installSessionSubscriptions(set, 'ble', id)
     stopRequestedSub?.remove()
     stopRequestedSub = addStopRequestedListener(() => {
       removeSessionSubscriptions()
       void get().loadRecordings()
-      set({
-        status: 'idle',
-        sessionMode: null,
-        connectedId: null,
-        error: undefined,
-      })
+      get().syncNativeState()
     })
 
     const device = get().devices.find((d) => d.id === id)
@@ -277,12 +299,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   async replayRecording(recording: RecordingInfo) {
     const { stopScan } = get()
     stopScan()
-    set({
-      status: 'connecting',
-      sessionMode: 'replay',
-      connectedId: recording.path,
-      error: undefined,
-    })
+    set({ connectedId: null, error: undefined, recentTelemetry: [] })
 
     installSessionSubscriptions(set, 'replay', recording.path)
 
@@ -293,7 +310,6 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
         recordingPath: recording.path,
         pollIntervalMs: 500,
       })
-      set({ status: 'connected', sessionMode: 'replay', connectedId: recording.path })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       set({ status: 'error', sessionMode: 'replay', error: msg })
@@ -322,12 +338,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       // Treat native "already stopped" style failures as a completed local teardown.
     } finally {
       await get().loadRecordings()
-      set({
-        status: 'idle',
-        sessionMode: null,
-        connectedId: null,
-        error: undefined,
-      })
+      get().syncNativeState()
     }
   },
 
@@ -351,17 +362,22 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
 
   syncNativeState() {
     const session = nativeGetSessionState()
-    if (session.mode) {
+    const boardStatus = boardStatusFromSession(session)
+    if (session.mode && boardStatus !== 'idle') {
       installSessionSubscriptions(set, session.mode, session.deviceId ?? '')
+    } else {
+      removeSessionSubscriptions()
     }
     set({
-      status: session.status as BleStatus,
+      status: boardStatus,
       sessionMode: session.mode,
-      connectedId: session.deviceId,
+      gpsStatus: session.gpsStatus ?? 'idle',
+      connectedId: boardConnectedIdFromSession(session, ''),
       error: session.error ?? undefined,
       telemetryRecordingEnabled: session.telemetryRecordingEnabled ?? false,
       recentTelemetry: session.recentTelemetry ?? [],
       recentLocations: session.recentLocations ?? [],
+      nativeStateReady: true,
     })
   },
 

@@ -18,13 +18,15 @@ import { routes } from '@/navigation/routes'
 import { useBleStore } from '@/store/bleStore'
 
 export function TelemetryView() {
-  const hasData = useBleStore((s) => s.recentTelemetry.length > 0)
+  const hasLiveBoardData = useBleStore(
+    (s) => s.status === 'connected' && s.recentTelemetry.length > 0,
+  )
 
   return (
     <ScrollView contentContainerStyle={styles.grid}>
       <TargetSection />
 
-      <View style={!hasData && styles.dimmed}>
+      <View style={!hasLiveBoardData && styles.dimmed}>
         <Pressable onPress={() => router.push(routes.controlBattery)}>
           <BatteryIndicator />
         </Pressable>

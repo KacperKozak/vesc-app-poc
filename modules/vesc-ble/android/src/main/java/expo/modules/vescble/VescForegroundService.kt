@@ -286,12 +286,17 @@ class VescForegroundService : Service() {
 
         private fun idleState(): Map<String, Any?> = mapOf(
             "status" to "idle",
+            "boardStatus" to "idle",
+            "gpsStatus" to "idle",
             "mode" to null,
             "deviceId" to null,
             "deviceName" to null,
             "canId" to null,
             "error" to null,
             "autoReconnect" to false,
+            "telemetryRecordingEnabled" to requestedTelemetryRecordingEnabled,
+            "recentTelemetry" to emptyList<Map<String, Any?>>(),
+            "recentLocations" to emptyList<Map<String, Any?>>(),
         )
     }
 
@@ -937,6 +942,8 @@ class VescForegroundService : Service() {
         canId = null
         telemetry = null
         latestLocation = null
+        recentTelemetry.clear()
+        recentLocations.clear()
         error = null
         status = "idle"
         config = null
@@ -1212,9 +1219,17 @@ class VescForegroundService : Service() {
             accuracyM <= MAX_RECORDING_ACCURACY_M
 
     private fun sessionStateMap(includeRecent: Boolean = false): Map<String, Any?> {
+        val mode = config?.mode
+        val boardStatus = when (mode) {
+            "ble", "replay" -> status
+            else -> "idle"
+        }
+        val gpsStatus = if (locationManager != null) "active" else "idle"
         val state = mutableMapOf<String, Any?>(
             "status" to status,
-            "mode" to config?.mode,
+            "boardStatus" to boardStatus,
+            "gpsStatus" to gpsStatus,
+            "mode" to mode,
             "deviceId" to config?.deviceId,
             "deviceName" to config?.deviceName,
             "canId" to canId,

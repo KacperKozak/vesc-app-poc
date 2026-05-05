@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert } from 'react-native'
 import { router } from 'expo-router'
 import { PencilSimpleIcon, PowerIcon, StarIcon, TrashIcon } from 'phosphor-react-native'
@@ -22,6 +22,7 @@ export function useBoardConnection() {
   )
   const {
     status: bleStatus,
+    nativeStateReady,
     sessionMode,
     recordings,
     connectedId,
@@ -37,6 +38,7 @@ export function useBoardConnection() {
   } = useBleStore(
     useShallow((s) => ({
       status: s.status,
+      nativeStateReady: s.nativeStateReady,
       sessionMode: s.sessionMode,
       recordings: s.recordings,
       connectedId: s.connectedId,
@@ -53,6 +55,7 @@ export function useBoardConnection() {
   )
   const { status: permStatus } = usePermissions()
   const [autoConnectEnabled, setAutoConnectEnabled] = useState(true)
+  const previousActiveBoardId = useRef(activeBoardId)
 
   const activeBoard = boards.find((b) => b.id === activeBoardId)
   const activeReplay =
@@ -66,18 +69,32 @@ export function useBoardConnection() {
   // Native owns scan/connect/reconnect for saved boards.
   useEffect(() => {
     if (!autoConnectEnabled) return
+    if (!nativeStateReady) return
     if (permStatus !== 'granted') return
     if (!activeBoard?.bleId) return
     if (bleStatus !== 'idle' && bleStatus !== 'error') return
     void connect(activeBoard.bleId, activeBoard.name)
-  }, [autoConnectEnabled, permStatus, activeBoard?.bleId, activeBoard?.name, bleStatus, connect])
+  }, [
+    autoConnectEnabled,
+    nativeStateReady,
+    permStatus,
+    activeBoard?.bleId,
+    activeBoard?.name,
+    bleStatus,
+    connect,
+  ])
 
-  // Reset on board change or unmount
+  // Reset the live board surface on board change. Native sessions are not
+  // stopped from React unmount because Android owns background reconnect.
   useEffect(() => {
+    const previousBoardId = previousActiveBoardId.current
+    const didChangeBoard = previousBoardId != null && previousBoardId !== activeBoardId
+    previousActiveBoardId.current = activeBoardId
+
     setAutoConnectEnabled(true)
     clearRecentTelemetry()
-    return () => {
-      stopScan()
+    stopScan()
+    if (didChangeBoard) {
       void disconnect()
     }
   }, [activeBoardId, clearRecentTelemetry, disconnect, stopScan])

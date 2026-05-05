@@ -29,6 +29,8 @@ export interface LocationEvent {
 
 export type SessionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 export type SessionMode = 'ble' | 'replay' | 'gps'
+export type BoardStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error'
+export type GpsStatus = 'idle' | 'active'
 
 export interface FiredAlert {
   ruleId: string
@@ -92,6 +94,8 @@ export interface TelemetryEvent {
 
 export interface SessionStateEvent {
   status: SessionStatus
+  boardStatus?: BoardStatus
+  gpsStatus?: GpsStatus
   mode: SessionMode | null
   deviceId: string | null
   deviceName: string | null
