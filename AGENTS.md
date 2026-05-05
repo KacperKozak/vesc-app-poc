@@ -35,6 +35,4 @@ import { LightningIcon, WarningCircleIcon } from 'phosphor-react-native'
 
 - Always use the **`Icon`-suffixed** export (e.g. `LightningIcon`, not `Lightning`). The un-suffixed names are deprecated and will produce warnings.
 - The `type Icon` export (for typing icon props) is **not** suffixed — import it as `type Icon` as-is.
-- `weight="fill"` is the standard style used throughout the app
 - `size` is typically `10`–`16` for inline/label icons, larger for standalone UI elements
-- Browse available icons at https://phosphoricons.com (filter by React Native support)
