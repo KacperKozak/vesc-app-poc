@@ -27,9 +27,18 @@ export interface LocationEvent {
   saved: boolean
 }
 
-export type SessionStatus = 'idle' | 'connecting' | 'connected' | 'stale' | 'reconnecting' | 'error'
-export type SessionMode = 'ble' | 'replay' | 'gps'
-export type BoardStatus = 'idle' | 'connecting' | 'connected' | 'stale' | 'reconnecting' | 'error'
+export type SessionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'discovering'
+  | 'subscribing'
+  | 'waiting_for_telemetry'
+  | 'connected'
+  | 'stale'
+  | 'reconnecting'
+  | 'disconnecting'
+  | 'error'
+export type BoardStatus = SessionStatus
 export type GpsStatus = 'idle' | 'active'
 export type ScanStatus = 'idle' | 'scanning' | 'error'
 
@@ -94,38 +103,38 @@ export interface TelemetryEvent {
   firedAlerts?: FiredAlert[]
 }
 
-export interface SessionStateEvent {
-  generation?: number
-  status: SessionStatus
-  boardStatus?: BoardStatus
-  gpsStatus?: GpsStatus
-  scanStatus?: ScanStatus
-  mode: SessionMode | null
-  deviceId: string | null
-  deviceName: string | null
-  canId: number | null
-  error: string | null
-  autoReconnect?: boolean
-  telemetryRecordingEnabled?: boolean
-  lastTelemetryAt?: number | null
-  recentTelemetry?: TelemetryEvent[]
-  recentLocations?: LocationEvent[]
-}
+export type BoardPhase = SessionStatus
+export type GpsPhase = 'idle' | 'starting' | 'active' | 'error'
+export type ScanPhase = ScanStatus
 
-export type StartSessionOptions = {
-  mode: 'replay'
-  deviceName?: string
-  recordingPath: string
-  pollIntervalMs?: number
-}
-
-export interface RecordingInfo {
-  id: string
-  path: string
-  fileName: string
-  deviceName: string
-  startedAt: number
-  sizeBytes: number
+export interface LiveStateEvent {
+  board: {
+    phase: BoardPhase
+    selectedBoardId: string | null
+    connectedBoardId: string | null
+    bleId: string | null
+    name: string | null
+    connectionSeq: number
+    lastTelemetryAt: number | null
+    error: string | null
+    autoConnect: boolean
+  }
+  gps: {
+    phase: GpsPhase
+    latestFix: LocationEvent | null
+    recentLocations: LocationEvent[]
+    error: string | null
+  }
+  scan: {
+    phase: ScanPhase
+    devices: DeviceFoundEvent[]
+    error: string | null
+  }
+  recording: {
+    enabled: boolean
+    activeBoardId: string | null
+    startedAt: number | null
+  }
 }
 
 export interface TelemetryHistoryOptions {
@@ -233,6 +242,7 @@ export interface AppSettings {
   liveHistoryLimit: number
   autoConnect: boolean
   autoRecording: boolean
+  selectedBoardId: string | null
 }
 
 export interface LocationTrackingOptions {
@@ -247,7 +257,7 @@ type VescBleEvents = {
   onDevice: (event: DeviceFoundEvent) => void
   onError: (event: ErrorEvent) => void
   onStopRequested: (event: Record<never, never>) => void
-  onSessionState: (event: SessionStateEvent) => void
+  onLiveState: (event: LiveStateEvent) => void
   onTelemetry: (event: TelemetryEvent) => void
   onLocation: (event: LocationEvent) => void
 }
@@ -275,11 +285,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   selectBoard(boardId: string): Promise<void>
   stopBoard(): Promise<void>
   setDebugRecordingEnabled(enabled: boolean): void
-  startSession(options: StartSessionOptions): Promise<void>
-  getSessionState(): SessionStateEvent
-  listRecordings(): Promise<RecordingInfo[]>
-  deleteRecording(path: string): Promise<boolean>
-  exportRecording(path: string): Promise<string>
+  getLiveState(): LiveStateEvent
+  setSelectedBoard(boardId: string | null): void
   getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryHistoryBlock[]>
   getTelemetrySamples(options: {
     fromMs: number
@@ -304,7 +311,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   setAlertRuleEnabled(id: string, enabled: boolean): Promise<void>
   deleteAlertRule(id: string): Promise<void>
   getSettings(): Promise<AppSettings>
-  updateSetting(key: string, value: number | boolean): Promise<void>
+  updateSetting(key: string, value: number | boolean | string | null): Promise<void>
 }
 
 const native = requireNativeModule<VescBleNativeModule>('VescBle')
@@ -353,7 +360,7 @@ export async function selectBoard(boardId: string): Promise<void> {
   return native.selectBoard(boardId)
 }
 
-/** Stop native board BLE/replay session. GPS monitoring may continue independently. */
+/** Stop native board session. GPS monitoring may continue independently. */
 export async function stopBoard(): Promise<void> {
   return native.stopBoard()
 }
@@ -363,26 +370,14 @@ export function setDebugRecordingEnabled(enabled: boolean): void {
   native.setDebugRecordingEnabled(enabled)
 }
 
-/** Start a native Android BLE/replay session. The service owns polling and notification updates. */
-export async function startSession(options: StartSessionOptions): Promise<void> {
-  return native.startSession(options)
+/** Read native-owned live state. UI should mirror this, not invent connection state. */
+export function getLiveState(): LiveStateEvent {
+  return native.getLiveState()
 }
 
-/** Read the current native Android session state snapshot. */
-export function getSessionState(): SessionStateEvent {
-  return native.getSessionState()
-}
-
-export async function listRecordings(): Promise<RecordingInfo[]> {
-  return native.listRecordings()
-}
-
-export async function deleteRecording(path: string): Promise<boolean> {
-  return native.deleteRecording(path)
-}
-
-export async function exportRecording(path: string): Promise<string> {
-  return native.exportRecording(path)
+/** Persist native auto-connect target. Native can use this while JS is frozen. */
+export function setSelectedBoard(boardId: string | null): void {
+  native.setSelectedBoard(boardId)
 }
 
 export async function getTelemetryHistory(
@@ -453,7 +448,10 @@ export async function getSettings(): Promise<AppSettings> {
   return native.getSettings()
 }
 
-export async function updateSetting(key: string, value: number | boolean): Promise<void> {
+export async function updateSetting(
+  key: string,
+  value: number | boolean | string | null,
+): Promise<void> {
   return native.updateSetting(key, value)
 }
 
@@ -477,8 +475,8 @@ export function addErrorListener(cb: (event: ErrorEvent) => void): EventSubscrip
   return emitter.addListener('onError', cb)
 }
 
-export function addSessionStateListener(cb: (event: SessionStateEvent) => void): EventSubscription {
-  return emitter.addListener('onSessionState', cb)
+export function addLiveStateListener(cb: (event: LiveStateEvent) => void): EventSubscription {
+  return emitter.addListener('onLiveState', cb)
 }
 
 export function addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {

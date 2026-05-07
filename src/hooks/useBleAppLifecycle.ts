@@ -5,7 +5,6 @@ import { useBleStore } from '@/store/bleStore'
 
 export function useBleAppLifecycle(): void {
   const stopScan = useBleStore((s) => s.stopScan)
-  const loadRecordings = useBleStore((s) => s.loadRecordings)
   const syncNativeState = useBleStore((s) => s.syncNativeState)
 
   useEffect(() => {
@@ -20,10 +19,9 @@ export function useBleAppLifecycle(): void {
       }
 
       syncNativeState()
-      void loadRecordings()
     }
 
     const subscription = AppState.addEventListener('change', onChange)
     return () => subscription.remove()
-  }, [loadRecordings, stopScan, syncNativeState])
+  }, [stopScan, syncNativeState])
 }

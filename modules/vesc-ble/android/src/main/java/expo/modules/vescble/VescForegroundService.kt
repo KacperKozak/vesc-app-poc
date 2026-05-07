@@ -19,7 +19,6 @@ import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -28,14 +27,12 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
-import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -51,7 +48,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.io.FileWriter
-import java.io.OutputStreamWriter
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
@@ -87,14 +83,13 @@ private val NUS_RX_UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
 data class SessionConfig(
-    val mode: String,
+    val appBoardId: String?,
     val deviceId: String?,
     val deviceName: String,
     val canId: Int?,
     val pollIntervalMs: Long,
     val recordingEnabled: Boolean,
     val telemetryRecordingEnabled: Boolean,
-    val recordingPath: String?,
     val autoReconnect: Boolean = false,
 )
 
@@ -187,13 +182,13 @@ class VescForegroundService : Service() {
         private var requestedTelemetryRecordingEnabled = false
         private val appDataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-        fun startSession(
+        fun startBoardSession(
             context: Context,
-            config: SessionConfig,
+            boardConfig: SessionConfig,
             onSuccess: () -> Unit,
             onError: (String, String) -> Unit,
         ) {
-            pendingStart = PendingStart(config, onSuccess, onError)
+            pendingStart = PendingStart(boardConfig, onSuccess, onError)
             val intent = Intent(context, VescForegroundService::class.java).apply {
                 action = ACTION_START_SESSION
             }
@@ -201,7 +196,7 @@ class VescForegroundService : Service() {
             instance?.consumePendingStart()
         }
 
-        fun stopSession(context: Context, onSuccess: () -> Unit = {}) {
+        fun stopBoardSession(context: Context, onSuccess: () -> Unit = {}) {
             pendingStop = PendingStop(onSuccess)
             val intent = Intent(context, VescForegroundService::class.java).apply {
                 action = ACTION_STOP_SESSION
@@ -271,7 +266,9 @@ class VescForegroundService : Service() {
             }
         }
 
-        fun currentState(): Map<String, Any?> = instance?.sessionStateMap(includeRecent = true) ?: idleState()
+        fun currentLiveState(context: Context): Map<String, Any?> =
+            instance?.liveStateMap(includeRecent = true)
+                ?: idleState(AppDataRepository.get(context.applicationContext))
 
         fun setAppInForeground(active: Boolean) {
             if (appInForeground == active) return
@@ -279,37 +276,42 @@ class VescForegroundService : Service() {
             instance?.showNotification()
         }
 
-        fun listRecordings(context: Context): List<Map<String, Any?>> {
-            return VescRecordingStore(context).list()
+        private fun idleState(repository: AppDataRepository): Map<String, Any?> {
+            val settings = kotlinx.coroutines.runBlocking { repository.getSettingsEntity() }
+            return mapOf(
+                "board" to mapOf(
+                    "phase" to "idle",
+                    "selectedBoardId" to settings.selectedBoardId,
+                    "connectedBoardId" to null,
+                    "bleId" to null,
+                    "name" to null,
+                    "connectionSeq" to 0L,
+                    "lastTelemetryAt" to null,
+                    "error" to null,
+                    "autoConnect" to settings.autoConnect,
+                ),
+                "gps" to mapOf(
+                    "phase" to "idle",
+                    "latestFix" to null,
+                    "recentLocations" to emptyList<Map<String, Any?>>(),
+                    "error" to null,
+                ),
+                "scan" to mapOf(
+                    "phase" to "idle",
+                    "devices" to emptyList<Map<String, Any?>>(),
+                    "error" to null,
+                ),
+                "recording" to mapOf(
+                    "enabled" to false,
+                    "activeBoardId" to null,
+                    "startedAt" to null,
+                ),
+            )
         }
-
-        fun deleteRecording(path: String): Boolean {
-            return File(path).delete()
-        }
-
-        fun exportRecording(context: Context, path: String): String {
-            return VescRecordingStore(context).export(path)
-        }
-
-        private fun idleState(): Map<String, Any?> = mapOf(
-            "generation" to 0L,
-            "status" to "idle",
-            "boardStatus" to "idle",
-            "gpsStatus" to "idle",
-            "mode" to null,
-            "deviceId" to null,
-            "deviceName" to null,
-            "canId" to null,
-            "error" to null,
-            "autoReconnect" to false,
-            "telemetryRecordingEnabled" to requestedTelemetryRecordingEnabled,
-            "recentTelemetry" to emptyList<Map<String, Any?>>(),
-            "recentLocations" to emptyList<Map<String, Any?>>(),
-        )
     }
 
     private data class PendingStart(
-        val config: SessionConfig,
+        val boardConfig: SessionConfig,
         val onSuccess: () -> Unit,
         val onError: (String, String) -> Unit,
     )
@@ -321,9 +323,9 @@ class VescForegroundService : Service() {
     private val packetReassembler = VescPacketReassembler()
     private val rttHistory = ArrayDeque<Long>()
 
-    private var config: SessionConfig? = null
-    private var status: String = "idle"
-    private var error: String? = null
+    private var boardConfig: SessionConfig? = null
+    private var boardStatus: String = "idle"
+    private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
     private var canId: Int? = null
     private var gatt: BluetoothGatt? = null
@@ -335,9 +337,6 @@ class VescForegroundService : Service() {
     private var pendingConnect: PendingStart? = null
     private var pollRunnable: Runnable? = null
     private var telemetryStaleRunnable: Runnable? = null
-    private var replayStartRunnable: Runnable? = null
-    private var replayRunnable: Runnable? = null
-    private val replayEventRunnables = mutableListOf<Runnable>()
     private var lastPollAt = 0L
     private var lastTelemetryAt = 0L
     private var diagWriteCount = 0
@@ -346,6 +345,9 @@ class VescForegroundService : Service() {
     private var recorder: VescSessionRecorder? = null
     private var telemetryStore: TelemetryRepository? = null
     private var locationManager: LocationManager? = null
+    private var gpsDeviceId: String? = null
+    private var gpsDeviceName: String? = null
+    private var gpsError: String? = null
     private var latestLocation: LocationSnapshot? = null
     private var isStoppingService = false
     private var autoReconnectRunnable: Runnable? = null
@@ -378,14 +380,14 @@ class VescForegroundService : Service() {
             ACTION_EXIT_FROM_NOTIFICATION -> exitFromNotification()
             ACTION_START_GPS_MONITORING -> consumePendingGpsStart()
             ACTION_STOP_GPS_MONITORING -> stopGpsMonitoring()
-            else -> if (config == null) stopSelf()
+            else -> if (boardConfig == null && locationManager == null) stopSelf()
         }
         return if (isStoppingService) START_NOT_STICKY else START_STICKY
     }
 
     override fun onDestroy() {
         if (!isStoppingService) {
-            stopCurrentSession(emitDisconnected = false)
+            stopCurrentBoardSession(emitDisconnected = false)
         }
         stopLocationUpdates()
         instance = null
@@ -402,27 +404,20 @@ class VescForegroundService : Service() {
     private fun consumePendingStop() {
         val stop = pendingStop ?: return
         pendingStop = null
-        if (config?.mode == "gps") {
+        if (boardConfig != null) {
+            setStatus("disconnecting")
+            stopCurrentBoardSession(
+                emitDisconnected = true,
+                updateNotification = locationManager == null,
+            )
             stop.onSuccess()
             return
         }
-        val resumeGps = requestedGpsMonitoring
-        if (resumeGps != null && config?.mode != null) {
-            stopCurrentSession(emitDisconnected = true, updateNotification = false)
-            startGpsMonitoring(resumeGps.deviceId, resumeGps.deviceName)
-            stop.onSuccess()
-            return
-        }
-        if (config == null) {
-            isStoppingService = true
-            stop.onSuccess()
-            stopSelf()
-            return
-        }
-        isStoppingService = true
-        stopCurrentSession(emitDisconnected = true)
         stop.onSuccess()
-        stopSelf()
+        if (locationManager == null) {
+            isStoppingService = true
+            stopSelf()
+        }
     }
 
     private fun consumePendingGpsStart() {
@@ -433,93 +428,59 @@ class VescForegroundService : Service() {
 
     private fun exitFromNotification() {
         isStoppingService = true
-        stopCurrentSession(emitDisconnected = true)
+        stopCurrentBoardSession(emitDisconnected = true)
+        stopLocationUpdates()
         closeAppTask()
         stopSelf()
     }
 
     private fun startGpsMonitoring(deviceId: String?, deviceName: String?) {
-        if (config?.mode == "gps") {
-            updateGpsContext(deviceId, deviceName)
-            showNotification(latestLocation?.let { formatGpsNotificationText(it) } ?: "Monitoring GPS")
-            return
-        }
-        if (config?.mode != null && config?.mode != "gps") {
-            updateGpsContext(deviceId, deviceName)
-            return
-        }
-
         isStoppingService = false
-        stopCurrentSession(emitDisconnected = false, updateNotification = false)
-        config = SessionConfig(
-            mode = "gps",
-            deviceId = deviceId,
-            deviceName = deviceName?.takeIf { it.isNotBlank() } ?: "GPS Monitoring",
-            canId = null,
-            pollIntervalMs = 0L,
-            recordingEnabled = false,
-            telemetryRecordingEnabled = requestedTelemetryRecordingEnabled,
-            recordingPath = null,
-            autoReconnect = false,
-        )
-        canId = null
-        telemetry = null
-        error = null
-        latestLocation = null
-        if (requestedTelemetryRecordingEnabled) {
-            telemetryStore = TelemetryRepository.get(applicationContext)
-            telemetryStore?.recordMarker(
-                "app_stop",
-                config?.deviceId,
-                config?.deviceName,
-                "GPS recording started",
-            )
-        }
+        gpsDeviceId = deviceId
+        gpsDeviceName = deviceName?.takeIf { it.isNotBlank() }
+        gpsError = null
         startLocationUpdates()
-        status = "connected"
         emitState()
-        startForeground(NOTIFICATION_ID, buildNotification("Monitoring GPS"))
+        if (boardConfig == null) {
+            startForeground(NOTIFICATION_ID, buildNotification("Monitoring GPS"))
+        } else {
+            showNotification()
+        }
     }
 
     private fun stopGpsMonitoring() {
-        if (config?.mode != "gps") return
-        isStoppingService = true
-        stopCurrentSession(emitDisconnected = false)
-        stopSelf()
-    }
-
-    private fun updateGpsContext(deviceId: String?, deviceName: String?) {
-        val session = config ?: return
-        config = session.copy(
-            deviceId = deviceId,
-            deviceName = deviceName?.takeIf { it.isNotBlank() } ?: session.deviceName,
-        )
+        requestedGpsMonitoring = null
+        pendingGpsStart = null
+        stopLocationUpdates()
+        gpsDeviceId = null
+        gpsDeviceName = null
+        gpsError = null
+        emitState()
+        if (boardConfig == null) {
+            isStoppingService = true
+            stopSelf()
+        }
     }
 
     private fun beginSession(start: PendingStart) {
         isStoppingService = false
-        stopCurrentSession(emitDisconnected = false, updateNotification = false)
+        stopCurrentBoardSession(emitDisconnected = false, updateNotification = false)
         VescForegroundService.reloadAlertRules(applicationContext)
-        config = start.config
+        boardConfig = start.boardConfig
         generation += 1
-        canId = start.config.canId
-        error = null
+        canId = start.boardConfig.canId
+        boardError = null
         telemetry = null
-        latestLocation = null
         recentTelemetry.clear()
-        recentLocations.clear()
         packetReassembler.reset()
         diagWriteCount = 0
         connectAttempt = 0
         autoReconnectAttempt = 0
         lastTelemetryAt = 0L
-        if (start.config.recordingEnabled && start.config.mode != "replay") {
-            recorder = VescSessionRecorder(this, start.config).also { it.start() }
+        if (start.boardConfig.recordingEnabled) {
+            recorder = VescSessionRecorder(this, start.boardConfig).also { it.start() }
         }
-        telemetryStore = if (
-            start.config.mode != "replay" &&
-            (start.config.telemetryRecordingEnabled || requestedTelemetryRecordingEnabled)
-        ) {
+        telemetryStore = if (start.boardConfig.telemetryRecordingEnabled || requestedTelemetryRecordingEnabled) {
             TelemetryRepository.get(applicationContext)
         } else {
             null
@@ -528,39 +489,13 @@ class VescForegroundService : Service() {
         setStatus("connecting")
         startForeground(NOTIFICATION_ID, buildNotification("Connecting..."))
 
-        when (start.config.mode) {
-            "replay" -> startReplaySession(start)
-            else -> startBleSession(start)
-        }
-    }
-
-    private fun startReplaySession(start: PendingStart) {
-        val path = start.config.recordingPath
-        if (path.isNullOrBlank()) {
-            failStart(start, "INVALID_RECORDING", "Replay session requires recordingPath")
-            return
-        }
-        val events = try {
-            VescRecordingStore(this).readReplayEvents(path)
-        } catch (e: Exception) {
-            failStart(start, "INVALID_RECORDING", e.message ?: "Could not read recording")
-            return
-        }
-        showNotification("Opening recording...")
-        replayStartRunnable = Runnable {
-            status = "connected"
-            emitState()
-            showNotification("Replaying recording")
-            start.onSuccess()
-            startReplayLoop(events)
-        }
-        mainHandler.postDelayed(replayStartRunnable!!, 700)
+        startBleSession(start)
     }
 
     private fun startBleSession(start: PendingStart) {
-        val deviceId = start.config.deviceId
+        val deviceId = start.boardConfig.deviceId
         if (deviceId.isNullOrBlank()) {
-            failStart(start, "INVALID_DEVICE", "startSession requires deviceId in BLE mode")
+            failStart(start, "INVALID_DEVICE", "Board session requires deviceId")
             return
         }
         pendingConnect = start
@@ -583,7 +518,10 @@ class VescForegroundService : Service() {
             Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
             recorder?.recordState("gatt:$newState", mapOf("status" to status))
             when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> gatt.requestMtu(517)
+                BluetoothProfile.STATE_CONNECTED -> {
+                    setStatus("discovering")
+                    gatt.requestMtu(517)
+                }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     val wasConnecting = pendingConnect
                     val wasIntentional = intentionalDisconnect
@@ -596,13 +534,13 @@ class VescForegroundService : Service() {
                         if (status == 133 && connectAttempt < 2) {
                             Log.w(TAG, "status=133 during connect, retrying once")
                             mainHandler.postDelayed({ startBleSession(wasConnecting) }, 250)
-                        } else if (wasConnecting.config.autoReconnect) {
-                            scheduleAutoReconnect(wasConnecting.config, status, "connect failed")
+                        } else if (wasConnecting.boardConfig.autoReconnect) {
+                            scheduleAutoReconnect(wasConnecting.boardConfig, status, "connect failed")
                         } else {
                             failStart(wasConnecting, "DISCONNECTED", "Device disconnected during connect (status=$status)")
                         }
-                    } else if (config?.autoReconnect == true) {
-                        scheduleAutoReconnect(config!!, status, "board disconnected")
+                    } else if (boardConfig?.autoReconnect == true) {
+                        scheduleAutoReconnect(boardConfig!!, status, "board disconnected")
                     } else {
                         setError("Board disconnected")
                         finishRecording("error")
@@ -619,6 +557,7 @@ class VescForegroundService : Service() {
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            setStatus("subscribing")
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 failPendingConnect("DISCOVERY_FAILED", "Service discovery failed status=$status")
                 return
@@ -681,15 +620,15 @@ class VescForegroundService : Service() {
         cancelCccdTimeout()
         val start = pendingConnect ?: return
         pendingConnect = null
-        status = "connecting"
-        error = null
+        boardStatus = "waiting_for_telemetry"
+        boardError = null
         emitState()
         showNotification("Discovering board...")
         start.onSuccess()
         mainHandler.postDelayed({ sendPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
         mainHandler.postDelayed({ sendPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
         if (canId != null) startPolling()
-        armBoardReadyTimeout(start.config)
+        armBoardReadyTimeout(start.boardConfig)
     }
 
     private fun handleFrameChunk(chunk: ByteArray) {
@@ -729,7 +668,7 @@ class VescForegroundService : Service() {
     }
 
     private fun startPolling() {
-        val session = config ?: return
+        val session = boardConfig ?: return
         val id = canId ?: return
         stopPolling()
         armTelemetryStaleWatchdog()
@@ -758,11 +697,15 @@ class VescForegroundService : Service() {
     }
 
     private fun armBoardReadyTimeout(session: SessionConfig) {
-        if (!session.autoReconnect || session.mode == "replay") return
+        if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
         boardReadyTimeout = Runnable {
             boardReadyTimeout = null
-            if (status == "connecting" && config?.autoReconnect == true && telemetry == null) {
+            if (
+                (boardStatus == "connecting" || boardStatus == "waiting_for_telemetry") &&
+                boardConfig?.autoReconnect == true &&
+                telemetry == null
+            ) {
                 scheduleAutoReconnect(session, null, "board telemetry unavailable")
             }
         }
@@ -776,65 +719,40 @@ class VescForegroundService : Service() {
 
     private fun markBoardReady() {
         cancelBoardReadyTimeout()
-        if (status == "connected") return
+        if (boardStatus == "connected") return
         autoReconnectAttempt = 0
-        status = "connected"
-        error = null
-        telemetryStore?.recordMarker("connected", config?.deviceId, config?.deviceName)
+        boardStatus = "connected"
+        val autoRecording = try {
+            kotlinx.coroutines.runBlocking {
+                AppDataRepository.get(applicationContext).getSettingsEntity().autoRecording
+            }
+        } catch (_: Exception) {
+            false
+        }
+        if (autoRecording && telemetryStore == null) {
+            telemetryStore = TelemetryRepository.get(applicationContext)
+        }
+        boardError = null
+        telemetryStore?.recordMarker("connected", boardConfig?.deviceId, boardConfig?.deviceName)
         emitState()
     }
 
     private fun armTelemetryStaleWatchdog() {
-        val session = config ?: return
-        if (!session.autoReconnect || session.mode == "replay") return
+        val session = boardConfig ?: return
+        if (!session.autoReconnect) return
         telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
         val armedAt = lastTelemetryAt
         telemetryStaleRunnable = Runnable {
             telemetryStaleRunnable = null
             val stillStale = lastTelemetryAt == armedAt ||
                 System.currentTimeMillis() - lastTelemetryAt >= TELEMETRY_STALE_MS
-            if (status == "connected" && config?.autoReconnect == true && stillStale) {
-                status = "stale"
+            if (boardStatus == "connected" && boardConfig?.autoReconnect == true && stillStale) {
+                boardStatus = "stale"
                 emitState()
                 scheduleAutoReconnect(session, null, "telemetry stale")
             }
         }
         mainHandler.postDelayed(telemetryStaleRunnable!!, TELEMETRY_STALE_MS)
-    }
-
-    private fun startReplayLoop(events: List<RecordedReplayEvent>) {
-        stopReplayLoop()
-        if (events.isEmpty()) {
-            setError("Recording has no RX events")
-            return
-        }
-        fun scheduleLoop() {
-            replayEventRunnables.clear()
-            events.forEach { event ->
-                val runnable = Runnable {
-                    lastPollAt = System.currentTimeMillis() - 40
-                    handleFrameChunk(event.bytes)
-                }
-                replayEventRunnables.add(runnable)
-                mainHandler.postDelayed(runnable, event.t)
-            }
-            val loopDelay = events.last().t + 1000L
-            replayRunnable = Runnable {
-                packetReassembler.reset()
-                scheduleLoop()
-            }
-            mainHandler.postDelayed(replayRunnable!!, loopDelay)
-        }
-        scheduleLoop()
-    }
-
-    private fun stopReplayLoop() {
-        replayStartRunnable?.let { mainHandler.removeCallbacks(it) }
-        replayStartRunnable = null
-        replayRunnable?.let { mainHandler.removeCallbacks(it) }
-        replayRunnable = null
-        replayEventRunnables.forEach { mainHandler.removeCallbacks(it) }
-        replayEventRunnables.clear()
     }
 
     private fun sendPayload(payload: ByteArray): Boolean {
@@ -930,8 +848,8 @@ class VescForegroundService : Service() {
         return rttHistory.average().roundToInt()
     }
 
-    private fun stopCurrentSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
-        val stoppedConfig = config
+    private fun stopCurrentBoardSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
+        val stoppedConfig = boardConfig
         autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
         autoReconnectRunnable = null
         stopReconnectScan()
@@ -939,7 +857,6 @@ class VescForegroundService : Service() {
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
         stopPolling()
-        stopReplayLoop()
         clearGatt(markIntentional = true)
         finishRecording(if (emitDisconnected) "disconnected" else "stopped")
         telemetryStore?.recordMarker(
@@ -952,13 +869,11 @@ class VescForegroundService : Service() {
         pendingConnect = null
         canId = null
         telemetry = null
-        latestLocation = null
         recentTelemetry.clear()
-        recentLocations.clear()
         generation += 1
-        error = null
-        status = "idle"
-        config = null
+        boardError = null
+        boardStatus = "idle"
+        boardConfig = null
         if (updateNotification && !isStoppingService && stoppedConfig != null) showNotification()
         emitState()
     }
@@ -985,8 +900,8 @@ class VescForegroundService : Service() {
     }
 
     private fun failStart(start: PendingStart, code: String, message: String) {
-        if (start.config.autoReconnect) {
-            scheduleAutoReconnect(start.config, null, message)
+        if (start.boardConfig.autoReconnect) {
+            scheduleAutoReconnect(start.boardConfig, null, message)
             start.onError(code, message)
             return
         }
@@ -1005,7 +920,7 @@ class VescForegroundService : Service() {
     }
 
     private fun setStatus(next: String) {
-        status = next
+        boardStatus = next
         recorder?.recordState(next)
         emitState()
     }
@@ -1019,8 +934,8 @@ class VescForegroundService : Service() {
         stopPolling()
         clearGatt(markIntentional = false)
         lastTelemetryAt = 0L
-        status = "reconnecting"
-        error = reason
+        boardStatus = "reconnecting"
+        boardError = reason
         autoReconnectAttempt += 1
         recorder?.recordState(
             "reconnecting",
@@ -1033,7 +948,7 @@ class VescForegroundService : Service() {
         val delayMs = minOf(250L * autoReconnectAttempt, 2_000L)
         val retry = Runnable {
             autoReconnectRunnable = null
-            if (config?.autoReconnect == true && status == "reconnecting") {
+            if (boardConfig?.autoReconnect == true && boardStatus == "reconnecting") {
                 startReconnectScan(session)
             }
         }
@@ -1058,10 +973,10 @@ class VescForegroundService : Service() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 if (!result.device.address.equals(targetId, ignoreCase = true)) return
                 stopReconnectScan()
-                if (config?.autoReconnect == true && status == "reconnecting") {
+                if (boardConfig?.autoReconnect == true && boardStatus == "reconnecting") {
                     connectAttempt = 0
-                    status = "connecting"
-                    error = null
+                    boardStatus = "connecting"
+                    boardError = null
                     emitState()
                     startBleSession(PendingStart(session, onSuccess = {}, onError = { _, _ -> }))
                 }
@@ -1103,16 +1018,16 @@ class VescForegroundService : Service() {
     }
 
     private fun setError(message: String) {
-        status = "error"
-        error = message
+        boardStatus = "error"
+        boardError = message
         recorder?.recordState("error", mapOf("message" to message))
-        telemetryStore?.recordMarker("error", config?.deviceId, config?.deviceName, message)
+        telemetryStore?.recordMarker("error", boardConfig?.deviceId, boardConfig?.deviceName, message)
         emitEvent("onError", mapOf("message" to message))
         emitState()
     }
 
     private fun emitState() {
-        emitEvent("onSessionState", sessionStateMap())
+        emitEvent("onLiveState", liveStateMap())
     }
 
     private fun emitEvent(name: String, body: Map<String, Any?>) {
@@ -1120,10 +1035,13 @@ class VescForegroundService : Service() {
     }
 
     private fun startLocationUpdates() {
-        if (config?.mode == "replay") return
         val hasFine = ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        if (!hasFine) return
+        if (!hasFine) {
+            gpsError = "Location permission not granted"
+            emitState()
+            return
+        }
         val lm = (getSystemService(Context.LOCATION_SERVICE) as? LocationManager) ?: return
         locationManager = lm
         try {
@@ -1142,6 +1060,8 @@ class VescForegroundService : Service() {
                 Looper.getMainLooper(),
             )
         } catch (e: Exception) {
+            gpsError = e.message ?: "Location updates failed"
+            emitState()
             Log.w(TAG, "Location updates failed: ${e.message}")
         }
     }
@@ -1156,16 +1076,25 @@ class VescForegroundService : Service() {
     }
 
     private fun setTelemetryRecordingEnabled(enabled: Boolean) {
-        val session = config
-        if (enabled && session?.mode != "replay") {
+        val session = boardConfig
+        if (enabled) {
+            if (
+                session == null ||
+                boardStatus == "idle" ||
+                boardStatus == "connecting" ||
+                boardStatus == "discovering" ||
+                boardStatus == "subscribing" ||
+                boardStatus == "disconnecting" ||
+                boardStatus == "error"
+            ) {
+                requestedTelemetryRecordingEnabled = false
+                emitEvent("onError", mapOf("message" to "Recording requires a connected board"))
+                emitState()
+                return
+            }
             if (telemetryStore == null) {
                 telemetryStore = TelemetryRepository.get(applicationContext)
-                telemetryStore?.recordMarker(
-                    if (status == "connected") "connected" else "app_stop",
-                    session?.deviceId,
-                    session?.deviceName,
-                    if (status == "connected") null else "Recording started",
-                )
+                telemetryStore?.recordMarker("connected", session.deviceId, session.deviceName, null)
             }
             emitState()
             return
@@ -1201,8 +1130,8 @@ class VescForegroundService : Service() {
         val saved = if (precise) {
             telemetryStore?.recordLocation(
                 capture,
-                deviceId = config?.deviceId,
-                deviceName = config?.deviceName,
+                deviceId = boardConfig?.deviceId,
+                deviceName = boardConfig?.deviceName,
             ) ?: false
         } else {
             false
@@ -1221,7 +1150,7 @@ class VescForegroundService : Service() {
         latestLocation = snapshot
         appendRecentLocation(snapshot)
         emitEvent("onLocation", snapshot.toMap())
-        if (config?.mode == "gps") showNotification(formatGpsNotificationText(snapshot))
+        if (boardConfig == null) showNotification(formatGpsNotificationText(snapshot))
         if (snapshot.precise) recorder?.recordLocation(snapshot)
     }
 
@@ -1230,38 +1159,47 @@ class VescForegroundService : Service() {
             accuracyM != null &&
             accuracyM <= MAX_RECORDING_ACCURACY_M
 
-    private fun sessionStateMap(includeRecent: Boolean = false): Map<String, Any?> {
-        val mode = config?.mode
+    private fun liveStateMap(includeRecent: Boolean = false): Map<String, Any?> {
+        val settings = kotlinx.coroutines.runBlocking {
+            AppDataRepository.get(applicationContext).getSettingsEntity()
+        }
         val now = System.currentTimeMillis()
-        val isTelemetryStale = status == "connected" &&
-            mode == "ble" &&
+        val phase = if (
+            boardStatus == "connected" &&
             lastTelemetryAt > 0L &&
             now - lastTelemetryAt >= TELEMETRY_STALE_MS
-        val boardStatus = when (mode) {
-            "ble" -> if (isTelemetryStale) "stale" else status
-            "replay" -> status
-            else -> "idle"
-        }
-        val gpsStatus = if (locationManager != null) "active" else "idle"
-        val state = mutableMapOf<String, Any?>(
-            "generation" to generation,
-            "status" to status,
-            "boardStatus" to boardStatus,
-            "gpsStatus" to gpsStatus,
-            "mode" to mode,
-            "deviceId" to config?.deviceId,
-            "deviceName" to config?.deviceName,
-            "canId" to canId,
-            "error" to error,
-            "autoReconnect" to (config?.autoReconnect ?: false),
-            "telemetryRecordingEnabled" to (config?.telemetryRecordingEnabled == true || requestedTelemetryRecordingEnabled),
-            "lastTelemetryAt" to telemetry?.lastPacketAt,
+        ) "stale" else boardStatus
+        val recentLocationsValue = if (includeRecent) recentLocations.toList() else emptyList()
+
+        return mapOf(
+            "board" to mapOf(
+                "phase" to phase,
+                "selectedBoardId" to settings.selectedBoardId,
+                "connectedBoardId" to boardConfig?.appBoardId,
+                "bleId" to boardConfig?.deviceId,
+                "name" to boardConfig?.deviceName,
+                "connectionSeq" to generation,
+                "lastTelemetryAt" to telemetry?.lastPacketAt,
+                "error" to boardError,
+                "autoConnect" to settings.autoConnect,
+            ),
+            "gps" to mapOf(
+                "phase" to if (locationManager != null) "active" else "idle",
+                "latestFix" to latestLocation?.toMap(),
+                "recentLocations" to recentLocationsValue,
+                "error" to gpsError,
+            ),
+            "scan" to mapOf(
+                "phase" to "idle",
+                "devices" to emptyList<Map<String, Any?>>(),
+                "error" to null,
+            ),
+            "recording" to mapOf(
+                "enabled" to (telemetryStore != null),
+                "activeBoardId" to if (telemetryStore != null) boardConfig?.appBoardId else null,
+                "startedAt" to null,
+            ),
         )
-        if (includeRecent) {
-            state["recentTelemetry"] = recentTelemetry.toList()
-            state["recentLocations"] = recentLocations.toList()
-        }
-        return state
     }
 
     private suspend fun loadAlertRules(context: Context) {
@@ -1434,7 +1372,7 @@ class VescForegroundService : Service() {
     }
 
     private fun buildNotification(text: String = "Monitoring board in background"): Notification {
-        val title = (config?.deviceName ?: "VESC").let { if (appInForeground) it else "$it (bg)" }
+        val title = (boardConfig?.deviceName ?: "VESC").let { if (appInForeground) it else "$it (bg)" }
         return androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
@@ -1522,8 +1460,7 @@ class VescForegroundService : Service() {
     }
 
     private fun recordTelemetry(values: RefloatTelemetry) {
-        val session = config ?: return
-        if (session.mode == "replay") return
+        val session = boardConfig ?: return
         telemetryStore?.recordTelemetry(
             TelemetryCapture(
                 capturedAtMs = values.lastPacketAt,
@@ -1635,16 +1572,14 @@ private class VescPacketReassembler {
     }
 }
 
-private data class RecordedReplayEvent(val t: Long, val bytes: ByteArray)
-
-private class VescSessionRecorder(context: Context, private val config: SessionConfig) {
-    private val store = VescRecordingStore(context)
+private class VescSessionRecorder(context: Context, private val boardConfig: SessionConfig) {
+    private val store = DebugRecordingStore(context)
     private val startedAt = System.currentTimeMillis()
     private val writer: FileWriter
     val file: File
 
     init {
-        file = store.createFile(config.deviceName)
+        file = store.createFile(boardConfig.deviceName)
         writer = FileWriter(file, false)
     }
 
@@ -1654,10 +1589,10 @@ private class VescSessionRecorder(context: Context, private val config: SessionC
                 .put("t", 0)
                 .put("kind", "meta")
                 .put("version", 1)
-                .put("deviceName", config.deviceName)
-                .put("deviceId", config.deviceId)
-                .put("mode", config.mode)
-                .put("pollIntervalMs", config.pollIntervalMs)
+                .put("deviceName", boardConfig.deviceName)
+                .put("deviceId", boardConfig.deviceId)
+                .put("sessionKind", "board")
+                .put("pollIntervalMs", boardConfig.pollIntervalMs)
                 .put("startedAt", startedAt)
         )
         recordState("recording-started")
@@ -1719,7 +1654,7 @@ private class VescSessionRecorder(context: Context, private val config: SessionC
     }
 }
 
-private class VescRecordingStore(private val context: Context) {
+private class DebugRecordingStore(private val context: Context) {
     private val dir: File
         get() = File(context.filesDir, "vesc-recordings").also { it.mkdirs() }
 
@@ -1728,70 +1663,6 @@ private class VescRecordingStore(private val context: Context) {
         return File(dir, "${System.currentTimeMillis()}-$safeName.jsonl")
     }
 
-    fun list(): List<Map<String, Any?>> {
-        return dir.listFiles { file -> file.isFile && file.extension == "jsonl" }
-            ?.sortedByDescending { it.lastModified() }
-            ?.map { file ->
-                val meta = readMeta(file)
-                mapOf(
-                    "id" to file.absolutePath,
-                    "path" to file.absolutePath,
-                    "fileName" to file.name,
-                    "deviceName" to (meta?.optString("deviceName")?.takeIf { it.isNotBlank() } ?: "Recorded Session"),
-                    "startedAt" to (meta?.optLong("startedAt", file.lastModified()) ?: file.lastModified()),
-                    "sizeBytes" to file.length(),
-                )
-            }
-            ?: emptyList()
-    }
-
-    fun readReplayEvents(path: String): List<RecordedReplayEvent> {
-        val file = File(path)
-        if (!file.exists()) throw IllegalArgumentException("Recording not found")
-        val events = mutableListOf<RecordedReplayEvent>()
-        file.forEachLine { line ->
-            if (line.isBlank()) return@forEachLine
-            val json = JSONObject(line)
-            if (json.optString("kind") == "ble-chunk" && json.optString("direction") == "rx") {
-                events.add(
-                    RecordedReplayEvent(
-                        t = json.optLong("t", 0L),
-                        bytes = Base64.decode(json.getString("base64"), Base64.NO_WRAP),
-                    )
-                )
-            }
-        }
-        val first = events.firstOrNull()?.t ?: 0L
-        return events.map { it.copy(t = (it.t - first).coerceAtLeast(0L)) }
-    }
-
-    fun export(path: String): String {
-        val source = File(path)
-        if (!source.exists()) throw IllegalArgumentException("Recording not found")
-        val outputName = source.name
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, outputName)
-            put(MediaStore.Downloads.MIME_TYPE, "application/jsonl")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-        }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw IllegalStateException("Could not create download")
-        resolver.openOutputStream(uri)?.use { output ->
-            source.inputStream().use { input -> input.copyTo(output) }
-        }
-        return uri.toString()
-    }
-
-    private fun readMeta(file: File): JSONObject? {
-        return try {
-            file.useLines { lines ->
-                lines.firstOrNull { it.isNotBlank() }?.let { JSONObject(it) }
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
 }
 
 private fun crc16(data: ByteArray): Int {

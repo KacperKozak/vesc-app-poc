@@ -47,15 +47,31 @@ class AppDataRepository private constructor(context: Context) {
     (dao.getSettings() ?: AppSettingsEntity()).toMap()
   }
 
+  suspend fun getSettingsEntity(): AppSettingsEntity = withContext(Dispatchers.IO) {
+    dao.getSettings() ?: AppSettingsEntity()
+  }
+
   suspend fun updateSetting(key: String, value: Any?): Unit = withContext(Dispatchers.IO) {
     val current = dao.getSettings() ?: AppSettingsEntity()
     val updated = when (key) {
       "liveHistoryLimit" -> current.copy(liveHistoryLimit = (value as? Number)?.toInt() ?: 5)
       "autoConnect" -> current.copy(autoConnect = value as? Boolean ?: true)
       "autoRecording" -> current.copy(autoRecording = value as? Boolean ?: false)
+      "selectedBoardId" -> current.copy(selectedBoardId = value as? String)
       else -> current
     }
     dao.upsertSettings(updated)
+  }
+
+  suspend fun setSelectedBoardId(id: String?): Unit = updateSetting("selectedBoardId", id)
+
+  suspend fun getAutoConnectBoard(): Map<String, Any?>? = withContext(Dispatchers.IO) {
+    val settings = dao.getSettings() ?: AppSettingsEntity()
+    settings.selectedBoardId
+      ?.let { dao.getBoard(it) }
+      ?.toMap()
+      ?: dao.getBoards().firstOrNull { it.isStarred }?.toMap()
+      ?: dao.getBoards().firstOrNull()?.toMap()
   }
 
   companion object {
@@ -85,6 +101,7 @@ fun AppSettingsEntity.toMap(): Map<String, Any?> = mapOf(
   "liveHistoryLimit" to liveHistoryLimit,
   "autoConnect" to autoConnect,
   "autoRecording" to autoRecording,
+  "selectedBoardId" to selectedBoardId,
 )
 
 fun AlertRuleEntity.toMap(): Map<String, Any?> = mapOf(

@@ -40,7 +40,11 @@ function bleLabel(status: string, scanStatus: string, avgLatency: number | null)
   }
   if (status === 'stale') return 'stale'
   if (status === 'connecting') return 'connecting'
+  if (status === 'discovering') return 'discovering'
+  if (status === 'subscribing') return 'subscribing'
+  if (status === 'waiting_for_telemetry') return 'waiting'
   if (status === 'reconnecting') return 'reconnecting'
+  if (status === 'disconnecting') return 'disconnecting'
   if (status === 'error') return 'error'
   return 'idle'
 }
@@ -48,7 +52,15 @@ function bleLabel(status: string, scanStatus: string, avgLatency: number | null)
 function bleColor(status: string, scanStatus: string): string {
   if (status === 'connected') return theme.gps.color
   if (status === 'stale' || status === 'error') return theme.error.color
-  if (scanStatus === 'scanning' || status === 'connecting' || status === 'reconnecting') {
+  if (
+    scanStatus === 'scanning' ||
+    status === 'connecting' ||
+    status === 'discovering' ||
+    status === 'subscribing' ||
+    status === 'waiting_for_telemetry' ||
+    status === 'reconnecting' ||
+    status === 'disconnecting'
+  ) {
     return theme.wheel.text
   }
   return '#475569'

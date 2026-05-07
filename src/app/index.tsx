@@ -30,19 +30,15 @@ export default function MainScreen() {
   const backPressedOnce = useRef(false)
   const load = useBoardStore((s) => s.load)
   const activeBoardId = useBoardStore((s) => s.activeBoardId)
-  const { telemetryRecordingEnabled, startGpsTracking, startTelemetryRecording } = useBleStore(
-    useShallow((s) => ({
-      telemetryRecordingEnabled: s.telemetryRecordingEnabled,
-      startGpsTracking: s.startGpsTracking,
-      startTelemetryRecording: s.startTelemetryRecording, // no-arg now
-    })),
-  )
+  const startGpsTracking = useBleStore((s) => s.startGpsTracking)
   const { status: permStatus, request } = usePermissions()
 
-  const autoRecording = useSettingsStore((s) => s.autoRecording)
-  const loadSettings = useSettingsStore((s) => s.load)
+  const { autoConnect, loadSettings } = useSettingsStore(
+    useShallow((s) => ({ autoConnect: s.autoConnect, loadSettings: s.load })),
+  )
 
   const connection = useBoardConnection()
+  const { bleStatus, handleRetryConnect } = connection
 
   useBleAppLifecycle()
 
@@ -58,23 +54,15 @@ export default function MainScreen() {
   useEffect(() => {
     if (permStatus === 'granted') {
       startGpsTracking({ boardId: activeBoardId })
-      if (telemetryRecordingEnabled) {
-        startTelemetryRecording()
-      }
     }
-  }, [
-    activeBoardId,
-    permStatus,
-    startGpsTracking,
-    startTelemetryRecording,
-    telemetryRecordingEnabled,
-  ])
+  }, [activeBoardId, permStatus, startGpsTracking])
 
   useEffect(() => {
-    if (autoRecording && connection.bleStatus === 'connected' && !telemetryRecordingEnabled) {
-      startTelemetryRecording()
-    }
-  }, [autoRecording, connection.bleStatus, telemetryRecordingEnabled, startTelemetryRecording])
+    if (!autoConnect || permStatus !== 'granted') return
+    if (!activeBoardId) return
+    if (bleStatus !== 'idle' && bleStatus !== 'error') return
+    handleRetryConnect()
+  }, [activeBoardId, autoConnect, bleStatus, handleRetryConnect, permStatus])
 
   useFocusEffect(
     useCallback(() => {
@@ -104,18 +92,21 @@ export default function MainScreen() {
         boards={connection.boards}
         activeBoardId={connection.activeBoardId}
         activeBoard={connection.activeBoard}
-        replayBoardName={connection.replayBoardName}
-        recordings={connection.recordings}
         recordDebugSession={connection.recordDebugSession}
         inlineItems={connection.inlineItems}
         menuItems={connection.menuItems}
         onSelectBoard={connection.handleSelectBoard}
         onAddBoard={connection.handleAddBoard}
-        onReplay={connection.handleReplay}
         onToggleRecordDebug={() => connection.setRecordDebugSession(!connection.recordDebugSession)}
       />
 
       <LiveStatusBar />
+      {!connection.nativeStateReady && (
+        <View style={styles.restoringBar}>
+          <Text style={styles.restoringText}>Restoring native state...</Text>
+          {/* I've never seen this? */}
+        </View>
+      )}
 
       <View style={styles.pagerWrap}>
         <MainPager ref={pagerRef} page={page} onPageChange={setPage}>
@@ -155,6 +146,18 @@ const styles = StyleSheet.create({
   },
   pagerWrap: {
     flex: 1,
+  },
+  restoringBar: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  restoringText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '700',
   },
   tabBar: {
     flexDirection: 'row',

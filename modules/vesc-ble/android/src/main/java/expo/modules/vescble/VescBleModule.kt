@@ -46,7 +46,11 @@ class VescBleModule : Module() {
     Name("VescBle")
 
     VescForegroundService.emitEvent = { name, body ->
-      if (shouldEmitToFrontend(name)) {
+      if (name == "onLiveState" && shouldEmitToFrontend("onLiveState")) {
+        mainHandler.post {
+          if (shouldEmitToFrontend("onLiveState")) sendEvent("onLiveState", liveStateWithScan(body))
+        }
+      } else if (shouldEmitToFrontend(name)) {
         mainHandler.post {
           if (shouldEmitToFrontend(name)) sendEvent(name, body)
         }
@@ -57,7 +61,7 @@ class VescBleModule : Module() {
       "onDevice",
       "onError",
       "onStopRequested",
-      "onSessionState",
+      "onLiveState",
       "onTelemetry",
       "onLocation",
     )
@@ -68,8 +72,8 @@ class VescBleModule : Module() {
     OnStopObserving("onError") { stopObserving("onError") }
     OnStartObserving("onStopRequested") { startObserving("onStopRequested") }
     OnStopObserving("onStopRequested") { stopObserving("onStopRequested") }
-    OnStartObserving("onSessionState") { startObserving("onSessionState") }
-    OnStopObserving("onSessionState") { stopObserving("onSessionState") }
+    OnStartObserving("onLiveState") { startObserving("onLiveState") }
+    OnStopObserving("onLiveState") { stopObserving("onLiveState") }
     OnStartObserving("onTelemetry") { startObserving("onTelemetry") }
     OnStopObserving("onTelemetry") { stopObserving("onTelemetry") }
     OnStartObserving("onLocation") { startObserving("onLocation") }
@@ -103,8 +107,11 @@ class VescBleModule : Module() {
     Function("previewAlertSound") { soundType: String ->
       VescForegroundService.previewAlertSound(context.applicationContext, soundType)
     }
-    Function("getSessionState") {
-      VescForegroundService.currentState() + mapOf("scanStatus" to scanStatus)
+    Function("getLiveState") {
+      liveStateWithScan(VescForegroundService.currentLiveState(context.applicationContext))
+    }
+    Function("setSelectedBoard") { boardId: String? ->
+      runBlocking { AppDataRepository.get(context.applicationContext).setSelectedBoardId(boardId) }
     }
     Function("setDebugRecordingEnabled") { enabled: Boolean ->
       requestedDebugRecordingEnabled = enabled
@@ -114,23 +121,7 @@ class VescBleModule : Module() {
       selectBoard(boardId)
     }
     AsyncFunction("stopBoard") { promise: Promise ->
-      stopSession(promise)
-    }
-    AsyncFunction("startSession") { options: Map<String, Any?>, promise: Promise ->
-      startSession(options, promise)
-    }
-    AsyncFunction("listRecordings") { promise: Promise ->
-      promise.resolve(VescForegroundService.listRecordings(context.applicationContext))
-    }
-    AsyncFunction("deleteRecording") { path: String, promise: Promise ->
-      promise.resolve(VescForegroundService.deleteRecording(path))
-    }
-    AsyncFunction("exportRecording") { path: String, promise: Promise ->
-      try {
-        promise.resolve(VescForegroundService.exportRecording(context.applicationContext, path))
-      } catch (e: Exception) {
-        promise.reject("EXPORT_FAILED", e.message ?: "Could not export recording", e)
-      }
+      stopBoardSession(promise)
     }
     AsyncFunction("getTelemetryHistory") Coroutine { options: Map<String, Any?> ->
       TelemetryRepository.get(context.applicationContext).getHistory(options)
@@ -190,6 +181,16 @@ class VescBleModule : Module() {
 
   private fun stopObserving(name: String) {
     observedEvents.remove(name)
+  }
+
+  private fun liveStateWithScan(state: Map<String, Any?>): Map<String, Any?> {
+    return state + mapOf(
+      "scan" to mapOf(
+        "phase" to scanStatus,
+        "devices" to emptyList<Map<String, Any?>>(),
+        "error" to null,
+      ),
+    )
   }
 
   private fun startScan(resetRetries: Boolean = true) {
@@ -296,6 +297,7 @@ class VescBleModule : Module() {
   }
 
   private suspend fun selectBoard(boardId: String) {
+    AppDataRepository.get(context.applicationContext).setSelectedBoardId(boardId)
     val board = AppDataRepository.get(context.applicationContext).getBoard(boardId)
       ?: throw IllegalArgumentException("Board not found: $boardId")
     val bleId = board["bleId"] as? String
@@ -303,17 +305,16 @@ class VescBleModule : Module() {
       throw IllegalArgumentException("Board has no BLE pairing: $boardId")
     }
     val boardName = board["name"] as? String ?: DEFAULT_BOARD_NAME
-    VescForegroundService.startSession(
+    VescForegroundService.startBoardSession(
       context.applicationContext,
       SessionConfig(
-        mode = "ble",
+        appBoardId = boardId,
         deviceId = bleId,
         deviceName = boardName,
         canId = null,
         pollIntervalMs = 500L,
         recordingEnabled = requestedDebugRecordingEnabled,
         telemetryRecordingEnabled = false,
-        recordingPath = null,
         autoReconnect = true,
       ),
       onSuccess = {},
@@ -328,43 +329,8 @@ class VescBleModule : Module() {
     TelemetryRepository.get(context.applicationContext).flushBlocking()
   }
 
-  private fun startSession(options: Map<String, Any?>, promise: Promise?) {
-    val mode = options["mode"] as? String ?: "ble"
-    val deviceId = options["deviceId"] as? String
-    val deviceName = options["deviceName"] as? String ?: DEFAULT_BOARD_NAME
-    val canId = (options["canId"] as? Number)?.toInt()
-    val pollIntervalMs = (options["pollIntervalMs"] as? Number)?.toLong() ?: 500L
-    val recordingEnabled = options["recordingEnabled"] as? Boolean ?: false
-    val telemetryRecordingEnabled = options["telemetryRecordingEnabled"] as? Boolean ?: false
-    val recordingPath = options["recordingPath"] as? String
-    val autoReconnect = options["autoReconnect"] as? Boolean ?: false
-
-    VescForegroundService.startSession(
-      context.applicationContext,
-      SessionConfig(
-        mode = mode,
-        deviceId = deviceId,
-        deviceName = deviceName,
-        canId = canId,
-        pollIntervalMs = pollIntervalMs,
-        recordingEnabled = recordingEnabled,
-        telemetryRecordingEnabled = telemetryRecordingEnabled,
-        recordingPath = recordingPath,
-        autoReconnect = autoReconnect,
-      ),
-      onSuccess = { promise?.resolve(null) },
-      onError = { code, message ->
-        if (promise != null) {
-          promise.reject(code, message, null)
-        } else if (!autoReconnect) {
-          sendEvent("onError", mapOf("message" to message))
-        }
-      },
-    )
-  }
-
-  private fun stopSession(promise: Promise) {
-    VescForegroundService.stopSession(context.applicationContext) {
+  private fun stopBoardSession(promise: Promise) {
+    VescForegroundService.stopBoardSession(context.applicationContext) {
       promise.resolve(null)
     }
   }

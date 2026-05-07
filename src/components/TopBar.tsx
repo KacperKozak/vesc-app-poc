@@ -8,20 +8,16 @@ import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
 import { VibeWheelLogo } from '@/components/VibeWheelLogo'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
-import type { RecordingInfo } from '@/store/bleStore'
 
 interface TopBarProps {
   boards: Board[]
   activeBoardId: string | null
   activeBoard: Board | undefined
-  replayBoardName: string | null
-  recordings: RecordingInfo[]
   recordDebugSession: boolean
   inlineItems: BoardMenuItem[]
   menuItems: BoardMenuItem[]
   onSelectBoard: (id: string) => void
   onAddBoard: () => void
-  onReplay: (recording: RecordingInfo) => void
   onToggleRecordDebug: () => void
 }
 
@@ -29,19 +25,16 @@ export function TopBar({
   boards,
   activeBoardId,
   activeBoard,
-  replayBoardName,
-  recordings,
   recordDebugSession,
   inlineItems,
   menuItems,
   onSelectBoard,
   onAddBoard,
-  onReplay,
   onToggleRecordDebug,
 }: TopBarProps) {
   const [selectorOpen, setSelectorOpen] = useState(false)
 
-  const displayName = replayBoardName ?? activeBoard?.name ?? 'No board'
+  const displayName = activeBoard?.name ?? 'No board'
 
   return (
     <View style={styles.container}>
@@ -69,7 +62,6 @@ export function TopBar({
         visible={selectorOpen}
         boards={boards}
         activeBoardId={activeBoardId}
-        recordings={recordings}
         recordDebugSession={recordDebugSession}
         onClose={() => setSelectorOpen(false)}
         onSelectBoard={(id) => {
@@ -79,10 +71,6 @@ export function TopBar({
         onAddBoard={() => {
           setSelectorOpen(false)
           onAddBoard()
-        }}
-        onReplay={(recording) => {
-          setSelectorOpen(false)
-          onReplay(recording)
         }}
         onToggleRecordDebug={onToggleRecordDebug}
       />

@@ -269,4 +269,6 @@ data class AppSettingsEntity(
   val autoConnect: Boolean = true,
   @ColumnInfo(name = "auto_recording")
   val autoRecording: Boolean = false,
+  @ColumnInfo(name = "selected_board_id")
+  val selectedBoardId: String? = null,
 )

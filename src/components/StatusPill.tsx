@@ -8,7 +8,11 @@ const COLORS: Record<string, { bg: string; text: string }> = {
   connected: { bg: theme.gps.bg, text: theme.gps.text },
   stale: { bg: theme.error.bg, text: theme.error.text },
   connecting: { bg: theme.wheel.bg, text: theme.wheel.text },
+  discovering: { bg: theme.wheel.bg, text: theme.wheel.text },
+  subscribing: { bg: theme.wheel.bg, text: theme.wheel.text },
+  waiting_for_telemetry: { bg: theme.wheel.bg, text: theme.wheel.text },
   reconnecting: { bg: theme.wheel.bg, text: theme.wheel.text },
+  disconnecting: { bg: theme.wheel.bg, text: theme.wheel.text },
   scanning: { bg: theme.warning.bg, text: theme.warning.text },
   error: { bg: theme.error.bg, text: theme.error.text },
   idle: { bg: '#1f2937', text: '#9ca3af' },
@@ -60,7 +64,15 @@ export function StatusPill({ status, style }: { status: string; style?: ViewStyl
 
   return (
     <View style={[styles.pill, { backgroundColor: pillBg }, style]}>
-      {(status === 'connecting' || status === 'reconnecting' || status === 'scanning') && (
+      {[
+        'connecting',
+        'discovering',
+        'subscribing',
+        'waiting_for_telemetry',
+        'reconnecting',
+        'disconnecting',
+        'scanning',
+      ].includes(status) && (
         <ActivityIndicator size="small" color={pillText} style={styles.spinner} />
       )}
       {(status === 'connected' || status === 'stale') && (
@@ -78,7 +90,7 @@ export function StatusPill({ status, style }: { status: string; style?: ViewStyl
             ? 'SLOW'
             : status === 'scanning'
               ? 'SEARCHING'
-              : status.toUpperCase()}
+              : status.split('_').join(' ').toUpperCase()}
       </Text>
     </View>
   )

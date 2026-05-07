@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     AlertRuleEntity::class,
     AppSettingsEntity::class,
   ],
-  version = 4,
+  version = 5,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -42,6 +42,12 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE app_settings ADD COLUMN selected_board_id TEXT")
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -49,7 +55,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
           TelemetryDatabase::class.java,
           "telemetry.db",
         )
-          .addMigrations(MIGRATION_3_4)
+          .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

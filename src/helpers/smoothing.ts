@@ -5,7 +5,7 @@
  * α    = 1 − exp(−Δt / τ),  τ = halfLifeMs / ln(2)
  *
  * Because α is computed from each sample's actual time delta, a gap in the
- * input (BLE drop, replay, app pause) does not produce a misleading spike —
+ * input (BLE drop, app pause) does not produce a misleading spike —
  * the filter "catches up" proportionally to the elapsed time.
  *
  * Use case: smooth out battery-voltage sag during heavy current draw so the

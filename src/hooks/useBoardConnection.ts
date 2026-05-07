@@ -1,15 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert } from 'react-native'
+import { useCallback, useMemo } from 'react'
 import { router } from 'expo-router'
-import { PencilSimpleIcon, PowerIcon, StarIcon, TrashIcon } from 'phosphor-react-native'
+import { PencilSimpleIcon, PowerIcon, StarIcon } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
 import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
-import { useSettingsStore } from '@/store/settingsStore'
 import { routes } from '@/navigation/routes'
 import type { BoardMenuItem } from '@/components/BoardMenu'
-import type { RecordingInfo } from '@/store/bleStore'
+
+function isBoardBusy(status: string): boolean {
+  return (
+    status === 'connecting' ||
+    status === 'discovering' ||
+    status === 'subscribing' ||
+    status === 'waiting_for_telemetry' ||
+    status === 'reconnecting' ||
+    status === 'disconnecting'
+  )
+}
 
 export function useBoardConnection() {
   const { boards, activeBoardId, setActiveBoard, starBoard } = useBoardStore(
@@ -23,68 +31,32 @@ export function useBoardConnection() {
   const {
     status: bleStatus,
     nativeStateReady,
-    sessionMode,
-    recordings,
-    connectedId,
     recordDebugSession,
-    loadRecordings,
     stopScan,
     connect,
     disconnect,
-    replayRecording,
-    deleteRecording,
+    setSelectedBoard,
     setRecordDebugSession,
   } = useBleStore(
     useShallow((s) => ({
       status: s.status,
       nativeStateReady: s.nativeStateReady,
-      sessionMode: s.sessionMode,
-      recordings: s.recordings,
-      connectedId: s.connectedId,
       recordDebugSession: s.recordDebugSession,
-      loadRecordings: s.loadRecordings,
       stopScan: s.stopScan,
       connect: s.connect,
       disconnect: s.disconnect,
-      replayRecording: s.replayRecording,
-      deleteRecording: s.deleteRecording,
+      setSelectedBoard: s.setSelectedBoard,
       setRecordDebugSession: s.setRecordDebugSession,
     })),
   )
-  const settingsAutoConnect = useSettingsStore((s) => s.autoConnect)
-  const [autoConnectEnabled, setAutoConnectEnabled] = useState(true)
-  const selectedBoardIntent = useRef<string | null>(null)
 
   const activeBoard = boards.find((b) => b.id === activeBoardId)
-  const activeReplay =
-    sessionMode === 'replay' && connectedId
-      ? recordings.find((r) => r.path === connectedId)
-      : undefined
-  const replayBoardName = activeReplay
-    ? `${activeReplay.deviceName} (${new Date(activeReplay.startedAt).toLocaleString()})`
-    : null
-
-  // JS sends board id intent; native reads BLE pairing/name and owns state.
-  useEffect(() => {
-    if (!autoConnectEnabled || !settingsAutoConnect) return
-    if (!nativeStateReady) return
-    if (!activeBoardId) return
-    if (bleStatus !== 'idle' && bleStatus !== 'error') return
-    if (selectedBoardIntent.current === activeBoardId) return
-    selectedBoardIntent.current = activeBoardId
-    void connect(activeBoardId)
-  }, [autoConnectEnabled, settingsAutoConnect, nativeStateReady, activeBoardId, bleStatus, connect])
-
-  useEffect(() => {
-    void loadRecordings()
-  }, [loadRecordings])
-
   const isSessionActive =
     bleStatus === 'connected' || bleStatus === 'stale' || bleStatus === 'reconnecting'
 
   const inlineItems = useMemo<BoardMenuItem[]>(() => {
     const items: BoardMenuItem[] = []
-    if (activeBoard && !activeReplay) {
+    if (activeBoard) {
       items.push({
         label: 'Edit Board',
         icon: PencilSimpleIcon,
@@ -94,78 +66,41 @@ export function useBoardConnection() {
     }
     if (isSessionActive) {
       items.push({
-        label: activeReplay ? 'Stop' : 'Disconnect',
+        label: 'Disconnect',
         icon: PowerIcon,
-        onPress: () => {
-          setAutoConnectEnabled(false)
-          selectedBoardIntent.current = null
-          void disconnect()
-        },
+        onPress: () => void disconnect(),
       })
     }
     return items
-  }, [activeBoard, activeReplay, isSessionActive, disconnect])
+  }, [activeBoard, isSessionActive, disconnect])
 
   const menuItems = useMemo<BoardMenuItem[]>(() => {
     const items: BoardMenuItem[] = []
-    if (activeBoard && !activeBoard.isStarred && !activeReplay) {
+    if (activeBoard && !activeBoard.isStarred) {
       items.push({
         label: 'Make main',
         icon: StarIcon,
         onPress: () => void starBoard(activeBoard.id),
       })
     }
-    if (isSessionActive && activeReplay) {
-      items.push({
-        label: 'Remove recording',
-        icon: TrashIcon,
-        destructive: true,
-        onPress: () =>
-          Alert.alert(
-            'Remove Recording',
-            `Remove "${activeReplay.fileName}"? This cannot be undone.`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Remove',
-                style: 'destructive',
-                onPress: () => {
-                  void disconnect().then(() => deleteRecording(activeReplay))
-                },
-              },
-            ],
-          ),
-      })
-    }
     return items
-  }, [activeBoard, activeReplay, isSessionActive, deleteRecording, disconnect, starBoard])
+  }, [activeBoard, starBoard])
 
   const handleSelectBoard = useCallback(
     (id: string) => {
-      selectedBoardIntent.current = null
-      setAutoConnectEnabled(true)
       setActiveBoard(id)
+      setSelectedBoard(id)
     },
-    [setActiveBoard],
+    [setActiveBoard, setSelectedBoard],
   )
 
   const handleAddBoard = useCallback(() => {
     router.push(routes.addBoardScan)
   }, [])
 
-  const handleReplay = useCallback(
-    (recording: RecordingInfo) => {
-      setAutoConnectEnabled(false)
-      void replayRecording(recording)
-    },
-    [replayRecording],
-  )
-
   const handleCancel = useCallback(() => {
-    setAutoConnectEnabled(false)
-    selectedBoardIntent.current = null
     const { status } = useBleStore.getState()
-    if (status === 'connecting' || status === 'reconnecting') {
+    if (isBoardBusy(status)) {
       void disconnect()
     } else {
       stopScan()
@@ -174,8 +109,6 @@ export function useBoardConnection() {
 
   const handleRetryConnect = useCallback(() => {
     if (!activeBoardId) return
-    setAutoConnectEnabled(true)
-    selectedBoardIntent.current = activeBoardId
     void connect(activeBoardId)
   }, [activeBoardId, connect])
 
@@ -183,15 +116,13 @@ export function useBoardConnection() {
     boards,
     activeBoard,
     activeBoardId,
-    replayBoardName,
+    nativeStateReady,
     bleStatus,
-    recordings,
     recordDebugSession,
     inlineItems,
     menuItems,
     handleSelectBoard,
     handleAddBoard,
-    handleReplay,
     handleCancel,
     handleRetryConnect,
     setRecordDebugSession,

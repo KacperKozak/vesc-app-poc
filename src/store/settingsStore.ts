@@ -5,6 +5,7 @@ const DEFAULTS: AppSettings = {
   liveHistoryLimit: 5,
   autoConnect: true,
   autoRecording: false,
+  selectedBoardId: null,
 }
 
 interface SettingsState extends AppSettings {

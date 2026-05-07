@@ -9,7 +9,7 @@ public class VescBleModule: Module {
   // MARK: - Session state
 
   private var sessionStatus = "idle"
-  private var sessionMode: String? = nil
+  private var selectedBoardId: String? = nil
   private var sessionDeviceId: String? = nil
   private var sessionDeviceName: String? = nil
 
@@ -55,9 +55,7 @@ public class VescBleModule: Module {
   public func definition() -> ModuleDefinition {
     Name("VescBle")
 
-    Events(
-      "onDevice", "onError", "onStopRequested", "onSessionState", "onTelemetry", "onLocation"
-    )
+    Events("onDevice", "onError", "onStopRequested", "onLiveState", "onTelemetry", "onLocation")
 
     OnDestroy {
       self.scanTimer?.invalidate()
@@ -99,118 +97,38 @@ public class VescBleModule: Module {
       // no-op in iOS simulator mock
     }
 
-    // MARK: Session
+    // MARK: Board session
 
-    Function("getSessionState") {
-      [
-        "status": self.sessionStatus,
-        "mode": self.sessionMode,
-        "deviceId": self.sessionDeviceId,
-        "deviceName": self.sessionDeviceName,
-        "canId": nil,
-        "error": nil,
-        "autoReconnect": false,
-        "telemetryRecordingEnabled": false,
-        "recentTelemetry": [] as [Any],
-        "recentLocations": [] as [Any],
-      ] as [String: Any?]
+    Function("getLiveState") {
+      self.liveState()
     }
 
-    AsyncFunction("startSession") { (options: [String: Any], promise: Promise) in
-      let mode = options["mode"] as? String ?? "ble"
-      let deviceId = options["deviceId"] as? String ?? "MOCK-ID"
-      let deviceName = options["deviceName"] as? String ?? "Mock Board"
-
-      self.sessionMode = mode
-      self.sessionDeviceId = deviceId
-      self.sessionDeviceName = deviceName
-      self.sessionStatus = "connecting"
-
-      self.sendEvent("onSessionState", [
-        "status": "connecting",
-        "mode": mode,
-        "deviceId": deviceId,
-        "deviceName": deviceName,
-        "canId": nil,
-        "error": nil,
-      ] as [String: Any?])
-
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        guard let self = self else { return }
-        self.sessionStatus = "connected"
-        self.sendEvent("onSessionState", [
-          "status": "connected",
-          "mode": mode,
-          "deviceId": deviceId,
-          "deviceName": deviceName,
-          "canId": nil,
-          "error": nil,
-        ] as [String: Any?])
-        self.startTelemetryTimer()
-        promise.resolve(nil)
-      }
+    Function("setSelectedBoard") { (boardId: String?) in
+      self.selectedBoardId = boardId
+      var settings = Self.loadSettings()
+      settings["selectedBoardId"] = boardId
+      Self.saveSettings(settings)
     }
 
-    AsyncFunction("startAutoConnect") { (options: [String: Any], promise: Promise) in
-      let deviceId = options["deviceId"] as? String ?? "MOCK-ID"
-      let deviceName = options["deviceName"] as? String ?? "Mock Board"
+    Function("setDebugRecordingEnabled") { (_: Bool) in
+      // Debug raw BLE recording is Android-only.
+    }
 
-      self.sessionMode = "ble"
-      self.sessionDeviceId = deviceId
-      self.sessionDeviceName = deviceName
-      self.sessionStatus = "connecting"
-      self.sendEvent("onSessionState", [
-        "status": "connecting",
-        "mode": "ble",
-        "deviceId": deviceId,
-        "deviceName": deviceName,
-        "canId": nil,
-        "error": nil,
-        "autoReconnect": true,
-      ] as [String: Any?])
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        guard let self = self else { return }
-        self.sessionStatus = "connected"
-        self.sendEvent("onSessionState", [
-          "status": "connected",
-          "mode": "ble",
-          "deviceId": deviceId,
-          "deviceName": deviceName,
-          "canId": nil,
-          "error": nil,
-          "autoReconnect": true,
-        ] as [String: Any?])
-        self.startTelemetryTimer()
-      }
+    AsyncFunction("selectBoard") { (boardId: String, promise: Promise) in
+      self.selectedBoardId = boardId
+      var settings = Self.loadSettings()
+      settings["selectedBoardId"] = boardId
+      Self.saveSettings(settings)
+      let board = self.boards.first { ($0["id"] as? String) == boardId }
+      let deviceId = board?["bleId"] as? String ?? "MOCK-ID"
+      let deviceName = board?["name"] as? String ?? "Mock Board"
+      self.startMockBoard(deviceId: deviceId, deviceName: deviceName)
       promise.resolve(nil)
     }
 
-    AsyncFunction("stopAutoConnect") { (promise: Promise) in
-      DispatchQueue.main.async { [weak self] in
-        self?.stopMockSession()
-      }
+    AsyncFunction("stopBoard") { (promise: Promise) in
+      DispatchQueue.main.async { [weak self] in self?.stopMockSession() }
       promise.resolve(nil)
-    }
-
-    AsyncFunction("stopSession") { (promise: Promise) in
-      DispatchQueue.main.async { [weak self] in
-        self?.stopMockSession()
-      }
-      promise.resolve(nil)
-    }
-
-    // MARK: Recordings (empty stubs)
-
-    AsyncFunction("listRecordings") { (promise: Promise) in
-      promise.resolve([] as [Any])
-    }
-
-    AsyncFunction("deleteRecording") { (_: String, promise: Promise) in
-      promise.resolve(false)
-    }
-
-    AsyncFunction("exportRecording") { (_: String, promise: Promise) in
-      promise.reject("NOT_IMPLEMENTED", "Recording export is not implemented on iOS")
     }
 
     // MARK: Telemetry history (empty stubs)
@@ -373,21 +291,61 @@ public class VescBleModule: Module {
     }
   }
 
+  private func startMockBoard(deviceId: String, deviceName: String) {
+    sessionDeviceId = deviceId
+    sessionDeviceName = deviceName
+    sessionStatus = "connecting"
+    sendEvent("onLiveState", liveState())
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+      guard let self = self else { return }
+      self.sessionStatus = "connected"
+      self.sendEvent("onLiveState", self.liveState())
+      self.startTelemetryTimer()
+    }
+  }
+
   private func stopMockSession() {
     telemetryTimer?.invalidate()
     telemetryTimer = nil
     sessionStatus = "idle"
-    sessionMode = nil
     sessionDeviceId = nil
     sessionDeviceName = nil
-    sendEvent("onSessionState", [
-      "status": "idle",
-      "mode": nil,
-      "deviceId": nil,
-      "deviceName": nil,
-      "canId": nil,
-      "error": nil,
-    ] as [String: Any?])
+    sendEvent("onLiveState", liveState())
+  }
+
+  private func liveState() -> [String: Any?] {
+    let settings = Self.loadSettings()
+    let gpsActive = locationTimer != nil
+    return [
+      "board": [
+        "phase": sessionStatus,
+        "selectedBoardId": selectedBoardId ?? settings["selectedBoardId"],
+        "connectedBoardId": sessionStatus == "idle" ? nil : selectedBoardId,
+        "bleId": sessionDeviceId,
+        "name": sessionDeviceName,
+        "connectionSeq": 0,
+        "lastTelemetryAt": nil,
+        "error": nil,
+        "autoConnect": settings["autoConnect"] as? Bool ?? true,
+      ] as [String: Any?],
+      "gps": [
+        "phase": gpsActive ? "active" : "idle",
+        "latestFix": nil,
+        "recentLocations": [] as [Any],
+        "error": nil,
+      ] as [String: Any?],
+      "scan": [
+        "phase": scanTimer == nil ? "idle" : "scanning",
+        "devices": [] as [Any],
+        "error": nil,
+      ] as [String: Any?],
+      "recording": [
+        "enabled": false,
+        "activeBoardId": nil,
+        "startedAt": nil,
+      ] as [String: Any?],
+    ]
   }
 
   private func emitMockTelemetry() {
@@ -500,6 +458,7 @@ public class VescBleModule: Module {
     "liveHistoryLimit": 5,
     "autoConnect": true,
     "autoRecording": false,
+    "selectedBoardId": NSNull(),
   ]
 
   private static func loadSettings() -> [String: Any] {
