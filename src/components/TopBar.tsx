@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { CaretDownIcon } from 'phosphor-react-native'
 
@@ -51,6 +51,8 @@ export function TopBar({
         </View>
       </Pressable>
 
+      <JsLagProbe />
+
       <BoardMenu items={menuItems} />
 
       <BoardSelectorSheet
@@ -74,6 +76,38 @@ export function TopBar({
         }}
         onToggleRecordDebug={onToggleRecordDebug}
       />
+    </View>
+  )
+}
+
+function JsLagProbe() {
+  const samplesRef = useRef<number[]>([])
+  const [maxLagMs, setMaxLagMs] = useState(0)
+
+  useEffect(() => {
+    let expectedAt = Date.now() + 250
+    const interval = setInterval(() => {
+      const now = Date.now()
+      const lag = Math.max(0, now - expectedAt)
+      expectedAt = now + 250
+
+      const samples = samplesRef.current
+      samples.push(lag)
+      while (samples.length > 20) samples.shift()
+
+      const nextMax = Math.round(Math.max(...samples))
+      setMaxLagMs(nextMax)
+      if (nextMax > 100) console.log('[js-lag]', nextMax)
+    }, 250)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  const color = maxLagMs > 250 ? '#f87171' : maxLagMs > 80 ? '#facc15' : '#4ade80'
+
+  return (
+    <View style={[styles.lagProbe, { borderColor: color }]}>
+      <Text style={[styles.lagText, { color }]}>JS {maxLagMs}ms</Text>
     </View>
   )
 }
@@ -109,5 +143,19 @@ const styles = StyleSheet.create({
     color: '#f1f5f9',
     fontSize: 15,
     fontWeight: '700',
+  },
+  lagProbe: {
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#020617',
+  },
+  lagText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
 })
