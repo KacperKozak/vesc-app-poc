@@ -207,6 +207,12 @@ interface TelemetryDao {
 
   @Query("DELETE FROM alerts WHERE id = :id")
   suspend fun deleteAlertRule(id: String)
+
+  @Query("SELECT * FROM app_settings WHERE id = 1 LIMIT 1")
+  suspend fun getSettings(): AppSettingsEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertSettings(settings: AppSettingsEntity)
 }
 
 private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity): TelemetryMinuteBucketEntity {

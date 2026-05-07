@@ -229,6 +229,12 @@ export interface TelemetrySummary {
   droppedPendingSamples: number
 }
 
+export interface AppSettings {
+  liveHistoryLimit: number
+  autoConnect: boolean
+  autoRecording: boolean
+}
+
 export interface LocationTrackingOptions {
   boardId?: string | null
 }
@@ -297,6 +303,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   upsertAlertRule(rule: AlertRule): Promise<void>
   setAlertRuleEnabled(id: string, enabled: boolean): Promise<void>
   deleteAlertRule(id: string): Promise<void>
+  getSettings(): Promise<AppSettings>
+  updateSetting(key: string, value: number | boolean): Promise<void>
 }
 
 const native = requireNativeModule<VescBleNativeModule>('VescBle')
@@ -439,6 +447,14 @@ export async function setAlertRuleEnabled(id: string, enabled: boolean): Promise
 
 export async function deleteAlertRule(id: string): Promise<void> {
   return native.deleteAlertRule(id)
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  return native.getSettings()
+}
+
+export async function updateSetting(key: string, value: number | boolean): Promise<void> {
+  return native.updateSetting(key, value)
 }
 
 /**

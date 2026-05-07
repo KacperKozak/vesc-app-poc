@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { usePermissions } from '@/ble/usePermissions'
 import { useBleAppLifecycle } from '@/hooks/useBleAppLifecycle'
 import { useBoardConnection } from '@/hooks/useBoardConnection'
@@ -38,13 +39,17 @@ export default function MainScreen() {
   )
   const { status: permStatus, request } = usePermissions()
 
+  const autoRecording = useSettingsStore((s) => s.autoRecording)
+  const loadSettings = useSettingsStore((s) => s.load)
+
   const connection = useBoardConnection()
 
   useBleAppLifecycle()
 
   useEffect(() => {
     void load()
-  }, [load])
+    void loadSettings()
+  }, [load, loadSettings])
 
   useEffect(() => {
     void request()
@@ -64,6 +69,12 @@ export default function MainScreen() {
     startTelemetryRecording,
     telemetryRecordingEnabled,
   ])
+
+  useEffect(() => {
+    if (autoRecording && connection.bleStatus === 'connected' && !telemetryRecordingEnabled) {
+      startTelemetryRecording()
+    }
+  }, [autoRecording, connection.bleStatus, telemetryRecordingEnabled, startTelemetryRecording])
 
   useFocusEffect(
     useCallback(() => {
@@ -96,6 +107,7 @@ export default function MainScreen() {
         replayBoardName={connection.replayBoardName}
         recordings={connection.recordings}
         recordDebugSession={connection.recordDebugSession}
+        inlineItems={connection.inlineItems}
         menuItems={connection.menuItems}
         onSelectBoard={connection.handleSelectBoard}
         onAddBoard={connection.handleAddBoard}
@@ -112,7 +124,7 @@ export default function MainScreen() {
             key="center"
             activeBoard={connection.activeBoard}
             bleStatus={connection.bleStatus}
-            onStopScan={connection.handleStopScan}
+            onStopScan={connection.handleCancel}
             onRetryConnect={connection.handleRetryConnect}
           />
           <MapScreen key="map" />

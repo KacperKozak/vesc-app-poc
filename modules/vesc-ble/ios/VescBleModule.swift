@@ -291,6 +291,17 @@ public class VescBleModule: Module {
       self.saveAppData()
       promise.resolve(nil)
     }
+
+    AsyncFunction("getSettings") { (promise: Promise) in
+      promise.resolve(Self.loadSettings())
+    }
+
+    AsyncFunction("updateSetting") { (key: String, value: Any?, promise: Promise) in
+      var settings = Self.loadSettings()
+      settings[key] = value
+      Self.saveSettings(settings)
+      promise.resolve(nil)
+    }
   }
 
   // MARK: - Scan
@@ -483,5 +494,28 @@ public class VescBleModule: Module {
     let normalized = array.map { item in item.compactMapValues { $0 } }
     guard let data = try? JSONSerialization.data(withJSONObject: normalized) else { return }
     UserDefaults.standard.set(data, forKey: key)
+  }
+
+  private static let defaultSettings: [String: Any] = [
+    "liveHistoryLimit": 5,
+    "autoConnect": true,
+    "autoRecording": false,
+  ]
+
+  private static func loadSettings() -> [String: Any] {
+    guard
+      let data = UserDefaults.standard.data(forKey: "vesc_ble_settings"),
+      let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      return defaultSettings
+    }
+    var merged = defaultSettings
+    for (k, v) in raw { merged[k] = v }
+    return merged
+  }
+
+  private static func saveSettings(_ settings: [String: Any]) {
+    guard let data = try? JSONSerialization.data(withJSONObject: settings) else { return }
+    UserDefaults.standard.set(data, forKey: "vesc_ble_settings")
   }
 }

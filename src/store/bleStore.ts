@@ -270,8 +270,15 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 
   async connect(boardId: string) {
+    const currentStatus = get().status
+    if (
+      currentStatus === 'connecting' ||
+      currentStatus === 'connected' ||
+      currentStatus === 'reconnecting'
+    )
+      return
     get().stopScan()
-    set({ error: undefined })
+    set({ status: 'connecting', sessionMode: 'ble', error: undefined })
 
     installSessionSubscriptions(set, 'ble', boardId)
     stopRequestedSub?.remove()

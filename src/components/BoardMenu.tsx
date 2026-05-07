@@ -28,7 +28,7 @@ export function BoardMenu({ items }: { items: BoardMenuItem[] }) {
             foreground: true,
           }}
         >
-          <item.icon size={18} color={item.destructive ? '#f87171' : '#9ca3af'} weight="regular" />
+          <item.icon size={18} color={item.destructive ? '#f87171' : '#9ca3af'} weight="light" />
         </Pressable>
       ))}
     </View>

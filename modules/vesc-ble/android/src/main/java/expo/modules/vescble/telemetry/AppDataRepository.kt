@@ -43,6 +43,21 @@ class AppDataRepository private constructor(context: Context) {
     dao.deleteAlertRule(id)
   }
 
+  suspend fun getSettings(): Map<String, Any?> = withContext(Dispatchers.IO) {
+    (dao.getSettings() ?: AppSettingsEntity()).toMap()
+  }
+
+  suspend fun updateSetting(key: String, value: Any?): Unit = withContext(Dispatchers.IO) {
+    val current = dao.getSettings() ?: AppSettingsEntity()
+    val updated = when (key) {
+      "liveHistoryLimit" -> current.copy(liveHistoryLimit = (value as? Number)?.toInt() ?: 5)
+      "autoConnect" -> current.copy(autoConnect = value as? Boolean ?: true)
+      "autoRecording" -> current.copy(autoRecording = value as? Boolean ?: false)
+      else -> current
+    }
+    dao.upsertSettings(updated)
+  }
+
   companion object {
     @Volatile
     private var instance: AppDataRepository? = null
@@ -64,6 +79,12 @@ fun BoardEntity.toMap(): Map<String, Any?> = mapOf(
   "createdAt" to createdAt,
   "minVoltage" to minVoltage,
   "maxVoltage" to maxVoltage,
+)
+
+fun AppSettingsEntity.toMap(): Map<String, Any?> = mapOf(
+  "liveHistoryLimit" to liveHistoryLimit,
+  "autoConnect" to autoConnect,
+  "autoRecording" to autoRecording,
 )
 
 fun AlertRuleEntity.toMap(): Map<String, Any?> = mapOf(

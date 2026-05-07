@@ -174,6 +174,12 @@ class VescBleModule : Module() {
       AppDataRepository.get(context.applicationContext).deleteAlertRule(id)
       VescForegroundService.reloadAlertRules(context.applicationContext)
     }
+    AsyncFunction("getSettings") {
+      runBlocking { AppDataRepository.get(context.applicationContext).getSettings() }
+    }
+    AsyncFunction("updateSetting") Coroutine { key: String, value: Any? ->
+      AppDataRepository.get(context.applicationContext).updateSetting(key, value)
+    }
   }
 
   private fun shouldEmitToFrontend(name: String): Boolean = frontendActive && observedEvents.contains(name)

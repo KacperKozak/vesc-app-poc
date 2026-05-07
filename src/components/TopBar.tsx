@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { CaretDownIcon } from 'phosphor-react-native'
+import { CaretDownIcon, GearSixIcon } from 'phosphor-react-native'
+import { router } from 'expo-router'
 
 import { BoardMenu, type BoardMenuItem } from '@/components/BoardMenu'
 import { BoardSelectorSheet } from '@/components/BoardSelectorSheet'
 import { VibeWheelLogo } from '@/components/VibeWheelLogo'
+import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
 import type { RecordingInfo } from '@/store/bleStore'
 
@@ -15,6 +17,7 @@ interface TopBarProps {
   replayBoardName: string | null
   recordings: RecordingInfo[]
   recordDebugSession: boolean
+  inlineItems: BoardMenuItem[]
   menuItems: BoardMenuItem[]
   onSelectBoard: (id: string) => void
   onAddBoard: () => void
@@ -29,6 +32,7 @@ export function TopBar({
   replayBoardName,
   recordings,
   recordDebugSession,
+  inlineItems,
   menuItems,
   onSelectBoard,
   onAddBoard,
@@ -51,9 +55,15 @@ export function TopBar({
         </View>
       </Pressable>
 
+      <BoardMenu items={inlineItems} />
+
       <JsLagProbe />
 
       <BoardMenu items={menuItems} />
+
+      <Pressable style={styles.iconBtn} onPress={() => router.push(routes.settings)}>
+        <GearSixIcon size={20} color="#94a3b8" weight="light" />
+      </Pressable>
 
       <BoardSelectorSheet
         visible={selectorOpen}
@@ -97,7 +107,6 @@ function JsLagProbe() {
 
       const nextMax = Math.round(Math.max(...samples))
       setMaxLagMs(nextMax)
-      if (nextMax > 100) console.log('[js-lag]', nextMax)
     }, 250)
 
     return () => clearInterval(interval)
@@ -143,6 +152,9 @@ const styles = StyleSheet.create({
     color: '#f1f5f9',
     fontSize: 15,
     fontWeight: '700',
+  },
+  iconBtn: {
+    padding: 6,
   },
   lagProbe: {
     minWidth: 64,

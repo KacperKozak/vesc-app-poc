@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
-import { usePermissions } from '@/ble/usePermissions'
+import { useSettingsStore } from '@/store/settingsStore'
 import { routes } from '@/navigation/routes'
 import type { BoardMenuItem } from '@/components/BoardMenu'
 import type { RecordingInfo } from '@/store/bleStore'
@@ -51,7 +51,7 @@ export function useBoardConnection() {
       setRecordDebugSession: s.setRecordDebugSession,
     })),
   )
-  const { status: permStatus } = usePermissions()
+  const settingsAutoConnect = useSettingsStore((s) => s.autoConnect)
   const [autoConnectEnabled, setAutoConnectEnabled] = useState(true)
   const selectedBoardIntent = useRef<string | null>(null)
 
@@ -66,21 +66,23 @@ export function useBoardConnection() {
 
   // JS sends board id intent; native reads BLE pairing/name and owns state.
   useEffect(() => {
-    if (!autoConnectEnabled) return
+    if (!autoConnectEnabled || !settingsAutoConnect) return
     if (!nativeStateReady) return
-    if (permStatus !== 'granted') return
     if (!activeBoardId) return
     if (bleStatus !== 'idle' && bleStatus !== 'error') return
     if (selectedBoardIntent.current === activeBoardId) return
     selectedBoardIntent.current = activeBoardId
     void connect(activeBoardId)
-  }, [autoConnectEnabled, nativeStateReady, permStatus, activeBoardId, bleStatus, connect])
+  }, [autoConnectEnabled, settingsAutoConnect, nativeStateReady, activeBoardId, bleStatus, connect])
 
   useEffect(() => {
     void loadRecordings()
   }, [loadRecordings])
 
-  const menuItems = useMemo<BoardMenuItem[]>(() => {
+  const isSessionActive =
+    bleStatus === 'connected' || bleStatus === 'stale' || bleStatus === 'reconnecting'
+
+  const inlineItems = useMemo<BoardMenuItem[]>(() => {
     const items: BoardMenuItem[] = []
     if (activeBoard && !activeReplay) {
       items.push({
@@ -90,19 +92,7 @@ export function useBoardConnection() {
           router.push({ pathname: routes.addBoardDetails, params: { boardId: activeBoard.id } }),
       })
     }
-    if (activeBoard && !activeBoard.isStarred && !activeReplay) {
-      items.push({
-        label: 'Make main',
-        icon: StarIcon,
-        onPress: () => void starBoard(activeBoard.id),
-      })
-    }
-    if (
-      bleStatus === 'connected' ||
-      bleStatus === 'stale' ||
-      bleStatus === 'connecting' ||
-      bleStatus === 'reconnecting'
-    ) {
+    if (isSessionActive) {
       items.push({
         label: activeReplay ? 'Stop' : 'Disconnect',
         icon: PowerIcon,
@@ -112,31 +102,43 @@ export function useBoardConnection() {
           void disconnect()
         },
       })
-      if (activeReplay) {
-        items.push({
-          label: 'Remove recording',
-          icon: TrashIcon,
-          destructive: true,
-          onPress: () =>
-            Alert.alert(
-              'Remove Recording',
-              `Remove "${activeReplay.fileName}"? This cannot be undone.`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Remove',
-                  style: 'destructive',
-                  onPress: () => {
-                    void disconnect().then(() => deleteRecording(activeReplay))
-                  },
-                },
-              ],
-            ),
-        })
-      }
     }
     return items
-  }, [activeBoard, activeReplay, bleStatus, deleteRecording, disconnect, starBoard])
+  }, [activeBoard, activeReplay, isSessionActive, disconnect])
+
+  const menuItems = useMemo<BoardMenuItem[]>(() => {
+    const items: BoardMenuItem[] = []
+    if (activeBoard && !activeBoard.isStarred && !activeReplay) {
+      items.push({
+        label: 'Make main',
+        icon: StarIcon,
+        onPress: () => void starBoard(activeBoard.id),
+      })
+    }
+    if (isSessionActive && activeReplay) {
+      items.push({
+        label: 'Remove recording',
+        icon: TrashIcon,
+        destructive: true,
+        onPress: () =>
+          Alert.alert(
+            'Remove Recording',
+            `Remove "${activeReplay.fileName}"? This cannot be undone.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () => {
+                  void disconnect().then(() => deleteRecording(activeReplay))
+                },
+              },
+            ],
+          ),
+      })
+    }
+    return items
+  }, [activeBoard, activeReplay, isSessionActive, deleteRecording, disconnect, starBoard])
 
   const handleSelectBoard = useCallback(
     (id: string) => {
@@ -159,15 +161,21 @@ export function useBoardConnection() {
     [replayRecording],
   )
 
-  const handleStopScan = useCallback(() => {
+  const handleCancel = useCallback(() => {
     setAutoConnectEnabled(false)
-    stopScan()
-  }, [stopScan])
+    selectedBoardIntent.current = null
+    const { status } = useBleStore.getState()
+    if (status === 'connecting' || status === 'reconnecting') {
+      void disconnect()
+    } else {
+      stopScan()
+    }
+  }, [stopScan, disconnect])
 
   const handleRetryConnect = useCallback(() => {
     if (!activeBoardId) return
     setAutoConnectEnabled(true)
-    selectedBoardIntent.current = null
+    selectedBoardIntent.current = activeBoardId
     void connect(activeBoardId)
   }, [activeBoardId, connect])
 
@@ -179,11 +187,12 @@ export function useBoardConnection() {
     bleStatus,
     recordings,
     recordDebugSession,
+    inlineItems,
     menuItems,
     handleSelectBoard,
     handleAddBoard,
     handleReplay,
-    handleStopScan,
+    handleCancel,
     handleRetryConnect,
     setRecordDebugSession,
   }
