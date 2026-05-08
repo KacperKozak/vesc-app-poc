@@ -11,6 +11,7 @@ import {
   type TelemetrySummary,
 } from 'vesc-ble'
 import { groupHistorySessions, type HistorySession } from '@/history/sessions'
+import { useSettingsStore } from '@/store/settingsStore'
 
 interface HistoryState {
   blocks: TelemetryHistoryBlock[]
@@ -82,7 +83,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         summary,
         blocks,
         sessions: groupHistorySessions(blocks),
-        liveBlocks: blocks.slice(0, 10),
+        liveBlocks: blocks.slice(0, useSettingsStore.getState().liveHistoryLimit),
         selectedBlock: null,
         selectedSession: null,
         samples: [],
@@ -107,10 +108,11 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
     const version = ++liveRefreshVersion
     try {
       const now = Date.now()
+      const limit = useSettingsStore.getState().liveHistoryLimit
       const fromMs = now - 10 * 60_000
       const [summary, liveBlocks, range] = await Promise.all([
         getTelemetrySummary(),
-        getTelemetryHistory({ fromMs, toMs: now, limit: 10 }),
+        getTelemetryHistory({ fromMs, toMs: now, limit }),
         getHistoryRange({ fromMs, toMs: now, limit: 120 }),
       ])
       if (version !== liveRefreshVersion) return

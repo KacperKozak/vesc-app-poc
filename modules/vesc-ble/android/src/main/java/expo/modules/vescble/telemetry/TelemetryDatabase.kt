@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
@@ -14,8 +15,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     TelemetryMarkerEntity::class,
     BoardEntity::class,
     AlertRuleEntity::class,
+    AppSettingsEntity::class,
   ],
-  version = 3,
+  version = 5,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -25,6 +27,27 @@ abstract class TelemetryDatabase : RoomDatabase() {
     @Volatile
     private var instance: TelemetryDatabase? = null
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS app_settings (
+            id INTEGER NOT NULL DEFAULT 1 PRIMARY KEY,
+            live_history_limit INTEGER NOT NULL DEFAULT 5,
+            auto_connect INTEGER NOT NULL DEFAULT 1,
+            auto_recording INTEGER NOT NULL DEFAULT 0
+          )
+          """.trimIndent(),
+        )
+      }
+    }
+
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE app_settings ADD COLUMN selected_board_id TEXT")
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -32,6 +55,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
           TelemetryDatabase::class.java,
           "telemetry.db",
         )
+          .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

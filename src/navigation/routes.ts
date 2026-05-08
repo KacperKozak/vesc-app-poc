@@ -1,5 +1,6 @@
 export const routes = {
   home: '/',
+  settings: '/settings',
   addBoardScan: '/addBoard/scan',
   addBoardDetails: '/addBoard/details',
   controlSpeed: '/control/speed',
@@ -16,6 +17,7 @@ export const routes = {
 
 export const stackScreens = {
   home: 'index',
+  settings: 'settings',
   addBoardScan: 'addBoard/scan',
   addBoardDetails: 'addBoard/details',
 } as const

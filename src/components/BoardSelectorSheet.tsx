@@ -1,30 +1,25 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  CaretRightIcon,
   CheckCircleIcon,
   LightningIcon,
   PlusIcon,
   StarIcon,
-  VideoCameraIcon,
   RadioButtonIcon,
   RecordIcon,
 } from 'phosphor-react-native'
 
 import type { Board } from '@/store/boardStore'
-import type { RecordingInfo } from '@/store/bleStore'
 import { theme } from '@/constants/theme'
 
 interface BoardSelectorSheetProps {
   visible: boolean
   boards: Board[]
   activeBoardId: string | null
-  recordings: RecordingInfo[]
   recordDebugSession: boolean
   onClose: () => void
   onSelectBoard: (id: string) => void
   onAddBoard: () => void
-  onReplay: (recording: RecordingInfo) => void
   onToggleRecordDebug: () => void
 }
 
@@ -32,12 +27,10 @@ export function BoardSelectorSheet({
   visible,
   boards,
   activeBoardId,
-  recordings,
   recordDebugSession,
   onClose,
   onSelectBoard,
   onAddBoard,
-  onReplay,
   onToggleRecordDebug,
 }: BoardSelectorSheetProps) {
   const insets = useSafeAreaInsets()
@@ -87,29 +80,6 @@ export function BoardSelectorSheet({
             </View>
             <Text style={styles.addText}>Add new board</Text>
           </Pressable>
-
-          {recordings.length > 0 && (
-            <>
-              <View style={styles.divider} />
-              <Text style={styles.sectionTitle}>Recordings</Text>
-              {recordings.map((r) => (
-                <Pressable key={r.path} style={styles.recordingRow} onPress={() => onReplay(r)}>
-                  <View style={styles.recordingIcon}>
-                    <VideoCameraIcon size={14} color="#a78bfa" weight="fill" />
-                  </View>
-                  <View style={styles.recordingInfo}>
-                    <Text style={styles.recordingName} numberOfLines={1}>
-                      {r.deviceName}
-                    </Text>
-                    <Text style={styles.recordingMeta}>
-                      {new Date(r.startedAt).toLocaleString()} · {Math.ceil(r.sizeBytes / 1024)} KB
-                    </Text>
-                  </View>
-                  <CaretRightIcon size={16} color="#4b5563" weight="bold" />
-                </Pressable>
-              ))}
-            </>
-          )}
 
           <View style={styles.divider} />
           <Pressable style={styles.debugRow} onPress={onToggleRecordDebug}>

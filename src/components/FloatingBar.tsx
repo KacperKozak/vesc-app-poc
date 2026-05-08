@@ -39,19 +39,49 @@ type ActionPill = {
 }
 type StatusPill = SpinnerPill | ActionPill
 
+function canToggleRecording(status: string): boolean {
+  return (
+    status === 'connected' ||
+    status === 'stale' ||
+    status === 'reconnecting' ||
+    status === 'waiting_for_telemetry'
+  )
+}
+
 function getStatusPill(
   status: string,
+  scanStatus: string,
   board: Board | undefined,
   onStopScan: () => void,
   onRetryConnect: () => void,
 ): StatusPill | null {
   if (!board?.bleId) return null
-  if (status === 'scanning')
+  if (scanStatus === 'scanning' && status === 'idle')
     return { kind: 'spinner', text: 'Searching…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'discovering')
+    return { kind: 'spinner', text: 'Discovering…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'subscribing')
+    return { kind: 'spinner', text: 'Subscribing…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'waiting_for_telemetry')
+    return {
+      kind: 'spinner',
+      text: 'Waiting for telemetry…',
+      color: '#3b82f6',
+      onPress: onStopScan,
+    }
   if (status === 'reconnecting')
     return { kind: 'spinner', text: 'Reconnecting…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'disconnecting')
+    return { kind: 'spinner', text: 'Disconnecting…', color: '#3b82f6', onPress: onStopScan }
   if (status === 'connecting')
     return { kind: 'spinner', text: 'Connecting…', color: '#3b82f6', onPress: onStopScan }
+  if (status === 'stale')
+    return {
+      kind: 'spinner',
+      text: 'Telemetry stale',
+      color: theme.error.color,
+      onPress: onStopScan,
+    }
   if (status === 'idle')
     return {
       kind: 'action',
@@ -77,9 +107,10 @@ export function FloatingBar({
   onStopScan,
   onRetryConnect,
 }: FloatingBarProps) {
-  const { recording, start, stop } = useBleStore(
+  const { recording, scanStatus, start, stop } = useBleStore(
     useShallow((s) => ({
       recording: s.telemetryRecordingEnabled,
+      scanStatus: s.scanStatus,
       start: s.startTelemetryRecording,
       stop: s.stopTelemetryRecording,
     })),
@@ -91,9 +122,9 @@ export function FloatingBar({
     } else {
       start()
     }
-  }, [recording, start, stop])
+  }, [bleStatus, recording, start, stop])
 
-  const pill = getStatusPill(bleStatus, activeBoard, onStopScan, onRetryConnect)
+  const pill = getStatusPill(bleStatus, scanStatus, activeBoard, onStopScan, onRetryConnect)
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
@@ -125,7 +156,14 @@ export function FloatingBar({
         </Pressable>
       )}
 
-      <Pressable style={[styles.fab, recording && styles.fabActive]} onPress={toggleRecord}>
+      <Pressable
+        style={[
+          styles.fab,
+          recording && styles.fabActive,
+          !canToggleRecording(bleStatus) && !recording && styles.fabDisabled,
+        ]}
+        onPress={toggleRecord}
+      >
         {recording ? (
           <StopCircleIcon size={22} color="#052e16" weight="fill" />
         ) : (
@@ -200,6 +238,9 @@ const styles = StyleSheet.create({
   fabActive: {
     backgroundColor: theme.gps.color,
     borderColor: theme.gps.border,
+  },
+  fabDisabled: {
+    opacity: 0.45,
   },
   fabLabel: {
     color: '#f1f5f9',

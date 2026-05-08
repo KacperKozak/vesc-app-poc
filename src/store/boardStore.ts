@@ -1,5 +1,12 @@
 import { create } from 'zustand'
-import { deleteBoard as nativeDeleteBoard, getBoards, type Board, upsertBoard } from 'vesc-ble'
+import {
+  deleteBoard as nativeDeleteBoard,
+  getBoards,
+  getSettings,
+  setSelectedBoard as nativeSetSelectedBoard,
+  type Board,
+  upsertBoard,
+} from 'vesc-ble'
 
 export type { Board } from 'vesc-ble'
 
@@ -42,16 +49,24 @@ export const useBoardStore = create<BoardState & BoardActions>((set, get) => ({
 
   async load() {
     const boards = await getBoards()
+    const settings = await getSettings()
     const { activeBoardId, hasLoaded } = get()
     const activeBoardExists = boards.some((b) => b.id === activeBoardId)
+    const selectedBoardExists = boards.some((b) => b.id === settings.selectedBoardId)
+    const nextActiveBoardId =
+      hasLoaded && activeBoardExists
+        ? activeBoardId
+        : selectedBoardExists
+          ? settings.selectedBoardId
+          : (boards.find((b) => b.isStarred)?.id ?? boards[0]?.id ?? null)
     set({
       boards,
       hasLoaded: true,
-      activeBoardId:
-        hasLoaded && activeBoardExists
-          ? activeBoardId
-          : (boards.find((b) => b.isStarred)?.id ?? boards[0]?.id ?? null),
+      activeBoardId: nextActiveBoardId,
     })
+    if (nextActiveBoardId !== settings.selectedBoardId) {
+      nativeSetSelectedBoard(nextActiveBoardId)
+    }
   },
 
   addBoard({ name, description, bleId, minVoltage, maxVoltage }) {
@@ -95,6 +110,7 @@ export const useBoardStore = create<BoardState & BoardActions>((set, get) => ({
 
   setActiveBoard(id) {
     set({ activeBoardId: id })
+    nativeSetSelectedBoard(id)
   },
 
   async starBoard(id) {

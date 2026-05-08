@@ -258,3 +258,17 @@ data class AlertRuleEntity(
   @ColumnInfo(name = "created_at")
   val createdAt: Long,
 )
+
+@Entity(tableName = "app_settings")
+data class AppSettingsEntity(
+  @PrimaryKey
+  val id: Int = 1,
+  @ColumnInfo(name = "live_history_limit")
+  val liveHistoryLimit: Int = 5,
+  @ColumnInfo(name = "auto_connect")
+  val autoConnect: Boolean = true,
+  @ColumnInfo(name = "auto_recording")
+  val autoRecording: Boolean = false,
+  @ColumnInfo(name = "selected_board_id")
+  val selectedBoardId: String? = null,
+)

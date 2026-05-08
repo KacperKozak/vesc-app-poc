@@ -33,10 +33,10 @@ Service: `6e400001-b5a3-f393-e0a9-e50e24dcca9e` (Nordic UART)
 ```
 modules/vesc-ble/          custom Expo native module (Android)
 modules/vesc-ble/android/.../VescBleModule.kt
-                           Expo module bridge — scan and session API
+                           Expo module bridge — scan and live-state API
 modules/vesc-ble/android/.../VescForegroundService.kt
-                           native BLE/replay session owner
-src/store/bleStore.ts      Zustand store — mirrors native session events
+                           native board BLE + GPS runtime owner
+src/store/bleStore.ts      Zustand store — mirrors native live state
 src/vesc/commands.ts       COMM_* enum + request builders
 src/vesc/packet.ts         VESC packet framing (encode/decode)
 src/vesc/reassembler.ts    reassemble multi-chunk BLE→VESC packets

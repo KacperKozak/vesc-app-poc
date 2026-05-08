@@ -184,6 +184,9 @@ interface TelemetryDao {
   @Query("SELECT * FROM boards ORDER BY is_starred DESC, created_at ASC")
   suspend fun getBoards(): List<BoardEntity>
 
+  @Query("SELECT * FROM boards WHERE id = :id LIMIT 1")
+  suspend fun getBoard(id: String): BoardEntity?
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertBoard(board: BoardEntity)
 
@@ -204,6 +207,12 @@ interface TelemetryDao {
 
   @Query("DELETE FROM alerts WHERE id = :id")
   suspend fun deleteAlertRule(id: String)
+
+  @Query("SELECT * FROM app_settings WHERE id = 1 LIMIT 1")
+  suspend fun getSettings(): AppSettingsEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertSettings(settings: AppSettingsEntity)
 }
 
 private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity): TelemetryMinuteBucketEntity {

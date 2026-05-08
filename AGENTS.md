@@ -13,6 +13,16 @@ Always use **bun** for all package management and script execution:
 
 Do **not** use `npm`, `yarn`, `npx`, or `pnpm`.
 
+## Architecture Discipline
+
+This is a PoC, but keep it sharp:
+
+- Native owns durable truth and long-lived work; JS renders state and sends intents.
+- Design for lifecycle breaks: reloads, backgrounding, process death, and restart.
+- Prefer clear architecture over compatibility, shortcuts, or hidden assumptions.
+- Make one focused stability change at a time when isolating bugs.
+- Remove unused code when replacing a path; do not keep dead code for later.
+
 ## Icons
 
 Use **`phosphor-react-native`** for all icons. Do **not** use emoji or unicode characters as icon substitutes.
@@ -25,6 +35,4 @@ import { LightningIcon, WarningCircleIcon } from 'phosphor-react-native'
 
 - Always use the **`Icon`-suffixed** export (e.g. `LightningIcon`, not `Lightning`). The un-suffixed names are deprecated and will produce warnings.
 - The `type Icon` export (for typing icon props) is **not** suffixed — import it as `type Icon` as-is.
-- `weight="fill"` is the standard style used throughout the app
 - `size` is typically `10`–`16` for inline/label icons, larger for standalone UI elements
-- Browse available icons at https://phosphoricons.com (filter by React Native support)

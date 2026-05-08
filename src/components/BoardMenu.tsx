@@ -1,6 +1,5 @@
-import { useRef, useState } from 'react'
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
-import { DotsThreeVerticalIcon, type Icon } from 'phosphor-react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
+import { type Icon } from 'phosphor-react-native'
 
 export interface BoardMenuItem {
   label: string
@@ -10,95 +9,47 @@ export interface BoardMenuItem {
   separator?: boolean
 }
 
-function DropdownMenu({
-  items,
-  anchor,
-  onClose,
-}: {
-  items: BoardMenuItem[]
-  anchor: { top: number; right: number }
-  onClose: () => void
-}) {
-  return (
-    <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-      <View style={[dropStyles.menu, { top: anchor.top, right: anchor.right }]}>
-        {items.map((item, i) => (
-          <View key={item.label}>
-            {item.separator && i > 0 && <View style={dropStyles.separator} />}
-            <Pressable
-              style={dropStyles.item}
-              onPress={() => {
-                onClose()
-                item.onPress()
-              }}
-            >
-              <item.icon
-                size={18}
-                color={item.destructive ? '#f87171' : '#9ca3af'}
-                weight="regular"
-              />
-              <Text style={[dropStyles.label, item.destructive && dropStyles.destructive]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-      </View>
-    </Modal>
-  )
-}
-
 export function BoardMenu({ items }: { items: BoardMenuItem[] }) {
-  const menuButtonRef = useRef<View>(null)
-  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null)
-
   if (items.length === 0) return null
 
-  const openMenu = () => {
-    menuButtonRef.current?.measure((_x, _y, _w, h, _px, pageY) => {
-      setAnchor({ top: pageY + h + 4, right: 12 })
-    })
-  }
-
   return (
-    <>
-      <View ref={menuButtonRef} collapsable={false}>
-        <Pressable style={styles.menuButton} onPress={openMenu}>
-          <DotsThreeVerticalIcon size={22} color="#9ca3af" weight="bold" />
+    <View style={styles.container}>
+      {items.map((item, i) => (
+        <Pressable
+          key={`${item.label}-${i}`}
+          style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={item.label}
+          onPress={item.onPress}
+          hitSlop={6}
+          android_ripple={{
+            color: 'rgba(148, 163, 184, 0.24)',
+            borderless: false,
+            foreground: true,
+          }}
+        >
+          <item.icon size={18} color={item.destructive ? '#f87171' : '#9ca3af'} weight="light" />
         </Pressable>
-      </View>
-
-      {anchor && <DropdownMenu items={items} anchor={anchor} onClose={() => setAnchor(null)} />}
-    </>
+      ))}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  menuButton: { paddingHorizontal: 8, paddingVertical: 4 },
-})
-
-const dropStyles = StyleSheet.create({
-  menu: {
-    position: 'absolute',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
-    overflow: 'hidden',
-  },
-  item: {
+  container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    gap: 12,
+    gap: 2,
   },
-  label: { color: '#f1f5f9', fontSize: 15 },
-  destructive: { color: '#f87171' },
-  separator: { height: 1, backgroundColor: '#334155', marginHorizontal: 0 },
+  iconButton: {
+    minWidth: 40,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  iconButtonPressed: {
+    opacity: 0.75,
+  },
 })
