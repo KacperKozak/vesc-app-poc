@@ -15,7 +15,6 @@ import {
   addLiveStateListener,
   addTelemetryListener,
   addLocationListener,
-  addStopRequestedListener,
   type BoardPhase,
   type GpsPhase,
   type ScanStatus,
@@ -61,7 +60,7 @@ interface BleActions {
   setSelectedBoard: (boardId: string | null) => void
   startTelemetryRecording: () => void
   stopTelemetryRecording: () => void
-  startGpsTracking: (context?: { boardId?: string | null }) => void
+  startGpsTracking: () => void
 }
 
 type BleStore = BleState & BleActions
@@ -73,7 +72,6 @@ let liveSub: EventSubscription | null = null
 let telemetrySub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 let scanErrorSub: EventSubscription | null = null
-let stopRequestedSub: EventSubscription | null = null
 
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
 const MIN_LIVE_HISTORY_MINUTES = 1
@@ -147,11 +145,6 @@ function installLiveSubscriptions(set: BleSet): void {
         ? appendByTimestamp(current.recentLocations, telemetry.location, locationKey)
         : current.recentLocations
       set({ recentTelemetry, recentLocations })
-    })
-  }
-  if (!stopRequestedSub) {
-    stopRequestedSub = addStopRequestedListener(() => {
-      useBleStore.getState().syncNativeState()
     })
   }
 }
@@ -283,10 +276,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     get().syncNativeState()
   },
 
-  startGpsTracking(context) {
-    nativeStartLocationUpdates({
-      boardId: context?.boardId ?? null,
-    })
+  startGpsTracking() {
+    nativeStartLocationUpdates()
     get().syncNativeState()
   },
 }))

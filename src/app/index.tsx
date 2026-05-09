@@ -53,9 +53,9 @@ export default function MainScreen() {
 
   useEffect(() => {
     if (permStatus === 'granted') {
-      startGpsTracking({ boardId: activeBoardId })
+      startGpsTracking()
     }
-  }, [activeBoardId, permStatus, startGpsTracking])
+  }, [permStatus, startGpsTracking])
 
   useEffect(() => {
     if (!autoConnect || permStatus !== 'granted') return
