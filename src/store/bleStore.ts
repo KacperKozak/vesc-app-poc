@@ -109,6 +109,9 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
     connectedId: state.board.connectedBoardId ?? state.board.bleId,
     error: state.board.error ?? state.gps.error ?? state.scan.error ?? undefined,
     telemetryRecordingEnabled: state.recording.enabled,
+    recentTelemetry: state.board.recentTelemetry.length
+      ? state.board.recentTelemetry
+      : current.recentTelemetry,
     recentLocations: state.gps.recentLocations.length
       ? state.gps.recentLocations
       : current.recentLocations,

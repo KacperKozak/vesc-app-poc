@@ -287,6 +287,7 @@ class VescForegroundService : Service() {
                     "name" to null,
                     "connectionSeq" to 0L,
                     "lastTelemetryAt" to null,
+                    "recentTelemetry" to emptyList<Map<String, Any?>>(),
                     "error" to null,
                     "autoConnect" to settings.autoConnect,
                 ),
@@ -1169,6 +1170,7 @@ class VescForegroundService : Service() {
             lastTelemetryAt > 0L &&
             now - lastTelemetryAt >= TELEMETRY_STALE_MS
         ) "stale" else boardStatus
+        val recentTelemetryValue = if (includeRecent) recentTelemetry.toList() else emptyList()
         val recentLocationsValue = if (includeRecent) recentLocations.toList() else emptyList()
 
         return mapOf(
@@ -1180,6 +1182,7 @@ class VescForegroundService : Service() {
                 "name" to boardConfig?.deviceName,
                 "connectionSeq" to generation,
                 "lastTelemetryAt" to telemetry?.lastPacketAt,
+                "recentTelemetry" to recentTelemetryValue,
                 "error" to boardError,
                 "autoConnect" to settings.autoConnect,
             ),
