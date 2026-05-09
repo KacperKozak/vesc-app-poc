@@ -44,7 +44,7 @@ export default function ImuScreen() {
   const currentBalance = selectedBalance ?? balancePoints.at(-1) ?? null
 
   return (
-    <ControlDetailLayout title="IMU" controlId="imu" unit="°">
+    <ControlDetailLayout title="IMU">
       <View style={styles.liveRow}>
         <View style={styles.liveCell}>
           <Text style={styles.liveLabel}>PITCH</Text>
@@ -70,6 +70,7 @@ export default function ImuScreen() {
         height={80}
         onPointSelected={setSelectedPitch}
         onGestureStart={() => setSelectedPitch(null)}
+        formatValue={(v) => `${fmt(v, 1)}°`}
       />
 
       <TelemetryLineChart
@@ -82,6 +83,7 @@ export default function ImuScreen() {
         height={80}
         onPointSelected={setSelectedRoll}
         onGestureStart={() => setSelectedRoll(null)}
+        formatValue={(v) => `${fmt(v, 1)}°`}
       />
 
       <TelemetryLineChart
@@ -94,6 +96,7 @@ export default function ImuScreen() {
         height={80}
         onPointSelected={setSelectedBalance}
         onGestureStart={() => setSelectedBalance(null)}
+        formatValue={(v) => `${fmt(v, 1)}°`}
       />
     </ControlDetailLayout>
   )

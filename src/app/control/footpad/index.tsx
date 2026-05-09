@@ -45,7 +45,7 @@ export default function FootpadScreen() {
   const current2 = selected2 ?? adc2Points.at(-1) ?? null
 
   return (
-    <ControlDetailLayout title="Footpad" controlId="footpad">
+    <ControlDetailLayout title="Footpad">
       <TelemetryLineChart
         label="ADC 1"
         value={current1 ? fmt(current1.value, 3) : DASH}
@@ -56,6 +56,7 @@ export default function FootpadScreen() {
         height={80}
         onPointSelected={setSelected1}
         onGestureStart={() => setSelected1(null)}
+        formatValue={(v) => fmt(v, 3)}
       />
       <StatsRow
         current={adc1Stats ? fmt(adc1Stats.current, 3) : DASH}
@@ -74,6 +75,7 @@ export default function FootpadScreen() {
         height={80}
         onPointSelected={setSelected2}
         onGestureStart={() => setSelected2(null)}
+        formatValue={(v) => fmt(v, 3)}
       />
       <StatsRow
         current={adc2Stats ? fmt(adc2Stats.current, 3) : DASH}

@@ -47,6 +47,7 @@ export default function BattCurrentScreen() {
         height={120}
         onPointSelected={setSelected}
         onGestureStart={() => setSelected(null)}
+        formatValue={(v) => `${fmt(v, 1)} A`}
       />
       <StatsRow
         current={stats ? `${fmt(stats.current, 1)} A` : DASH}

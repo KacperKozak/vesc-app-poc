@@ -52,6 +52,7 @@ export default function MotorTempScreen() {
         height={120}
         onPointSelected={setSelected}
         onGestureStart={() => setSelected(null)}
+        formatValue={(v) => `${fmt(v, 1)} °C`}
       />
       <StatsRow
         current={stats ? `${fmt(stats.current, 1)} °C` : DASH}
