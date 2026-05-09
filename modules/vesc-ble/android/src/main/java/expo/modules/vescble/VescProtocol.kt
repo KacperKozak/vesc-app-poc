@@ -2,6 +2,7 @@ package expo.modules.vescble
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.abs
 import kotlin.math.pow
 
 internal const val COMM_FW_VERSION = 0
@@ -123,6 +124,8 @@ internal fun parseRefloatGetAllData(
     val speed = (int16(payload, 27) / 10.0) * 3.6
     val state = payload[10].toInt() and 0xff
     val odometer = if (mode >= 2 && payload.size >= 42) float32Auto(payload, 35) else null
+    val dutyRaw = (payload[33].toInt() and 0xff) - 128
+    val dutyCycle = if (abs(dutyRaw) <= 1) 0.0 else dutyRaw / 100.0
     return RefloatTelemetry(
         hasFault = false,
         faultCode = 0,
@@ -135,7 +138,7 @@ internal fun parseRefloatGetAllData(
         motorCurrent = int16(payload, 29) / 10.0,
         batteryCurrent = int16(payload, 31) / 10.0,
         erpm = int16(payload, 25),
-        dutyCycle = ((payload[33].toInt() and 0xff) - 128) / 100.0,
+        dutyCycle = dutyCycle,
         state = state,
         switchState = payload[11].toInt() and 0xff,
         adc1 = (payload[12].toInt() and 0xff) / 50.0,

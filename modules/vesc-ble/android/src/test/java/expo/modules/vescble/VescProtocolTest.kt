@@ -65,6 +65,24 @@ class VescProtocolTest {
   }
 
   @Test
+  fun clampsIdleDutyQuantization() {
+    val payload = ByteArray(42)
+    payload[0] = COMM_CUSTOM_APP_DATA.toByte()
+    payload[1] = REFLOAT_MAGIC.toByte()
+    payload[2] = REFLOAT_GET_ALLDATA.toByte()
+    payload[3] = 2
+
+    payload[33] = 129.toByte()
+    assertEquals(0.0, parseRefloatGetAllData(payload, null, 1L, null)!!.dutyCycle, 0.001)
+
+    payload[33] = 127.toByte()
+    assertEquals(0.0, parseRefloatGetAllData(payload, null, 1L, null)!!.dutyCycle, 0.001)
+
+    payload[33] = 130.toByte()
+    assertEquals(0.02, parseRefloatGetAllData(payload, null, 1L, null)!!.dutyCycle, 0.001)
+  }
+
+  @Test
   fun parsesFaultPayload() {
     val payload = byteArrayOf(
       COMM_CUSTOM_APP_DATA.toByte(),
