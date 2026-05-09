@@ -73,7 +73,9 @@ private const val REFLOAT_MAGIC = 101
 private const val REFLOAT_GET_ALLDATA = 10
 private const val REFLOAT_FAULT_MODE = 69
 private const val MAX_RECORDING_ACCURACY_M = 20.0
-private const val RECENT_WINDOW_MS = 10 * 60 * 1000L
+private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
+private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
+private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
 private const val TELEMETRY_STALE_MS = 2_500L
 private const val BOARD_READY_TIMEOUT_MS = 4_000L
 
@@ -180,6 +182,7 @@ class VescForegroundService : Service() {
         private var pendingGpsStart: PendingGpsStart? = null
         private var requestedGpsMonitoring: PendingGpsStart? = null
         private var requestedTelemetryRecordingEnabled = false
+        private var requestedLiveHistoryLimitMinutes = DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
         private val appDataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         fun startBoardSession(
@@ -234,6 +237,13 @@ class VescForegroundService : Service() {
             requestedTelemetryRecordingEnabled = enabled
             instance?.setTelemetryRecordingEnabled(enabled)
             if (!enabled) TelemetryRepository.get(context.applicationContext).flushBlocking()
+        }
+
+        fun setLiveHistoryLimit(limit: Number?) {
+            val minutes = (limit?.toInt() ?: DEFAULT_LIVE_HISTORY_LIMIT_MINUTES)
+                .coerceIn(MIN_LIVE_HISTORY_LIMIT_MINUTES, MAX_LIVE_HISTORY_LIMIT_MINUTES)
+            requestedLiveHistoryLimitMinutes = minutes
+            instance?.setLiveHistoryLimitMinutes(minutes)
         }
 
         @Volatile private var alertRules: List<AlertRuleEntity> = emptyList()
@@ -355,6 +365,7 @@ class VescForegroundService : Service() {
     private var reconnectScanCallback: ScanCallback? = null
     private var autoReconnectAttempt = 0
     private var generation = 0L
+    private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val alertLastFiredAt = HashMap<String, Long>()
@@ -466,6 +477,7 @@ class VescForegroundService : Service() {
     private fun beginSession(start: PendingStart) {
         isStoppingService = false
         stopCurrentBoardSession(emitDisconnected = false, updateNotification = false)
+        refreshLiveHistoryLimit()
         VescForegroundService.reloadAlertRules(applicationContext)
         boardConfig = start.boardConfig
         generation += 1
@@ -1164,6 +1176,7 @@ class VescForegroundService : Service() {
         val settings = kotlinx.coroutines.runBlocking {
             AppDataRepository.get(applicationContext).getSettingsEntity()
         }
+        setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
         val now = System.currentTimeMillis()
         val phase = if (
             boardStatus == "connected" &&
@@ -1345,7 +1358,7 @@ class VescForegroundService : Service() {
     }
 
     private fun pruneRecent(points: ArrayDeque<Map<String, Any?>>, nowMs: Long) {
-        val oldest = nowMs - RECENT_WINDOW_MS
+        val oldest = nowMs - recentWindowMs()
         while (points.isNotEmpty()) {
             val timestamp = (points.first()["lastPacketAt"] as? Number)?.toLong()
                 ?: (points.first()["timestamp"] as? Number)?.toLong()
@@ -1353,6 +1366,24 @@ class VescForegroundService : Service() {
             if (timestamp >= oldest) break
             points.removeFirst()
         }
+    }
+
+    private fun recentWindowMs(): Long = liveHistoryLimitMinutes.toLong() * 60_000L
+
+    private fun setLiveHistoryLimitMinutes(minutes: Int) {
+        liveHistoryLimitMinutes = minutes.coerceIn(
+            MIN_LIVE_HISTORY_LIMIT_MINUTES,
+            MAX_LIVE_HISTORY_LIMIT_MINUTES,
+        )
+        pruneRecent(recentTelemetry, System.currentTimeMillis())
+        pruneRecent(recentLocations, System.currentTimeMillis())
+    }
+
+    private fun refreshLiveHistoryLimit() {
+        val settings = kotlinx.coroutines.runBlocking {
+            AppDataRepository.get(applicationContext).getSettingsEntity()
+        }
+        setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
     }
 
     private fun createNotificationChannel() {
