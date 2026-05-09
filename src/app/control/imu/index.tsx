@@ -5,6 +5,7 @@ import { TelemetryLineChart } from '@/components/charts/TelemetryLineChart'
 import type { TelemetryChartPoint } from '@/components/charts/chartMath'
 import { computeAutoRange } from '@/components/charts/chartMath'
 import { ControlDetailLayout } from '@/components/control/ControlDetailLayout'
+import { CHART_DEFAULTS } from '@/constants/chartDefaults'
 import { DASH, fmt } from '@/helpers/format'
 import { theme } from '@/constants/theme'
 import { useBleStore } from '@/store/bleStore'
@@ -28,10 +29,16 @@ export default function ImuScreen() {
     [recentTelemetry],
   )
 
-  const pitchRange = useMemo(() => computeAutoRange(pitchPoints, { minSpan: 20 }), [pitchPoints])
-  const rollRange = useMemo(() => computeAutoRange(rollPoints, { minSpan: 20 }), [rollPoints])
+  const pitchRange = useMemo(
+    () => computeAutoRange(pitchPoints, { baseline: CHART_DEFAULTS.pitch }),
+    [pitchPoints],
+  )
+  const rollRange = useMemo(
+    () => computeAutoRange(rollPoints, { baseline: CHART_DEFAULTS.roll }),
+    [rollPoints],
+  )
   const balanceRange = useMemo(
-    () => computeAutoRange(balancePoints, { minSpan: 20 }),
+    () => computeAutoRange(balancePoints, { baseline: CHART_DEFAULTS.balance }),
     [balancePoints],
   )
 
