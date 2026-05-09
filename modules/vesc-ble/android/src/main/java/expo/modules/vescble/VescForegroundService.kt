@@ -1,11 +1,7 @@
 package expo.modules.vescble
 
 import android.annotation.SuppressLint
-import android.app.ActivityManager
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -21,21 +17,13 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.util.Base64
 import android.util.Log
-import androidx.core.content.ContextCompat
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.TelemetryCapture
@@ -45,15 +33,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import org.json.JSONObject
-import java.io.File
-import java.io.FileWriter
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-private const val TAG = "VescSession"
+internal const val VESC_SESSION_TAG = "VescSession"
 private const val CHANNEL_ID = "vesc_monitoring_v4"
 private const val NOTIFICATION_ID = 1001
 private const val ACTION_START_SESSION = "expo.modules.vescble.ACTION_START_SESSION"
@@ -162,25 +147,7 @@ class VescForegroundService : Service() {
         }
 
         fun previewAlertSound(context: Context, soundType: String) {
-            instance?.playAlertTone(soundType, null) ?: playStandaloneAlertTone(soundType)
-        }
-
-        private fun playStandaloneAlertTone(soundType: String) {
-            try {
-                val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
-                val tone = when (soundType) {
-                    "urgent" -> ToneGenerator.TONE_CDMA_ABBR_ALERT
-                    "pulse"  -> ToneGenerator.TONE_PROP_BEEP
-                    else     -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
-                }
-                tg.startTone(tone, 350)
-                if (soundType == "urgent") {
-                    Handler(Looper.getMainLooper()).postDelayed({ tg.startTone(tone, 350) }, 380)
-                }
-                Handler(Looper.getMainLooper()).postDelayed({ tg.release() }, if (soundType == "urgent") 900 else 500)
-            } catch (e: Exception) {
-                Log.w(TAG, "Alert preview failed: ${e.message}")
-            }
+            instance?.alertFeedback?.playTone(soundType, null) ?: VescAlertFeedback.preview(soundType)
         }
 
         fun currentLiveState(context: Context): Map<String, Any?> =
@@ -239,6 +206,24 @@ class VescForegroundService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val packetReassembler = VescPacketReassembler()
     private val rttHistory = ArrayDeque<Long>()
+    private val notificationController by lazy {
+        VescNotificationController(
+            service = this,
+            serviceClass = VescForegroundService::class.java,
+            channelId = CHANNEL_ID,
+            notificationId = NOTIFICATION_ID,
+            stopAction = ACTION_EXIT_FROM_NOTIFICATION,
+        )
+    }
+    private val alertEngine = VescAlertEngine()
+    private val alertFeedback by lazy { VescAlertFeedback(this, mainHandler) }
+    private val gpsMonitor by lazy {
+        VescGpsMonitor(
+            context = this,
+            looper = Looper.getMainLooper(),
+            onLocation = ::onLocationUpdated,
+        )
+    }
 
     private var boardConfig: SessionConfig? = null
     private var boardStatus: String = "idle"
@@ -261,7 +246,6 @@ class VescForegroundService : Service() {
     private var connectAttempt = 0
     private var recorder: VescSessionRecorder? = null
     private var telemetryStore: TelemetryRepository? = null
-    private var locationManager: LocationManager? = null
     private var gpsError: String? = null
     private var latestLocation: LocationSnapshot? = null
     private var isStoppingService = false
@@ -272,12 +256,6 @@ class VescForegroundService : Service() {
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
-    private val alertLastFiredAt = HashMap<String, Long>()
-
-    private val locationListener = LocationListener { location ->
-        onLocationUpdated(location)
-    }
-
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
@@ -286,7 +264,7 @@ class VescForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        createNotificationChannel()
+        notificationController.createChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -296,7 +274,7 @@ class VescForegroundService : Service() {
             ACTION_EXIT_FROM_NOTIFICATION -> exitFromNotification()
             ACTION_START_GPS_MONITORING -> consumePendingGpsStart()
             ACTION_STOP_GPS_MONITORING -> stopGpsMonitoring()
-            else -> if (boardConfig == null && locationManager == null) stopSelf()
+            else -> if (boardConfig == null && !gpsMonitor.active) stopSelf()
         }
         return if (isStoppingService) START_NOT_STICKY else START_STICKY
     }
@@ -324,13 +302,13 @@ class VescForegroundService : Service() {
             setStatus("disconnecting")
             stopCurrentBoardSession(
                 emitDisconnected = true,
-                updateNotification = locationManager == null,
+                updateNotification = !gpsMonitor.active,
             )
             stop.onSuccess()
             return
         }
         stop.onSuccess()
-        if (locationManager == null) {
+        if (!gpsMonitor.active) {
             isStoppingService = true
             stopSelf()
         }
@@ -422,12 +400,12 @@ class VescForegroundService : Service() {
             }
         }
         mainHandler.postDelayed(connectTimeout!!, 12_000)
-        Log.d(TAG, "connectGatt $deviceId attempt=$connectAttempt")
+        Log.d(VESC_SESSION_TAG, "connectGatt $deviceId attempt=$connectAttempt")
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
+            Log.d(VESC_SESSION_TAG, "onConnectionStateChange status=$status newState=$newState")
             recorder?.recordState("gatt:$newState", mapOf("status" to status))
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
@@ -444,7 +422,7 @@ class VescForegroundService : Service() {
                         intentionalDisconnect = false
                     } else if (wasConnecting != null) {
                         if (status == 133 && connectAttempt < 2) {
-                            Log.w(TAG, "status=133 during connect, retrying once")
+                            Log.w(VESC_SESSION_TAG, "status=133 during connect, retrying once")
                             mainHandler.postDelayed({ startBleSession(wasConnecting) }, 250)
                         } else if (wasConnecting.boardConfig.autoReconnect) {
                             scheduleAutoReconnect(wasConnecting.boardConfig, status, "connect failed")
@@ -462,7 +440,7 @@ class VescForegroundService : Service() {
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            Log.d(TAG, "onMtuChanged mtu=$mtu status=$status")
+            Log.d(VESC_SESSION_TAG, "onMtuChanged mtu=$mtu status=$status")
             if (!gatt.discoverServices()) {
                 failPendingConnect("DISCOVERY_FAILED", "Could not start service discovery")
             }
@@ -495,7 +473,7 @@ class VescForegroundService : Service() {
             writeCccd(gatt, rxCccd)
 
             cccdTimeout = Runnable {
-                Log.w(TAG, "CCCD ack timeout, resolving connect")
+                Log.w(VESC_SESSION_TAG, "CCCD ack timeout, resolving connect")
                 resolveBleConnect()
             }
             mainHandler.postDelayed(cccdTimeout!!, 4000)
@@ -735,7 +713,7 @@ class VescForegroundService : Service() {
             gatt?.disconnect()
             gatt?.close()
         } catch (e: Exception) {
-            Log.w(TAG, "GATT cleanup failed: ${e.message}")
+            Log.w(VESC_SESSION_TAG, "GATT cleanup failed: ${e.message}")
         }
         gatt = null
         txChar = null
@@ -834,7 +812,7 @@ class VescForegroundService : Service() {
             }
 
             override fun onScanFailed(errorCode: Int) {
-                Log.w(TAG, "Reconnect scan failed errorCode=$errorCode")
+                Log.w(VESC_SESSION_TAG, "Reconnect scan failed errorCode=$errorCode")
                 stopReconnectScan()
                 scheduleAutoReconnect(session, null, "reconnect scan failed ($errorCode)")
             }
@@ -850,10 +828,10 @@ class VescForegroundService : Service() {
                     .build(),
                 callback,
             )
-            Log.d(TAG, "Reconnect scan started for $targetId")
+            Log.d(VESC_SESSION_TAG, "Reconnect scan started for $targetId")
         } catch (e: Exception) {
             reconnectScanCallback = null
-            Log.w(TAG, "Reconnect scan start failed: ${e.message}")
+            Log.w(VESC_SESSION_TAG, "Reconnect scan start failed: ${e.message}")
             scheduleAutoReconnect(session, null, "reconnect scan start failed")
         }
     }
@@ -864,7 +842,7 @@ class VescForegroundService : Service() {
         try {
             bluetoothAdapter.bluetoothLeScanner?.stopScan(callback)
         } catch (e: Exception) {
-            Log.w(TAG, "Reconnect scan stop failed: ${e.message}")
+            Log.w(VESC_SESSION_TAG, "Reconnect scan stop failed: ${e.message}")
         }
     }
 
@@ -886,44 +864,12 @@ class VescForegroundService : Service() {
     }
 
     private fun startLocationUpdates() {
-        val hasFine = ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!hasFine) {
-            gpsError = "Location permission not granted"
-            emitState()
-            return
-        }
-        val lm = (getSystemService(Context.LOCATION_SERVICE) as? LocationManager) ?: return
-        locationManager = lm
-        try {
-            lm.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                1000L,
-                0f,
-                locationListener,
-                Looper.getMainLooper(),
-            )
-            lm.requestLocationUpdates(
-                LocationManager.NETWORK_PROVIDER,
-                2000L,
-                0f,
-                locationListener,
-                Looper.getMainLooper(),
-            )
-        } catch (e: Exception) {
-            gpsError = e.message ?: "Location updates failed"
-            emitState()
-            Log.w(TAG, "Location updates failed: ${e.message}")
-        }
+        gpsError = gpsMonitor.start()
+        if (gpsError != null) emitState()
     }
 
     private fun stopLocationUpdates() {
-        val lm = locationManager ?: return
-        try {
-            lm.removeUpdates(locationListener)
-        } catch (_: Exception) {
-        }
-        locationManager = null
+        gpsMonitor.stop()
     }
 
     private fun setTelemetryRecordingEnabled(enabled: Boolean) {
@@ -1038,7 +984,7 @@ class VescForegroundService : Service() {
                 "autoConnect" to settings.autoConnect,
             ),
             "gps" to mapOf(
-                "phase" to if (locationManager != null) "active" else "idle",
+                "phase" to if (gpsMonitor.active) "active" else "idle",
                 "latestFix" to latestLocation?.toMap(),
                 "recentLocations" to recentLocationsValue,
                 "error" to gpsError,
@@ -1060,122 +1006,23 @@ class VescForegroundService : Service() {
         try {
             val rules = AppDataRepository.get(context).getEnabledAlertRuleEntities()
             alertRules = rules
-            alertLastFiredAt.clear()
-            Log.d(TAG, "Loaded ${rules.size} alert rule(s)")
+            alertEngine.resetDebounce()
+            Log.d(VESC_SESSION_TAG, "Loaded ${rules.size} alert rule(s)")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to load alert rules: ${e.message}")
+            Log.w(VESC_SESSION_TAG, "Failed to load alert rules: ${e.message}")
             alertRules = emptyList()
         }
     }
 
     private fun evaluateAlerts(t: RefloatTelemetry): List<Map<String, Any?>> {
-        val rules = alertRules
-        if (rules.isEmpty()) return emptyList()
-        val now = System.currentTimeMillis()
-        val fired = mutableListOf<Map<String, Any?>>()
-        for (rule in rules) {
-            val id           = rule.id
-            val controlId    = rule.controlId
-            val threshold    = rule.threshold
-            val thresholdMax = rule.thresholdMax
-            val soundType    = rule.soundType
-            val value        = extractAlertValue(controlId, t) ?: continue
-            val aboveDir     = alertDirectionIsAbove(controlId)
-            val triggered    = if (aboveDir) value >= threshold else value <= threshold
-            if (!triggered) continue
-            val rangeDepth = alertRangeDepth(value, threshold, thresholdMax, aboveDir)
-            val debounceMs = rangeDepth?.let { depth ->
-                (1_000L - (650L * depth)).toLong()
-            } ?: 10_000L
-            if (now - (alertLastFiredAt[id] ?: 0L) < debounceMs) continue
-            alertLastFiredAt[id] = now
-            fired.add(mapOf(
-                "ruleId"       to id,
-                "controlId"    to controlId,
-                "value"        to value,
-                "threshold"    to threshold,
-                "thresholdMax" to thresholdMax,
-                "soundType"    to soundType,
-                "rangeDepth"   to rangeDepth,
-                "firedAt"      to now,
-            ))
-        }
+        val fired = alertEngine.evaluate(alertRules, t)
         if (fired.isNotEmpty()) {
             val first = fired.first()
             val rangeDepth = (first["rangeDepth"] as? Number)?.toDouble()
-            playAlertTone(first["soundType"] as? String ?: "default", rangeDepth)
-            vibrate(rangeDepth)
+            alertFeedback.playTone(first["soundType"] as? String ?: "default", rangeDepth)
+            alertFeedback.vibrate(rangeDepth)
         }
         return fired
-    }
-
-    // Battery alerts when voltage is LOW (below threshold); everything else alerts high.
-    private fun alertDirectionIsAbove(controlId: String): Boolean = controlId != "battery"
-
-    private fun alertRangeDepth(
-        value: Double,
-        threshold: Double,
-        thresholdMax: Double?,
-        aboveDir: Boolean,
-    ): Double? {
-        if (thresholdMax == null || thresholdMax == threshold) return null
-        val span = if (aboveDir) thresholdMax - threshold else threshold - thresholdMax
-        if (span <= 0.0) return null
-        val depth = if (aboveDir) value - threshold else threshold - value
-        return (depth / span).coerceIn(0.0, 1.0)
-    }
-
-    private fun extractAlertValue(controlId: String, t: RefloatTelemetry): Double? = when (controlId) {
-        "speed"           -> abs(t.speed)
-        "battery"         -> t.batteryVoltage
-        "duty"            -> abs(t.dutyCycle) * 100.0
-        "motor-temp"      -> t.tempMotor?.takeIf { it > 0 }
-        "motor-current"   -> t.motorCurrent
-        "controller-temp" -> t.tempMosfet
-        "batt-current"    -> t.batteryCurrent
-        "imu"             -> t.pitch
-        "footpad"         -> t.adc1
-        else              -> null
-    }
-
-    @Suppress("UNUSED_PARAMETER")
-    private fun playAlertTone(soundType: String, rangeDepth: Double?) {
-        try {
-            val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
-            if (rangeDepth != null) {
-                val durationMs = (140L + (760L * rangeDepth)).toInt()
-                tg.startTone(alertTone(soundType), durationMs)
-                mainHandler.postDelayed({ tg.release() }, durationMs + 120L)
-                return
-            }
-            val tone = alertTone(soundType)
-            tg.startTone(tone, 450)
-            mainHandler.postDelayed({ tg.startTone(tone, 450) }, 500)
-            mainHandler.postDelayed({ tg.startTone(tone, 450) }, 1_000)
-            mainHandler.postDelayed({ tg.release() }, 1_600)
-        } catch (e: Exception) {
-            Log.w(TAG, "Alert tone failed: ${e.message}")
-        }
-    }
-
-    private fun alertTone(soundType: String): Int = when (soundType) {
-        "urgent" -> ToneGenerator.TONE_CDMA_ABBR_ALERT
-        "pulse"  -> ToneGenerator.TONE_PROP_BEEP
-        else     -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
-    }
-
-    private fun vibrate(rangeDepth: Double?) {
-        try {
-            val v = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
-            if (rangeDepth != null) {
-                val durationMs = (90L + (260L * rangeDepth)).toLong()
-                v.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
-                return
-            }
-            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 450, 120, 450, 120, 650), -1))
-        } catch (e: Exception) {
-            Log.w(TAG, "Vibrate failed: ${e.message}")
-        }
     }
 
     private fun appendRecentTelemetry(point: Map<String, Any?>, packetAt: Long) {
@@ -1218,82 +1065,16 @@ class VescForegroundService : Service() {
         setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
     }
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "VESC Board Monitoring",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = "Shows while monitoring board and GPS data"
-            setSound(null, null)
-            enableVibration(false)
-            setShowBadge(false)
-        }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-    }
-
     private fun showNotification(text: String = "Monitoring board in background") {
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(text))
+        notificationController.show(text, boardConfig?.deviceName, appInForeground)
     }
 
     private fun buildNotification(text: String = "Monitoring board in background"): Notification {
-        val title = (boardConfig?.deviceName ?: "VESC").let { if (appInForeground) it else "$it (bg)" }
-        return androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setContentIntent(buildOpenAppIntent())
-            .setOngoing(true)
-            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
-            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-            .setForegroundServiceBehavior(
-                androidx.core.app.NotificationCompat.FOREGROUND_SERVICE_DEFERRED,
-            )
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "Exit",
-                buildStopIntent(),
-            )
-            .build()
-            .apply {
-                flags = flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
-            }
-    }
-
-    private fun buildStopIntent(): PendingIntent {
-        val intent = Intent(this, VescForegroundService::class.java).apply {
-            action = ACTION_EXIT_FROM_NOTIFICATION
-        }
-        return PendingIntent.getService(
-            this,
-            1,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-    }
-
-    private fun buildOpenAppIntent(): PendingIntent {
-        val intent = packageManager.getLaunchIntentForPackage(packageName) ?: Intent()
-        return PendingIntent.getActivity(
-            this,
-            0,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        return notificationController.build(text, boardConfig?.deviceName, appInForeground)
     }
 
     private fun closeAppTask() {
-        try {
-            getSystemService(ActivityManager::class.java)
-                ?.appTasks
-                ?.forEach { it.finishAndRemoveTask() }
-        } catch (e: Exception) {
-            Log.w(TAG, "App task cleanup failed: ${e.message}")
-        }
+        notificationController.closeAppTask()
     }
 
     private fun writeCccd(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor) {
@@ -1369,97 +1150,4 @@ class VescForegroundService : Service() {
             )
         )
     }
-}
-
-private class VescSessionRecorder(context: Context, private val boardConfig: SessionConfig) {
-    private val store = DebugRecordingStore(context)
-    private val startedAt = System.currentTimeMillis()
-    private val writer: FileWriter
-    val file: File
-
-    init {
-        file = store.createFile(boardConfig.deviceName)
-        writer = FileWriter(file, false)
-    }
-
-    fun start() {
-        write(
-            JSONObject()
-                .put("t", 0)
-                .put("kind", "meta")
-                .put("version", 1)
-                .put("deviceName", boardConfig.deviceName)
-                .put("deviceId", boardConfig.deviceId)
-                .put("sessionKind", "board")
-                .put("pollIntervalMs", boardConfig.pollIntervalMs)
-                .put("startedAt", startedAt)
-        )
-        recordState("recording-started")
-    }
-
-    fun recordState(status: String, extra: Map<String, Any?> = emptyMap()) {
-        val json = JSONObject()
-            .put("t", elapsed())
-            .put("kind", "session-state")
-            .put("status", status)
-        extra.forEach { (key, value) -> json.put(key, value) }
-        write(json)
-    }
-
-    fun recordChunk(direction: String, bytes: ByteArray) {
-        write(
-            JSONObject()
-                .put("t", elapsed())
-                .put("kind", "ble-chunk")
-                .put("direction", direction)
-                .put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
-        )
-    }
-
-    fun recordLocation(location: LocationSnapshot) {
-        write(
-            JSONObject()
-                .put("t", elapsed())
-                .put("kind", "location")
-                .put("latitude", location.latitude)
-                .put("longitude", location.longitude)
-                .put("speedMps", location.speedMps)
-                .put("bearingDeg", location.bearingDeg)
-                .put("accuracyM", location.accuracyM)
-                .put("altitudeM", location.altitudeM)
-                .put("timestamp", location.timestamp)
-        )
-    }
-
-    fun finish(status: String) {
-        try {
-            recordState(status)
-            writer.flush()
-            writer.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Recording close failed: ${e.message}")
-        }
-    }
-
-    private fun elapsed(): Long = System.currentTimeMillis() - startedAt
-
-    private fun write(json: JSONObject) {
-        try {
-            writer.append(json.toString()).append('\n')
-            writer.flush()
-        } catch (e: Exception) {
-            Log.w(TAG, "Recording write failed: ${e.message}")
-        }
-    }
-}
-
-private class DebugRecordingStore(private val context: Context) {
-    private val dir: File
-        get() = File(context.filesDir, "vesc-recordings").also { it.mkdirs() }
-
-    fun createFile(deviceName: String): File {
-        val safeName = deviceName.replace(Regex("[^A-Za-z0-9._-]+"), "-").trim('-').ifBlank { "vesc-board" }
-        return File(dir, "${System.currentTimeMillis()}-$safeName.jsonl")
-    }
-
 }
