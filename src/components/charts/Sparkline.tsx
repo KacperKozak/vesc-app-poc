@@ -29,6 +29,56 @@ interface SparklineProps {
 
 const DEFAULT_HEIGHT = 28
 const BADGE_ROW_HEIGHT = 12
+const MIN_BUCKETS = 50
+
+function downsampleMinMax(points: SparklinePoint[], bucketCount: number): SparklinePoint[] {
+  if (points.length <= bucketCount * 2) return points
+
+  const tMin = points[0].ts
+  const tMax = points[points.length - 1].ts
+  const tSpan = tMax - tMin
+  if (tSpan <= 0) return points
+
+  const result: SparklinePoint[] = []
+  const bucketWidth = tSpan / bucketCount
+  let bi = 0
+  let minP: SparklinePoint | null = null
+  let maxP: SparklinePoint | null = null
+
+  for (const p of points) {
+    const bucket = Math.min(Math.floor((p.ts - tMin) / bucketWidth), bucketCount - 1)
+
+    if (bucket !== bi) {
+      if (minP && maxP) {
+        if (minP === maxP) {
+          result.push(minP)
+        } else if (minP.ts <= maxP.ts) {
+          result.push(minP, maxP)
+        } else {
+          result.push(maxP, minP)
+        }
+      }
+      minP = null
+      maxP = null
+      bi = bucket
+    }
+
+    if (!minP || p.value < minP.value) minP = p
+    if (!maxP || p.value > maxP.value) maxP = p
+  }
+
+  if (minP && maxP) {
+    if (minP === maxP) {
+      result.push(minP)
+    } else if (minP.ts <= maxP.ts) {
+      result.push(minP, maxP)
+    } else {
+      result.push(maxP, minP)
+    }
+  }
+
+  return result
+}
 
 /**
  * Lightweight sparkline. Draws a polyline of recent values. When `fmtMax` is
@@ -55,8 +105,12 @@ export function Sparkline({
     if (points.length < 2 || width < 1) {
       return { polyPoints: '', maxPos: null as { x: number; y: number } | null, maxValue: null }
     }
-    const xMax = points[points.length - 1].ts
-    const xMin = windowMs ? xMax - windowMs : points[0].ts
+
+    const buckets = Math.max(width, MIN_BUCKETS)
+    const reduced = downsampleMinMax(points, buckets)
+
+    const xMax = reduced[reduced.length - 1].ts
+    const xMin = windowMs ? xMax - windowMs : reduced[0].ts
     const xSpan = xMax - xMin
 
     let yMin: number
@@ -67,7 +121,7 @@ export function Sparkline({
     } else {
       yMin = Number.POSITIVE_INFINITY
       yMax = Number.NEGATIVE_INFINITY
-      for (const p of points) {
+      for (const p of reduced) {
         if (p.value < yMin) yMin = p.value
         if (p.value > yMax) yMax = p.value
       }
@@ -89,7 +143,7 @@ export function Sparkline({
 
     let maxV = -Infinity
     let maxIdx = 0
-    points.forEach((p, i) => {
+    reduced.forEach((p, i) => {
       if (p.value > maxV) {
         maxV = p.value
         maxIdx = i
@@ -105,8 +159,8 @@ export function Sparkline({
     }
 
     return {
-      polyPoints: points.map((p) => `${project(p).x},${project(p).y}`).join(' '),
-      maxPos: project(points[maxIdx]),
+      polyPoints: reduced.map((p) => `${project(p).x},${project(p).y}`).join(' '),
+      maxPos: project(reduced[maxIdx]),
       maxValue: maxV,
     }
   }, [points, width, height, range, minSpan, windowMs])
