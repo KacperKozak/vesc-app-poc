@@ -80,9 +80,10 @@ let locationSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 let scanErrorSub: EventSubscription | null = null
 let liveHistoryPublishTimer: ReturnType<typeof setTimeout> | null = null
+let settingsUnsubscribe: (() => void) | null = null
 
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
-const LIVE_HISTORY_PUBLISH_MS = 250
+const LIVE_HISTORY_PUBLISH_MS = 1000
 
 function scannedDeviceName(id: string, name?: string): string {
   const candidate = name?.trim()
@@ -100,9 +101,42 @@ const EMPTY_LIVE_STATUS: LiveStatusSummary = {
   gpsAccuracyM: null,
 }
 
+function clearLiveHistoryPublishTimer(): void {
+  if (!liveHistoryPublishTimer) return
+  clearTimeout(liveHistoryPublishTimer)
+  liveHistoryPublishTimer = null
+}
+
+function removeLiveSubscriptions(): void {
+  clearLiveHistoryPublishTimer()
+  liveSub?.remove()
+  telemetrySub?.remove()
+  locationSub?.remove()
+  liveSub = null
+  telemetrySub = null
+  locationSub = null
+}
+
+function removeScanSubscriptions(): void {
+  scanSub?.remove()
+  scanErrorSub?.remove()
+  scanSub = null
+  scanErrorSub = null
+}
+
+function cleanupBleStoreModule(): void {
+  removeLiveSubscriptions()
+  removeScanSubscriptions()
+  settingsUnsubscribe?.()
+  settingsUnsubscribe = null
+}
+
 function applyLiveState(state: LiveStateEvent, set: BleSet): void {
   const hasRecentSnapshot =
     state.board.recentTelemetry.length > 0 || state.gps.recentLocations.length > 0
+  if (hasRecentSnapshot) {
+    clearLiveHistoryPublishTimer()
+  }
   if (!hasRecentSnapshot) {
     liveTelemetryRuntime.syncConnectionSeq(state.board.connectionSeq)
   }
@@ -132,6 +166,7 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
 }
 
 function resetLivePresentation(set: BleSet): void {
+  clearLiveHistoryPublishTimer()
   const live = liveTelemetryRuntime.reset()
   set({
     lastTelemetryAt: null,
@@ -211,8 +246,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
 
     set({ devices: [], error: undefined })
 
-    scanSub?.remove()
-    scanErrorSub?.remove()
+    removeScanSubscriptions()
     scanErrorSub = addErrorListener((event) => {
       set({ scanStatus: 'error', error: event.message })
     })
@@ -235,10 +269,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
       nativeScan()
       get().syncNativeState()
     } catch (err) {
-      scanSub?.remove()
-      scanSub = null
-      scanErrorSub?.remove()
-      scanErrorSub = null
+      removeScanSubscriptions()
       set({
         scanStatus: 'error',
         error: err instanceof Error ? err.message : String(err),
@@ -253,10 +284,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
     } catch {
       // Native scan may already be stopped after permission or lifecycle changes.
     }
-    scanSub?.remove()
-    scanSub = null
-    scanErrorSub?.remove()
-    scanErrorSub = null
+    removeScanSubscriptions()
   },
 
   async connect(boardId: string) {
@@ -313,8 +341,26 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 }))
 
-useSettingsStore.subscribe((settings, previousSettings) => {
+type HotModule = {
+  hot?: {
+    dispose?: (callback: () => void) => void
+  }
+}
+
+type BleStoreGlobal = typeof globalThis & {
+  __vescBleStoreCleanup?: () => void
+}
+
+const bleStoreGlobal = globalThis as BleStoreGlobal
+bleStoreGlobal.__vescBleStoreCleanup?.()
+
+settingsUnsubscribe = useSettingsStore.subscribe((settings, previousSettings) => {
   if (settings.liveHistoryLimit === previousSettings.liveHistoryLimit) return
   const state = nativeGetLiveState()
   applyLiveState(state, useBleStore.setState)
 })
+
+bleStoreGlobal.__vescBleStoreCleanup = cleanupBleStoreModule
+
+const hotModule = typeof module === 'undefined' ? null : (module as unknown as HotModule)
+hotModule?.hot?.dispose?.(cleanupBleStoreModule)
