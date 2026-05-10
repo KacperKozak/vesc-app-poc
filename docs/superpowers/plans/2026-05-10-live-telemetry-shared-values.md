@@ -27,6 +27,7 @@
 ## Task 1: Pure Live Metric History
 
 **Files:**
+
 - Create: `src/telemetry/liveMetricHistory.ts`
 - Create: `src/telemetry/liveMetricHistory.test.ts`
 
@@ -123,7 +124,11 @@ describe('live metric history', () => {
   test('summarizes board and GPS freshness without exposing sample arrays', () => {
     const buffer = createLiveMetricBuffer()
     appendTelemetrySample(buffer, telemetry({ lastPacketAt: 2_000, avgLatency: 25 }), 10_000)
-    appendLocationSample(buffer, location({ timestamp: 3_000, precise: false, accuracyM: 12 }), 10_000)
+    appendLocationSample(
+      buffer,
+      location({ timestamp: 3_000, precise: false, accuracyM: 12 }),
+      10_000,
+    )
 
     expect(summarizeLiveStatus(buffer)).toEqual({
       boardSampleCount: 1,
@@ -332,6 +337,7 @@ git commit -m "Add live metric history buffer"
 ## Task 2: Live Telemetry Runtime
 
 **Files:**
+
 - Create: `src/telemetry/liveTelemetryRuntime.ts`
 - Create: `src/telemetry/liveTelemetryRuntime.test.ts`
 
@@ -639,6 +645,7 @@ git commit -m "Add live telemetry runtime"
 ## Task 3: Wire Runtime Into BLE Store
 
 **Files:**
+
 - Modify: `src/store/bleStore.ts`
 
 - [ ] **Step 1: Write failing store-level type check by editing state shape**
@@ -789,6 +796,7 @@ git commit -m "Route live telemetry through runtime"
 ## Task 4: SpeedGauge SharedValue Hot Path
 
 **Files:**
+
 - Modify: `src/components/charts/SpeedGauge.tsx`
 - Modify: `src/components/cards/SpeedIndicator.tsx`
 
@@ -951,6 +959,7 @@ git commit -m "Drive speed gauge from shared value"
 ## Task 5: Hot Telemetry Cards
 
 **Files:**
+
 - Modify: `src/components/TelemetryCard.tsx`
 - Modify: `src/components/cards/DutyCard.tsx`
 - Modify: `src/components/cards/MotorCurrentCard.tsx`
@@ -988,13 +997,7 @@ function AnimatedTelemetryValue({
     return { text, value: text }
   })
 
-  return (
-    <AnimatedTextInput
-      editable={false}
-      animatedProps={animatedProps}
-      style={styles.value}
-    />
-  )
+  return <AnimatedTextInput editable={false} animatedProps={animatedProps} style={styles.value} />
 }
 ```
 
@@ -1008,15 +1011,17 @@ formatAnimatedValue?: (value: number) => string
 Replace value render:
 
 ```tsx
-{animatedValue && formatAnimatedValue ? (
-  <AnimatedTelemetryValue value={animatedValue} format={formatAnimatedValue} unit={unit} />
-) : (
-  <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
-    {value}
-    {unit ? <Text style={styles.unit}> {unit}</Text> : null}
-    {sub ? <Text style={styles.sub}> {sub}</Text> : null}
-  </Text>
-)}
+{
+  animatedValue && formatAnimatedValue ? (
+    <AnimatedTelemetryValue value={animatedValue} format={formatAnimatedValue} unit={unit} />
+  ) : (
+    <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
+      {value}
+      {unit ? <Text style={styles.unit}> {unit}</Text> : null}
+      {sub ? <Text style={styles.sub}> {sub}</Text> : null}
+    </Text>
+  )
+}
 ```
 
 - [ ] **Step 2: Update DutyCard**
@@ -1125,6 +1130,7 @@ git commit -m "Use shared values for hot telemetry cards"
 ## Task 6: LiveStatusBar Summary Path
 
 **Files:**
+
 - Modify: `src/components/LiveStatusBar.tsx`
 
 - [ ] **Step 1: Replace array subscription**
@@ -1161,7 +1167,8 @@ Replace counts and latency:
 ```ts
 const boardText =
   liveStatus.boardAvgLatencyMs != null ? `${Math.round(liveStatus.boardAvgLatencyMs)}ms` : '-'
-const boardMeta = status === 'connected' ? formatLastSec(telemetryAgeMs) : formatLastSec(telemetryAgeMs)
+const boardMeta =
+  status === 'connected' ? formatLastSec(telemetryAgeMs) : formatLastSec(telemetryAgeMs)
 ```
 
 Use `liveStatus.boardSampleCount` and `liveStatus.gpsSampleCount` in labels.
@@ -1186,6 +1193,7 @@ git commit -m "Make live status bar use summary state"
 ## Task 7: Remaining Consumers
 
 **Files:**
+
 - Modify: `src/app/control/batt-current/index.tsx`
 - Modify: `src/app/control/battery/index.tsx`
 - Modify: `src/app/control/controller-temp/index.tsx`
@@ -1326,6 +1334,7 @@ git commit -m "Migrate telemetry consumers to live history"
 ## Task 8: Throttle Publishing
 
 **Files:**
+
 - Modify: `src/telemetry/liveTelemetryRuntime.ts`
 - Modify: `src/store/bleStore.ts`
 - Modify: `src/telemetry/liveTelemetryRuntime.test.ts`
@@ -1456,6 +1465,7 @@ git commit -m "Throttle live history publishing"
 ## Task 9: Verification
 
 **Files:**
+
 - No planned file edits.
 
 - [ ] **Step 1: Run full checks**

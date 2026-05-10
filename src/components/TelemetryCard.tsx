@@ -54,13 +54,7 @@ function AnimatedTelemetryValue({
     return { text, value: text }
   })
 
-  return (
-    <AnimatedTextInput
-      editable={false}
-      animatedProps={animatedProps}
-      style={styles.value}
-    />
-  )
+  return <AnimatedTextInput editable={false} animatedProps={animatedProps} style={styles.value} />
 }
 
 export function AlertBadge({ controlId }: { controlId: string }) {
