@@ -84,6 +84,16 @@ describe('live metric history', () => {
     expect(projectLiveMetricHistory(buffer).speed).toEqual([{ ts: 1_000, value: 1 }])
   })
 
+  test('deduplicates location samples by timestamp', () => {
+    const buffer = createLiveMetricBuffer()
+    appendLocationSample(buffer, location({ timestamp: 1_000, speedMps: 1, accuracyM: 3 }), 10_000)
+    appendLocationSample(buffer, location({ timestamp: 1_000, speedMps: 2, accuracyM: 12 }), 10_000)
+
+    expect(buffer.locations).toHaveLength(1)
+    expect(getLatestGps(buffer)).toMatchObject({ timestamp: 1_000, speedMps: 1, accuracyM: 3 })
+    expect(summarizeLiveStatus(buffer)).toMatchObject({ gpsSampleCount: 1, gpsAccuracyM: 3 })
+  })
+
   test('keeps telemetry sorted and prunes late samples against newest timestamp', () => {
     const buffer = createLiveMetricBuffer()
     appendTelemetrySample(buffer, telemetry({ lastPacketAt: 11_000, speed: 11 }), 10_000)
