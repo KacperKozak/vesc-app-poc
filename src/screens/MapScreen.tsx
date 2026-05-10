@@ -4,6 +4,7 @@ import Mapbox, {
   Camera,
   FillLayer,
   FillExtrusionLayer,
+  LineLayer,
   MarkerView,
   RasterLayer,
   RasterSource,
@@ -55,7 +56,8 @@ interface MapScreenProps {
 }
 
 export function MapScreen(_props: MapScreenProps) {
-  const gpsFix = useBleStore((s) => s.recentLocations.at(-1) ?? null)
+  const recentLocations = useBleStore((s) => s.recentLocations)
+  const gpsFix = recentLocations.at(-1) ?? null
   const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore()
   const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('onedark')
   const [followGps, setFollowGps] = useState(true)
@@ -91,6 +93,11 @@ export function MapScreen(_props: MapScreenProps) {
         ? makeCircleFeature(gpsFix.longitude, gpsFix.latitude, gpsFix.accuracyM)
         : null,
     [gpsFix],
+  )
+
+  const trailShape = useMemo(
+    () => (recentLocations.length >= 2 ? makeTrailLineString(recentLocations) : null),
+    [recentLocations],
   )
 
   useEffect(() => {
@@ -196,6 +203,29 @@ export function MapScreen(_props: MapScreenProps) {
             <RasterLayer id="mapy-tiles-layer" sourceID="mapy-tiles" style={{}} />
           </RasterSource>
         ) : null}
+
+        {trailShape && (
+          <ShapeSource id="trail-source" shape={trailShape} lineMetrics>
+            <LineLayer
+              id="trail-line"
+              style={{
+                lineColor: '#7c6fef',
+                lineWidth: 3,
+                lineCap: 'round',
+                lineJoin: 'round',
+                lineGradient: [
+                  'interpolate',
+                  ['linear'],
+                  ['line-progress'],
+                  0,
+                  'rgba(124,111,239,0)',
+                  1,
+                  'rgba(124,111,239,0.85)',
+                ],
+              }}
+            />
+          </ShapeSource>
+        )}
 
         {gpsFix && (
           <>
@@ -345,6 +375,19 @@ function MapPin({
 
 function zoomLevelForDelta(delta: number): number {
   return Math.max(3, Math.min(19, Math.log2(360 / Math.max(delta, 0.0001))))
+}
+
+function makeTrailLineString(
+  locations: { longitude: number; latitude: number }[],
+): GeoJSON.Feature<GeoJSON.LineString> {
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: locations.map((l) => [l.longitude, l.latitude]),
+    },
+    properties: {},
+  }
 }
 
 function makeCircleFeature(
