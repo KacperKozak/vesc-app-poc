@@ -13,6 +13,7 @@ import {
   type LiveMetricHistory,
   type LiveStatusSummary,
 } from './liveMetricHistory'
+import { useSettingsStore } from '@/store/settingsStore'
 
 export interface LiveTelemetryValues {
   speedKmh: SharedValue<number | null>
@@ -43,6 +44,18 @@ export interface LiveTelemetryRuntime {
 
 interface LiveTelemetryRuntimeOptions {
   windowMs: () => number
+}
+
+const MIN_LIVE_HISTORY_MINUTES = 1
+const DEFAULT_LIVE_HISTORY_MINUTES = 5
+
+function liveHistoryWindowMs(): number {
+  const minutes = useSettingsStore.getState().liveHistoryLimit
+  const safeMinutes =
+    Number.isFinite(minutes) && minutes >= MIN_LIVE_HISTORY_MINUTES
+      ? minutes
+      : DEFAULT_LIVE_HISTORY_MINUTES
+  return safeMinutes * 60 * 1000
 }
 
 function finite(value: number | null | undefined): number | null {
@@ -175,4 +188,4 @@ export function createLiveTelemetryRuntime({
   }
 }
 
-export const liveTelemetryRuntime = createLiveTelemetryRuntime({ windowMs: () => 5 * 60_000 })
+export const liveTelemetryRuntime = createLiveTelemetryRuntime({ windowMs: liveHistoryWindowMs })

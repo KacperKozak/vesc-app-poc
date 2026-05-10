@@ -19,11 +19,16 @@ import {
   type GpsPhase,
   type ScanStatus,
   type LocationEvent,
-  type TelemetryEvent,
   type LiveStateEvent,
 } from 'vesc-ble'
 
 import { useSettingsStore } from '@/store/settingsStore'
+import { liveTelemetryRuntime } from '@/telemetry/liveTelemetryRuntime'
+import {
+  emptyLiveMetricHistory,
+  type LiveMetricHistory,
+  type LiveStatusSummary,
+} from '@/telemetry/liveMetricHistory'
 
 export interface ScannedDevice {
   id: string
@@ -44,8 +49,9 @@ interface BleState {
   selectedBoardId: string | null
   connectedId: string | null
   error: string | undefined
-  recentTelemetry: TelemetryEvent[]
-  recentLocations: LocationEvent[]
+  liveMetricHistory: LiveMetricHistory
+  liveLocationHistory: LocationEvent[]
+  liveStatus: LiveStatusSummary
   telemetryRecordingEnabled: boolean
   recordDebugSession: boolean
 }
@@ -70,21 +76,11 @@ type BleSet = {
 
 let liveSub: EventSubscription | null = null
 let telemetrySub: EventSubscription | null = null
+let locationSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 let scanErrorSub: EventSubscription | null = null
 
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
-const MIN_LIVE_HISTORY_MINUTES = 1
-const DEFAULT_LIVE_HISTORY_MINUTES = 5
-
-function liveHistoryWindowMs(): number {
-  const minutes = useSettingsStore.getState().liveHistoryLimit
-  const safeMinutes =
-    Number.isFinite(minutes) && minutes >= MIN_LIVE_HISTORY_MINUTES
-      ? minutes
-      : DEFAULT_LIVE_HISTORY_MINUTES
-  return safeMinutes * 60 * 1000
-}
 
 function scannedDeviceName(id: string, name?: string): string {
   const candidate = name?.trim()
@@ -92,27 +88,19 @@ function scannedDeviceName(id: string, name?: string): string {
   return `Unknown ${id.slice(-5)}`
 }
 
-function telemetryKey(telemetry: TelemetryEvent): number {
-  return telemetry.lastPacketAt
-}
-
-function locationKey(location: LocationEvent): number {
-  return location.timestamp
-}
-
-function pruneByTimestamp<T>(items: T[], nowMs: number, key: (value: T) => number): T[] {
-  const oldest = nowMs - liveHistoryWindowMs()
-  return items.filter((value) => key(value) >= oldest)
-}
-
-function appendByTimestamp<T>(items: T[], item: T, key: (value: T) => number): T[] {
-  const itemKey = key(item)
-  if (items.some((existing) => key(existing) === itemKey)) return items
-  return pruneByTimestamp([...items, item], itemKey, key).sort((a, b) => key(a) - key(b))
+const EMPTY_LIVE_STATUS: LiveStatusSummary = {
+  boardSampleCount: 0,
+  boardLastPacketAt: null,
+  boardAvgLatencyMs: null,
+  gpsSampleCount: 0,
+  gpsLastFixAt: null,
+  gpsPrecise: false,
+  gpsAccuracyM: null,
 }
 
 function applyLiveState(state: LiveStateEvent, set: BleSet): void {
-  set((current) => ({
+  const live = liveTelemetryRuntime.seedFromLiveState(state)
+  set({
     status: state.board.phase,
     gpsStatus: state.gps.phase,
     scanStatus: state.scan.phase,
@@ -123,13 +111,10 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
     connectedId: state.board.connectedBoardId ?? state.board.bleId,
     error: state.board.error ?? state.gps.error ?? state.scan.error ?? undefined,
     telemetryRecordingEnabled: state.recording.enabled,
-    recentTelemetry: state.board.recentTelemetry.length
-      ? state.board.recentTelemetry
-      : current.recentTelemetry,
-    recentLocations: state.gps.recentLocations.length
-      ? state.gps.recentLocations
-      : current.recentLocations,
-  }))
+    liveMetricHistory: live.liveMetricHistory,
+    liveLocationHistory: live.liveLocationHistory,
+    liveStatus: live.liveStatus,
+  })
 }
 
 function installLiveSubscriptions(set: BleSet): void {
@@ -138,13 +123,20 @@ function installLiveSubscriptions(set: BleSet): void {
   }
   if (!telemetrySub) {
     telemetrySub = addTelemetryListener((telemetry) => {
-      const current = useBleStore.getState()
-      if (telemetry.generation != null && telemetry.generation !== current.connectionSeq) return
-      const recentTelemetry = appendByTimestamp(current.recentTelemetry, telemetry, telemetryKey)
-      const recentLocations = telemetry.location
-        ? appendByTimestamp(current.recentLocations, telemetry.location, locationKey)
-        : current.recentLocations
-      set({ recentTelemetry, recentLocations })
+      const live = liveTelemetryRuntime.ingestTelemetry(telemetry)
+      if (!live) return
+      set({
+        lastTelemetryAt: telemetry.lastPacketAt,
+        liveMetricHistory: live.liveMetricHistory,
+        liveLocationHistory: live.liveLocationHistory,
+        liveStatus: live.liveStatus,
+      })
+    })
+  }
+  if (!locationSub) {
+    locationSub = addLocationListener((location) => {
+      const live = liveTelemetryRuntime.ingestLocation(location)
+      set({ liveLocationHistory: live.liveLocationHistory, liveStatus: live.liveStatus })
     })
   }
 }
@@ -160,8 +152,9 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   selectedBoardId: null,
   connectedId: null,
   error: undefined,
-  recentTelemetry: [],
-  recentLocations: [],
+  liveMetricHistory: emptyLiveMetricHistory(),
+  liveLocationHistory: [],
+  liveStatus: EMPTY_LIVE_STATUS,
   telemetryRecordingEnabled: false,
   recordDebugSession: false,
 
@@ -282,17 +275,8 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   },
 }))
 
-addLocationListener((location) => {
-  useBleStore.setState((s) => ({
-    recentLocations: appendByTimestamp(s.recentLocations, location, locationKey),
-  }))
-})
-
 useSettingsStore.subscribe((settings, previousSettings) => {
   if (settings.liveHistoryLimit === previousSettings.liveHistoryLimit) return
-  const nowMs = Date.now()
-  useBleStore.setState((s) => ({
-    recentTelemetry: pruneByTimestamp(s.recentTelemetry, nowMs, telemetryKey),
-    recentLocations: pruneByTimestamp(s.recentLocations, nowMs, locationKey),
-  }))
+  const state = nativeGetLiveState()
+  applyLiveState(state, useBleStore.setState)
 })
