@@ -45,20 +45,24 @@ const AnimatedLine = Animated.createAnimatedComponent(Line)
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput)
 
 function clamp01(f: number) {
+  'worklet'
   return Math.min(1, Math.max(0, f))
 }
 
 function polar(r: number, f: number) {
+  'worklet'
   const angle = Math.PI - Math.PI * f // π → 0, sweeping through π/2 (top)
   return { x: CX + r * Math.cos(angle), y: CY - r * Math.sin(angle) }
 }
 
 function arcPath(f: number) {
+  'worklet'
   const end = polar(R, clamp01(f))
   return `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${end.x} ${end.y}`
 }
 
 function wedgePath(f: number) {
+  'worklet'
   const c = clamp01(f)
   if (c <= 0) return ''
   const end = polar(R, c)
@@ -66,6 +70,7 @@ function wedgePath(f: number) {
 }
 
 function rangeWedgePath(fromFraction: number, toFraction: number) {
+  'worklet'
   const from = clamp01(fromFraction)
   const to = clamp01(toFraction)
   if (to <= from) return ''
