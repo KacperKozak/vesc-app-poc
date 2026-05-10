@@ -15,6 +15,10 @@ import {
   CubeIcon,
   CrosshairIcon,
   CrosshairSimpleIcon,
+  MapTrifoldIcon,
+  MountainsIcon,
+  PlanetIcon,
+  type Icon,
   XIcon,
 } from 'phosphor-react-native'
 import { useBleStore } from '@/store/bleStore'
@@ -31,9 +35,14 @@ const BLANK_STYLE = JSON.stringify({
   layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#111827' } }],
 })
 const MAP_STYLES = [
-  { key: 'outdoors', label: 'Outdoors', styleURL: Mapbox.StyleURL.Outdoors },
-  { key: 'satellite', label: 'Satelite', styleURL: Mapbox.StyleURL.SatelliteStreet },
-  { key: 'mapy', label: 'Mapy.cz', styleURL: null },
+  { key: 'outdoors', label: 'Outdoors', styleURL: Mapbox.StyleURL.Outdoors, Icon: MountainsIcon },
+  {
+    key: 'satellite',
+    label: 'Satellite',
+    styleURL: Mapbox.StyleURL.SatelliteStreet,
+    Icon: PlanetIcon,
+  },
+  { key: 'mapy', label: 'Mapy.cz', styleURL: null, Icon: MapTrifoldIcon },
 ] as const
 
 type MapStyleKey = (typeof MAP_STYLES)[number]['key']
@@ -271,28 +280,42 @@ export function MapScreen(_props: MapScreenProps) {
         )}
       </Pressable>
 
-      <View style={styles.providerSwitch}>
+      <View style={styles.mapStyleSwitch}>
         {MAP_STYLES.map((style) => (
-          <Pressable
+          <MapStyleButton
             key={style.key}
-            style={[
-              styles.providerButton,
-              mapStyleKey === style.key && styles.providerButtonActive,
-            ]}
+            Icon={style.Icon}
+            label={style.label}
+            active={mapStyleKey === style.key}
             onPress={() => setMapStyleKey(style.key)}
-          >
-            <Text
-              style={[
-                styles.providerButtonText,
-                mapStyleKey === style.key && styles.providerButtonTextActive,
-              ]}
-            >
-              {style.label}
-            </Text>
-          </Pressable>
+          />
         ))}
       </View>
     </View>
+  )
+}
+
+function MapStyleButton({
+  Icon,
+  label,
+  active,
+  onPress,
+}: {
+  Icon: Icon
+  label: string
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      style={[styles.mapStyleButton, active && styles.mapStyleButtonActive]}
+      onPress={onPress}
+    >
+      <Icon size={21} color={active ? '#f9fafb' : '#9ca3af'} weight={active ? 'fill' : 'bold'} />
+    </Pressable>
   )
 }
 
@@ -401,7 +424,7 @@ const styles = StyleSheet.create({
   },
   attribution: {
     position: 'absolute',
-    left: 12,
+    right: 12,
     bottom: 12,
     backgroundColor: 'rgba(17,24,39,0.38)',
     borderRadius: 10,
@@ -466,33 +489,26 @@ const styles = StyleSheet.create({
   followButtonActive: {
     backgroundColor: theme.gps.bg,
   },
-  providerSwitch: {
+  mapStyleSwitch: {
     position: 'absolute',
-    left: 12,
+    alignSelf: 'center',
     bottom: 46,
-    flexDirection: 'column',
-    alignItems: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(17,24,39,0.9)',
-    borderRadius: 10,
-    padding: 3,
-    gap: 2,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.18)',
+    padding: 4,
   },
-  providerButton: {
+  mapStyleButton: {
+    width: 46,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    borderRadius: 23,
   },
-  providerButtonActive: {
+  mapStyleButtonActive: {
     backgroundColor: '#2563eb',
-  },
-  providerButtonText: {
-    color: '#9ca3af',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  providerButtonTextActive: {
-    color: '#f9fafb',
   },
 })
