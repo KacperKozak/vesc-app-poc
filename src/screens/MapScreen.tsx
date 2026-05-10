@@ -16,6 +16,7 @@ import {
   CrosshairIcon,
   CrosshairSimpleIcon,
   MapTrifoldIcon,
+  MoonStarsIcon,
   MountainsIcon,
   PlanetIcon,
   type Icon,
@@ -25,6 +26,7 @@ import { useBleStore } from '@/store/bleStore'
 import { useMapStore } from '@/store/mapStore'
 import { MAPBOX_ACCESS_TOKEN, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
 import { theme } from '@/constants/theme'
+import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
@@ -35,6 +37,7 @@ const BLANK_STYLE = JSON.stringify({
   layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#111827' } }],
 })
 const MAP_STYLES = [
+  { key: 'onedark', label: 'One Dark', styleURL: null, Icon: MoonStarsIcon },
   { key: 'outdoors', label: 'Outdoors', styleURL: Mapbox.StyleURL.Outdoors, Icon: MountainsIcon },
   {
     key: 'satellite',
@@ -54,7 +57,7 @@ interface MapScreenProps {
 export function MapScreen(_props: MapScreenProps) {
   const gpsFix = useBleStore((s) => s.recentLocations.at(-1) ?? null)
   const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore()
-  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('outdoors')
+  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('onedark')
   const [followGps, setFollowGps] = useState(true)
   const [heading, setHeading] = useState(0)
   const [rotationLocked, setRotationLocked] = useState(false)
@@ -76,10 +79,12 @@ export function MapScreen(_props: MapScreenProps) {
     }
   }, [gpsFix])
 
-  const markerColor = !gpsFix ? '#9ca3af' : gpsFix.precise ? theme.gps.color : theme.error.color
+  const markerColor = !gpsFix ? '#9ca3af' : '#7c6fef'
   const selectedMapStyle = MAP_STYLES.find((style) => style.key === mapStyleKey) ?? MAP_STYLES[0]
   const isMapy = selectedMapStyle.key === 'mapy'
-  const showBuildings3d = selectedMapStyle.key === 'outdoors'
+  const isOneDark = selectedMapStyle.key === 'onedark'
+  const useCustomJSON = isMapy || isOneDark
+  const showBuildings3d = selectedMapStyle.key === 'outdoors' || selectedMapStyle.key === 'onedark'
   const accuracyShape = useMemo(
     () =>
       gpsFix?.accuracyM != null
@@ -144,8 +149,8 @@ export function MapScreen(_props: MapScreenProps) {
     <View style={styles.container}>
       <Mapbox.MapView
         style={styles.map}
-        styleURL={isMapy ? undefined : selectedMapStyle.styleURL}
-        styleJSON={isMapy ? BLANK_STYLE : undefined}
+        styleURL={useCustomJSON ? undefined : selectedMapStyle.styleURL}
+        styleJSON={isOneDark ? ONE_DARK_MAP_STYLE : isMapy ? BLANK_STYLE : undefined}
         pitchEnabled
         rotateEnabled={!rotationLocked}
         onLongPress={(feature) => {
@@ -172,10 +177,10 @@ export function MapScreen(_props: MapScreenProps) {
             minZoomLevel={14}
             maxZoomLevel={22}
             style={{
-              fillExtrusionColor: '#e5e7eb',
+              fillExtrusionColor: isOneDark ? '#3e4451' : '#e5e7eb',
               fillExtrusionHeight: ['coalesce', ['get', 'height'], 12],
               fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
-              fillExtrusionOpacity: 0.42,
+              fillExtrusionOpacity: isOneDark ? 0.65 : 0.42,
               fillExtrusionVerticalGradient: true,
             }}
           />
@@ -199,7 +204,7 @@ export function MapScreen(_props: MapScreenProps) {
                 <FillLayer
                   id="gps-accuracy-fill"
                   style={{
-                    fillColor: gpsFix.precise ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)',
+                    fillColor: 'rgba(124,111,239,0.18)',
                   }}
                 />
               </ShapeSource>
@@ -314,7 +319,7 @@ function MapStyleButton({
       style={[styles.mapStyleButton, active && styles.mapStyleButtonActive]}
       onPress={onPress}
     >
-      <Icon size={21} color={active ? '#f9fafb' : '#9ca3af'} weight={active ? 'fill' : 'bold'} />
+      <Icon size={21} color={active ? '#61afef' : '#9ca3af'} weight={active ? 'fill' : 'bold'} />
     </Pressable>
   )
 }
@@ -508,6 +513,6 @@ const styles = StyleSheet.create({
     borderRadius: 23,
   },
   mapStyleButtonActive: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3d4556',
   },
 })
