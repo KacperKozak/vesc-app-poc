@@ -4,7 +4,7 @@ import Mapbox, {
   Camera,
   FillLayer,
   FillExtrusionLayer,
-  PointAnnotation,
+  MarkerView,
   RasterLayer,
   RasterSource,
   ShapeSource,
@@ -320,7 +320,6 @@ function MapStyleButton({
 }
 
 function MapPin({
-  id,
   coordinate,
   color,
   onSelected,
@@ -331,11 +330,11 @@ function MapPin({
   onSelected?: () => void
 }) {
   return (
-    <PointAnnotation id={id} coordinate={coordinate} onSelected={onSelected}>
-      <View style={[styles.pin, { borderColor: color }]}>
+    <MarkerView coordinate={coordinate} allowOverlap>
+      <Pressable style={[styles.pin, { borderColor: color }]} onPress={onSelected}>
         <View style={[styles.pinCore, { backgroundColor: color }]} />
-      </View>
-    </PointAnnotation>
+      </Pressable>
+    </MarkerView>
   )
 }
 
