@@ -7,12 +7,12 @@ import { ControlDetailLayout } from '@/components/control/ControlDetailLayout'
 import { StatsRow } from '@/components/control/StatsRow'
 import { DASH, fmtVoltage } from '@/helpers/format'
 import { theme } from '@/constants/theme'
-import { useBleStore } from '@/store/bleStore'
+import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useBoardStore } from '@/store/boardStore'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
 export default function BatteryScreen() {
-  const batteryVoltage = useBleStore((s) => s.liveMetricHistory.batteryVoltage)
+  const batteryVoltage = useLiveMetric(liveSelectors.batteryVoltage)
   const windowMs = useLiveWindowMs()
   const board = useBoardStore((s) => s.boards.find((b) => b.id === s.activeBoardId))
 

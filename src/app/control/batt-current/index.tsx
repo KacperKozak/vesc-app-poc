@@ -8,11 +8,11 @@ import { StatsRow } from '@/components/control/StatsRow'
 import { DASH, fmtCurrent } from '@/helpers/format'
 import { CHART_DEFAULTS } from '@/constants/chartDefaults'
 import { theme } from '@/constants/theme'
-import { useBleStore } from '@/store/bleStore'
+import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
 export default function BattCurrentScreen() {
-  const batteryCurrent = useBleStore((s) => s.liveMetricHistory.batteryCurrent)
+  const batteryCurrent = useLiveMetric(liveSelectors.batteryCurrent)
   const windowMs = useLiveWindowMs()
 
   const points = useMemo<TelemetryChartPoint[]>(

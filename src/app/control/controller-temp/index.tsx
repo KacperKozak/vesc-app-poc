@@ -8,11 +8,11 @@ import { StatsRow } from '@/components/control/StatsRow'
 import { DASH, fmtTemp } from '@/helpers/format'
 import { CHART_DEFAULTS } from '@/constants/chartDefaults'
 import { theme } from '@/constants/theme'
-import { useBleStore } from '@/store/bleStore'
+import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
 export default function ControllerTempScreen() {
-  const controllerTemp = useBleStore((s) => s.liveMetricHistory.controllerTemp)
+  const controllerTemp = useLiveMetric(liveSelectors.controllerTemp)
   const windowMs = useLiveWindowMs()
 
   const points = useMemo<TelemetryChartPoint[]>(

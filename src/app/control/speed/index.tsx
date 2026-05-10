@@ -6,13 +6,13 @@ import { ControlDetailLayout } from '@/components/control/ControlDetailLayout'
 import { StatsRow } from '@/components/control/StatsRow'
 import { DASH, fmtSpeed } from '@/helpers/format'
 import { theme } from '@/constants/theme'
-import { useBleStore } from '@/store/bleStore'
+import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
 const RANGE = { y: { min: 0, max: 50 } }
 
 export default function SpeedScreen() {
-  const speed = useBleStore((s) => s.liveMetricHistory.speed)
+  const speed = useLiveMetric(liveSelectors.speed)
   const windowMs = useLiveWindowMs()
 
   const points = useMemo<TelemetryChartPoint[]>(
