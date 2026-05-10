@@ -50,12 +50,20 @@ function AnimatedTelemetryValue({
 }) {
   const animatedProps = useAnimatedProps(() => {
     const current = value.value
-    const formatted = current == null ? '-' : current.toFixed(decimals)
-    const text = current == null ? formatted : `${formatted}${unit ? ` ${unit}` : ''}`
+    const text = current == null ? '-' : current.toFixed(decimals)
     return { text, value: text }
   })
 
-  return <AnimatedTextInput editable={false} animatedProps={animatedProps} style={styles.value} />
+  return (
+    <View style={styles.valueRow}>
+      <AnimatedTextInput
+        editable={false}
+        animatedProps={animatedProps}
+        style={[styles.value, styles.animatedValue]}
+      />
+      {unit ? <Text style={styles.unit}> {unit}</Text> : null}
+    </View>
+  )
 }
 
 export function AlertBadge({ controlId }: { controlId: string }) {
@@ -151,6 +159,13 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontWeight: '600',
     padding: 0,
+  },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  animatedValue: {
+    minWidth: 0,
   },
   unit: {
     color: '#64748b',

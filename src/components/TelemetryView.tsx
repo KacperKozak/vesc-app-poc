@@ -11,7 +11,6 @@ import {
   MotorCurrentCard,
   MotorTempCard,
   SpeedIndicator,
-  StateCard,
   TargetSection,
 } from '@/components/cards'
 import { routes } from '@/navigation/routes'
@@ -133,17 +132,6 @@ export function TelemetryView() {
             }}
           >
             <ImuCard />
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.rowItem, pressed && styles.cardPressablePressed]}
-            onPress={() => router.push(routes.controlState)}
-            android_ripple={{
-              color: 'rgba(148, 163, 184, 0.18)',
-              borderless: false,
-              foreground: true,
-            }}
-          >
-            <StateCard />
           </Pressable>
         </View>
       </View>
