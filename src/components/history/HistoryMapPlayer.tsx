@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import Mapbox, { Camera, LineLayer, ShapeSource, type Camera as CameraRef } from '@rnmapbox/maps'
 import {
   CaretLeftIcon,
@@ -9,6 +9,7 @@ import {
   PlayIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  TrashIcon,
 } from 'phosphor-react-native'
 
 import {
@@ -62,6 +63,7 @@ interface HistoryMapPlayerProps {
   loadingSession: boolean
   sessionTruncated: boolean
   onSelectSession: (session: HistorySession | null) => Promise<void>
+  onRemoveSelectedSession: () => Promise<void>
 }
 
 export function HistoryMapPlayer({
@@ -73,12 +75,14 @@ export function HistoryMapPlayer({
   loadingSession,
   sessionTruncated,
   onSelectSession,
+  onRemoveSelectedSession,
 }: HistoryMapPlayerProps) {
   const [sheetVisible, setSheetVisible] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [headTimeMs, setHeadTimeMs] = useState<number | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [activeCharts, setActiveCharts] = useState<Set<OptionalChartMetric>>(new Set())
+  const [deletingSession, setDeletingSession] = useState(false)
   const playbackStartRef = useRef<{ realMs: number; headMs: number } | null>(null)
   const cameraRef = useRef<CameraRef>(null)
 
@@ -503,6 +507,26 @@ export function HistoryMapPlayer({
     )
   }
 
+  const confirmRemoveSelectedSession = () => {
+    if (!selectedSession || deletingSession) return
+    Alert.alert(
+      'Delete ride',
+      'Delete this ride from history? This removes board samples, GPS points, markers, and graph data.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            stopPlayback()
+            setDeletingSession(true)
+            void onRemoveSelectedSession().finally(() => setDeletingSession(false))
+          },
+        },
+      ],
+    )
+  }
+
   return (
     <View style={styles.container}>
       <Mapbox.MapView
@@ -589,6 +613,20 @@ export function HistoryMapPlayer({
             <Text style={styles.sessionTitle} numberOfLines={1}>
               {new Date(selectedSession.startAtMs).toLocaleString()} · {selectedSession.deviceName}
             </Text>
+          )}
+          {selectedSession && (
+            <Pressable
+              style={[
+                styles.deleteButton,
+                (loadingSession || deletingSession) && styles.deleteButtonDisabled,
+              ]}
+              disabled={loadingSession || deletingSession}
+              accessibilityRole="button"
+              accessibilityLabel="Delete selected ride"
+              onPress={confirmRemoveSelectedSession}
+            >
+              <TrashIcon size={16} color="#fecaca" weight="bold" />
+            </Pressable>
           )}
         </View>
 
@@ -835,6 +873,19 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontSize: 12,
     flex: 1,
+  },
+  deleteButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#7f1d1d',
+    backgroundColor: '#451a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonDisabled: {
+    opacity: 0.45,
   },
   chartStack: {
     gap: 8,
