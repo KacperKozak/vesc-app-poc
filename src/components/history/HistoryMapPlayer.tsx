@@ -136,7 +136,7 @@ export function HistoryMapPlayer({
     if (!mapReady || !selectedSession || route.length < 2) return
     const fit = () => {
       const bounds = getBounds(route)
-      cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [80, 40, 360, 40], 700)
+      cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [80, 40, 80, 40], 700)
     }
     const frame = requestAnimationFrame(fit)
     const timer = setTimeout(fit, 120)
@@ -320,6 +320,10 @@ export function HistoryMapPlayer({
         style={styles.map}
         styleJSON={ONE_DARK_MAP_STYLE}
         onDidFinishLoadingMap={() => setMapReady(true)}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        logoEnabled={false}
+        attributionEnabled={false}
         onPress={(feature) => {
           const [longitude, latitude] = feature.geometry.coordinates
           onMapPress(latitude, longitude)
@@ -582,14 +586,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   controls: {
-    position: 'absolute',
-    left: 10,
-    right: 10,
-    bottom: 10,
+    marginHorizontal: 10,
+    marginBottom: 10,
+    marginTop: 6,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#334155',
-    backgroundColor: 'rgba(15,23,42,0.95)',
+    backgroundColor: '#0f172a',
     padding: 10,
     gap: 8,
   },
