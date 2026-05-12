@@ -22,7 +22,6 @@ interface DualGaugeProps {
   speedMax?: number
   dutyMax?: number
   speedAlerts?: DualGaugeAlert[]
-  distance?: string
 }
 
 // Quarter-arc geometry constants
@@ -102,7 +101,6 @@ function wedgePathRight(f: number) {
 }
 
 function rangeWedgePathLeft(fromFraction: number, toFraction: number) {
-  'worklet'
   const from = clamp01(fromFraction)
   const to = clamp01(toFraction)
   if (to <= from) return ''
@@ -120,7 +118,7 @@ const BG_ARC_RIGHT = arcPathRight(1)
 
 function AlertTick({ fraction }: { fraction: number }) {
   const inner = polarLeft(R - 3, fraction)
-  const outer = polarLeft(R - STROKE / 2, fraction)
+  const outer = polarLeft(R + STROKE / 2, fraction)
   return (
     <Line
       x1={inner.x}
@@ -300,19 +298,11 @@ export function DualGauge({
   speedMax = 50,
   dutyMax = 100,
   speedAlerts = [],
-  distance,
 }: DualGaugeProps) {
   const router = useRouter()
 
   return (
     <View style={styles.wrap}>
-      {distance ? (
-        <View style={styles.distanceCorner} pointerEvents="none">
-          <Text style={styles.distanceLabel}>TOTAL </Text>
-          <Text style={styles.distanceValue}>{distance}</Text>
-        </View>
-      ) : null}
-
       <View style={{ flexDirection: 'row' }}>
         <Pressable
           style={styles.halfPressable}
@@ -375,25 +365,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     marginBottom: 6,
     position: 'relative',
-  },
-  distanceCorner: {
-    position: 'absolute',
-    top: 12,
-    right: 14,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  distanceLabel: {
-    color: '#64748b',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-  },
-  distanceValue: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    fontFamily: 'monospace',
-    fontWeight: '700',
   },
   halfPressable: {
     flex: 1,

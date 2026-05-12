@@ -37,7 +37,6 @@ export function DualGaugeIndicator() {
       speedMax={SPEED_MAX}
       dutyMax={DUTY_MAX}
       speedAlerts={speedAlerts}
-      distance={undefined}
     />
   )
 }
