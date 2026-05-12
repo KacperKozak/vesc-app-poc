@@ -10,6 +10,10 @@ test('speed formatting uses absolute rounded values', () => {
   expect(telemetry.speed.formatWithUnit(-12.4)).toBe('12 km/h')
 })
 
+test('battery voltage formatting uses compact unit and single decimal', () => {
+  expect(telemetry.battVoltage.formatWithUnit(81.94)).toBe('81.9V')
+})
+
 test('control id lookup resolves alert-enabled metrics', () => {
   expect(telemetryByControlId['motor-current']).toBe(telemetry.motorCurrent)
   expect(telemetryByControlId.battery).toBe(telemetry.battVoltage)

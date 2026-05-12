@@ -19,6 +19,8 @@ export interface TelemetryMetricConfig {
 type TelemetryMetricDefinition = Omit<TelemetryMetricConfig, 'format' | 'formatWithUnit'> & {
   /** Display absolute values for this metric. */
   abs?: boolean
+  /** Remove the separator between number and unit in formatWithUnit. */
+  compactUnit?: boolean
 }
 
 type TelemetryDefinitions = Record<string, TelemetryMetricDefinition>
@@ -41,7 +43,8 @@ function defineMetric(config: TelemetryMetricDefinition): TelemetryMetricConfig 
     format: formatNumber,
     formatWithUnit: (v: number) => {
       const num = formatNumber(v)
-      return config.unit ? `${num} ${config.unit}` : num
+      if (!config.unit) return num
+      return config.compactUnit ? `${num}${config.unit}` : `${num} ${config.unit}`
     },
   }
 }
@@ -94,7 +97,8 @@ const telemetryDefinitions = {
     label: 'Battery Voltage',
     unit: 'V',
     color: '#4ade80',
-    decimals: 2,
+    decimals: 1,
+    compactUnit: true,
     chartRange: { min: 0, max: 100 },
     minSpan: 2,
     controlId: 'battery',
