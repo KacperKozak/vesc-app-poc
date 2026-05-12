@@ -295,20 +295,22 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
       {isLeft ? (
         <>
           <Text style={[styles.tick, styles.tickBottomLeft]} pointerEvents="none">
-            {'0 '}
+            {'0'}
             <Text style={styles.tickUnit}>{unit}</Text>
           </Text>
           <Text style={[styles.tick, styles.tickTopRight]} pointerEvents="none">
-            {max} <Text style={styles.tickUnit}>{unit}</Text>
+            {max}
+            <Text style={styles.tickUnit}>{unit}</Text>
           </Text>
         </>
       ) : (
         <>
           <Text style={[styles.tick, styles.tickTopLeft]} pointerEvents="none">
-            {max} <Text style={styles.tickUnit}>{unit}</Text>
+            {max}
+            <Text style={styles.tickUnit}>{unit}</Text>
           </Text>
           <Text style={[styles.tick, styles.tickBottomRight]} pointerEvents="none">
-            {'0 '}
+            {'0'}
             <Text style={styles.tickUnit}>{unit}</Text>
           </Text>
         </>
