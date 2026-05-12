@@ -4,10 +4,9 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import {
   BatteryIndicator,
   CurrentsCard,
-  DutyCard,
+  DualGaugeIndicator,
   FootpadCard,
   ImuCard,
-  SpeedIndicator,
   TargetSection,
   TemperaturesCard,
 } from '@/components/cards'
@@ -35,30 +34,9 @@ export function TelemetryView() {
         >
           <BatteryIndicator />
         </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.cardPressable, pressed && styles.cardPressablePressed]}
-          onPress={() => router.push(routes.controlSpeed)}
-          android_ripple={{
-            color: 'rgba(148, 163, 184, 0.18)',
-            borderless: false,
-            foreground: true,
-          }}
-        >
-          <SpeedIndicator />
-        </Pressable>
+        <DualGaugeIndicator />
 
         <View style={styles.row}>
-          <Pressable
-            style={({ pressed }) => [styles.rowItem, pressed && styles.cardPressablePressed]}
-            onPress={() => router.push(routes.controlDuty)}
-            android_ripple={{
-              color: 'rgba(148, 163, 184, 0.18)',
-              borderless: false,
-              foreground: true,
-            }}
-          >
-            <DutyCard />
-          </Pressable>
           <Pressable
             style={({ pressed }) => [styles.rowItem, pressed && styles.cardPressablePressed]}
             onPress={() => router.push(routes.controlTemperatures)}
@@ -70,8 +48,6 @@ export function TelemetryView() {
           >
             <TemperaturesCard />
           </Pressable>
-        </View>
-        <View style={styles.row}>
           <Pressable
             style={({ pressed }) => [styles.rowItem, pressed && styles.cardPressablePressed]}
             onPress={() => router.push(routes.controlCurrents)}
@@ -83,6 +59,8 @@ export function TelemetryView() {
           >
             <CurrentsCard />
           </Pressable>
+        </View>
+        <View style={styles.row}>
           <Pressable
             style={({ pressed }) => [styles.rowItem, pressed && styles.cardPressablePressed]}
             onPress={() => router.push(routes.controlFootpad)}
@@ -94,8 +72,6 @@ export function TelemetryView() {
           >
             <FootpadCard />
           </Pressable>
-        </View>
-        <View style={styles.row}>
           <Pressable
             style={({ pressed }) => [styles.rowItem, pressed && styles.cardPressablePressed]}
             onPress={() => router.push(routes.controlImu)}
