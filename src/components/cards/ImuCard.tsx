@@ -1,12 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Sparkline, type SparklinePoint } from '@/components/charts/Sparkline'
-import { theme } from '@/constants/theme'
-import { DASH, fmt } from '@/helpers/format'
+import { telemetry } from '@/constants/telemetry'
+import { DASH } from '@/helpers/format'
 import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
 export function ImuCard() {
+  const pitchCfg = telemetry.pitch
+  const rollCfg = telemetry.roll
+  const balanceCfg = telemetry.balancePitch
   const pitchSeries = useLiveMetric(liveSelectors.pitch)
   const rollSeries = useLiveMetric(liveSelectors.roll)
   const balanceSeries = useLiveMetric(liveSelectors.balancePitch)
@@ -21,25 +24,25 @@ export function ImuCard() {
       <View style={styles.row}>
         <ImuColumn
           label="P"
-          value={latestPitch ? `${fmt(latestPitch.value, 0)}°` : DASH}
+          value={latestPitch ? pitchCfg.formatWithUnit(latestPitch.value) : DASH}
           series={pitchSeries}
-          color={theme.wheel.color}
+          color={pitchCfg.color}
           windowMs={windowMs}
         />
         <View style={styles.divider} />
         <ImuColumn
           label="R"
-          value={latestRoll ? `${fmt(latestRoll.value, 0)}°` : DASH}
+          value={latestRoll ? rollCfg.formatWithUnit(latestRoll.value) : DASH}
           series={rollSeries}
-          color={theme.bran.color}
+          color={rollCfg.color}
           windowMs={windowMs}
         />
         <View style={styles.divider} />
         <ImuColumn
           label="B"
-          value={latestBalance ? `${fmt(latestBalance.value, 0)}°` : DASH}
+          value={latestBalance ? balanceCfg.formatWithUnit(latestBalance.value) : DASH}
           series={balanceSeries}
-          color={theme.target.color}
+          color={balanceCfg.color}
           windowMs={windowMs}
         />
       </View>

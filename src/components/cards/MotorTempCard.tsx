@@ -1,12 +1,12 @@
 import { TelemetryCard } from '@/components/TelemetryCard'
-import { theme } from '@/constants/theme'
-import { DASH, fmtTemp } from '@/helpers/format'
+import { telemetry } from '@/constants/telemetry'
+import { DASH } from '@/helpers/format'
 import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 import { liveTelemetryRuntime } from '@/telemetry/liveTelemetryRuntime'
 
-const FMT_MAX = (v: number) => `${fmtTemp(v)}°C`
-const MIN_SPAN = 30
+const cfg = telemetry.motorTemp
+const FMT_MAX = (v: number) => cfg.formatWithUnit(v)
 
 export function MotorTempCard() {
   const series = useLiveMetric(liveSelectors.motorTemp)
@@ -14,16 +14,16 @@ export function MotorTempCard() {
 
   return (
     <TelemetryCard
-      controlId="motor-temp"
-      label="Motor Temp"
+      controlId={cfg.controlId}
+      label={cfg.label}
       value={DASH}
-      unit="°C"
+      unit={cfg.unit}
       animatedValue={liveTelemetryRuntime.values.motorTemp}
-      animatedDecimals={0}
+      animatedDecimals={cfg.decimals}
       series={series}
-      seriesColor={theme.warning.color}
+      seriesColor={cfg.color}
       fmtMax={FMT_MAX}
-      minSpan={MIN_SPAN}
+      minSpan={cfg.minSpan}
       windowMs={windowMs}
     />
   )

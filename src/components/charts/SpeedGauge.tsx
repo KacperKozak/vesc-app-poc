@@ -4,8 +4,8 @@ import Animated, { useAnimatedProps, type SharedValue } from 'react-native-reani
 import Svg, { Defs, Line, Path, RadialGradient, Stop } from 'react-native-svg'
 
 import { Sparkline, type SparklinePoint } from '@/components/charts/Sparkline'
+import { telemetry } from '@/constants/telemetry'
 import { theme } from '@/constants/theme'
-import { fmtSpeed } from '@/helpers/format'
 
 interface Props {
   /** Current VESC speed in km/h. */
@@ -83,8 +83,8 @@ function rangeWedgePath(fromFraction: number, toFraction: number) {
 // Background track is constant — draw it once at module load, not per render.
 const BG_ARC_PATH = arcPath(1)
 
-function fmtSpeedWithUnit(value: number) {
-  return `${fmtSpeed(value)} km/h`
+function formatSpeedWithUnit(value: number) {
+  return telemetry.speed.formatWithUnit(value)
 }
 
 /**
@@ -101,7 +101,7 @@ export function SpeedGauge({
   max = 50,
   alerts = [],
 }: Props) {
-  const color = theme.wheel.color
+  const color = telemetry.speed.color
   const sparkRange = useMemo(() => (max === SPARK_RANGE.max ? SPARK_RANGE : { min: 0, max }), [max])
   const animatedValueProps = useAnimatedProps(() => {
     const current = value.value
@@ -223,7 +223,7 @@ export function SpeedGauge({
           />
           <Text style={styles.gpsText}>
             <Text style={styles.gpsLabel}>GPS </Text>
-            {gpsValue != null ? fmtSpeedWithUnit(gpsValue) : '—'}
+            {gpsValue != null ? formatSpeedWithUnit(gpsValue) : '—'}
           </Text>
         </View>
       </View>
@@ -235,7 +235,7 @@ export function SpeedGauge({
             color={color}
             height={28}
             range={sparkRange}
-            fmtMax={fmtSpeedWithUnit}
+            fmtMax={formatSpeedWithUnit}
             windowMs={windowMs}
           />
         </View>

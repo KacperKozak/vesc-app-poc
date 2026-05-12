@@ -1,12 +1,14 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Sparkline, type SparklinePoint } from '@/components/charts/Sparkline'
-import { theme } from '@/constants/theme'
+import { telemetry } from '@/constants/telemetry'
 import { DASH } from '@/helpers/format'
 import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
 export function FootpadCard() {
+  const adc1 = telemetry.footpadAdc1
+  const adc2 = telemetry.footpadAdc2
   const adc1Series = useLiveMetric(liveSelectors.footpadAdc1)
   const adc2Series = useLiveMetric(liveSelectors.footpadAdc2)
   const windowMs = useLiveWindowMs()
@@ -18,18 +20,18 @@ export function FootpadCard() {
       <Text style={styles.cardLabel}>Footpad</Text>
       <View style={styles.row}>
         <AdcColumn
-          label="ADC 1"
-          value={latestAdc1 ? latestAdc1.value.toFixed(2) : DASH}
+          label={adc1.label}
+          value={latestAdc1 ? adc1.format(latestAdc1.value) : DASH}
           series={adc1Series}
-          color={theme.wheel.color}
+          color={adc1.color}
           windowMs={windowMs}
         />
         <View style={styles.divider} />
         <AdcColumn
-          label="ADC 2"
-          value={latestAdc2 ? latestAdc2.value.toFixed(2) : DASH}
+          label={adc2.label}
+          value={latestAdc2 ? adc2.format(latestAdc2.value) : DASH}
           series={adc2Series}
-          color={theme.bran.color}
+          color={adc2.color}
           windowMs={windowMs}
         />
       </View>

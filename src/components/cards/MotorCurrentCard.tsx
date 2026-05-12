@@ -1,12 +1,12 @@
 import { TelemetryCard } from '@/components/TelemetryCard'
-import { theme } from '@/constants/theme'
-import { DASH, fmtCurrent } from '@/helpers/format'
+import { telemetry } from '@/constants/telemetry'
+import { DASH } from '@/helpers/format'
 import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 import { liveTelemetryRuntime } from '@/telemetry/liveTelemetryRuntime'
 
-const FMT_MAX = (v: number) => `${fmtCurrent(v)} A`
-const MIN_SPAN = 20
+const cfg = telemetry.motorCurrent
+const FMT_MAX = (v: number) => cfg.formatWithUnit(v)
 
 export function MotorCurrentCard() {
   const series = useLiveMetric(liveSelectors.motorCurrent)
@@ -14,16 +14,16 @@ export function MotorCurrentCard() {
 
   return (
     <TelemetryCard
-      controlId="motor-current"
-      label="Motor Current"
+      controlId={cfg.controlId}
+      label={cfg.label}
       value={DASH}
-      unit="A"
+      unit={cfg.unit}
       animatedValue={liveTelemetryRuntime.values.motorCurrent}
-      animatedDecimals={0}
+      animatedDecimals={cfg.decimals}
       series={series}
-      seriesColor={theme.bran.color}
+      seriesColor={cfg.color}
       fmtMax={FMT_MAX}
-      minSpan={MIN_SPAN}
+      minSpan={cfg.minSpan}
       windowMs={windowMs}
     />
   )
