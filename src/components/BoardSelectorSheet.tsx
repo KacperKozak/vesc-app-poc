@@ -3,11 +3,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   CheckCircleIcon,
   LightningIcon,
+  PencilSimpleIcon,
   PlusIcon,
   StarIcon,
   RadioButtonIcon,
   RecordIcon,
 } from 'phosphor-react-native'
+import { router } from 'expo-router'
+import { routes } from '@/navigation/routes'
 
 import type { Board } from '@/store/boardStore'
 import { theme } from '@/constants/theme'
@@ -70,6 +73,15 @@ export function BoardSelectorSheet({
                   )}
                 </View>
                 {isActive && <CheckCircleIcon size={20} color={theme.wheel.color} weight="fill" />}
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation()
+                    router.push({ pathname: routes.addBoardDetails, params: { boardId: board.id } })
+                  }}
+                  hitSlop={8}
+                >
+                  <PencilSimpleIcon size={15} color="#475569" weight="bold" />
+                </Pressable>
               </Pressable>
             )
           })}

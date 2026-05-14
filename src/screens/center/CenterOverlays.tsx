@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { RefObject } from 'react'
 import { ArrowLeftIcon, ClockCounterClockwiseIcon } from 'phosphor-react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { BottomTelemetryStrip } from '@/screens/center/BottomTelemetryStrip'
+import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
 import { HistoryControls } from '@/screens/center/HistoryControls'
 import { HistoryTelemetryPanel } from '@/screens/center/HistoryTelemetryPanel'
 import { LiveHud } from '@/screens/center/LiveHud'
@@ -100,6 +101,9 @@ export function CenterOverlays({
   selectRide,
   exitRideReview,
 }: CenterOverlaysProps) {
+  const insets = useSafeAreaInsets()
+  const aboveStripBottom = STRIP_CONTENT_HEIGHT + Math.max(insets.bottom, 6) + 8
+
   return (
     <>
       {flags.showTelemetry && (
@@ -125,9 +129,12 @@ export function CenterOverlays({
             activeBoard={activeBoard}
             onStopScan={onStopScan}
             onRetryConnect={onRetryConnect}
-            bottomOffset={73}
+            bottomOffset={aboveStripBottom}
           />
-          <Pressable style={styles.historyButton} onPress={() => void enterRideReview()}>
+          <Pressable
+            style={[styles.historyButton, { bottom: aboveStripBottom }]}
+            onPress={() => void enterRideReview()}
+          >
             <ClockCounterClockwiseIcon size={18} color="#f8fafc" weight="bold" />
           </Pressable>
         </>
@@ -135,7 +142,10 @@ export function CenterOverlays({
 
       {flags.showMapFocus && (
         <>
-          <Pressable style={styles.backButton} onPress={exitMapFocus}>
+          <Pressable
+            style={[styles.backButton, { top: Math.max(insets.top, 8) }]}
+            onPress={exitMapFocus}
+          >
             <ArrowLeftIcon size={20} color="#f8fafc" weight="bold" />
           </Pressable>
           <MapControls
@@ -198,7 +208,7 @@ export function CenterOverlays({
       />
 
       {historyError ? (
-        <View style={styles.historyError}>
+        <View style={[styles.historyError, { bottom: aboveStripBottom }]}>
           <Text style={styles.historyErrorText} selectable>
             {historyError}
           </Text>
@@ -211,12 +221,11 @@ export function CenterOverlays({
 const styles = StyleSheet.create({
   backButton: {
     position: 'absolute',
-    top: 44,
-    left: 12,
+    left: 10,
     zIndex: 30,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -226,7 +235,6 @@ const styles = StyleSheet.create({
   historyButton: {
     position: 'absolute',
     right: 12,
-    bottom: 76,
     zIndex: 20,
     width: 42,
     height: 42,
@@ -241,7 +249,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     right: 12,
-    bottom: 76,
     zIndex: 25,
     borderRadius: 10,
     padding: 10,

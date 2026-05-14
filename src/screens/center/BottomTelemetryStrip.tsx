@@ -13,6 +13,7 @@ interface BottomTelemetryStripProps {
 }
 
 const FOOTPAD_ACTIVE_V = 0.8
+export const STRIP_CONTENT_HEIGHT = 80
 
 export function BottomTelemetryStrip({ visible }: BottomTelemetryStripProps) {
   const insets = useSafeAreaInsets()
@@ -37,186 +38,181 @@ export function BottomTelemetryStrip({ visible }: BottomTelemetryStripProps) {
   const pitchDeg = Math.max(-18, Math.min(18, pitch))
 
   return (
-    <View style={[styles.wrap, { bottom: Math.max(insets.bottom, 8) }]} pointerEvents="box-none">
+    <View
+      style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 6) }]}
+      pointerEvents="box-none"
+    >
       <View style={styles.strip}>
-        <Pressable style={styles.cellWide} onPress={() => router.push(routes.controlTemperatures)}>
-          <Text style={styles.label}>Temps</Text>
-          <View style={styles.tempRow}>
-            <Text style={styles.subLabel}>M</Text>
-            <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
-              {formatValue(motorTemp, telemetry.motorTemp.formatWithUnit)}
-            </Text>
-            <Text style={styles.subLabel}>C</Text>
-            <Text style={styles.valueMuted} numberOfLines={1} adjustsFontSizeToFit>
-              {formatValue(controllerTemp, telemetry.controllerTemp.formatWithUnit)}
-            </Text>
-          </View>
-          <View style={styles.sparkRow}>
-            <Sparkline
-              points={motorTempSeries}
-              color={telemetry.motorTemp.color}
-              height={12}
-              minSpan={20}
-              showMaxBadge={false}
-              windowMs={windowMs}
-            />
-            <Sparkline
-              points={controllerTempSeries}
-              color={telemetry.controllerTemp.color}
-              height={12}
-              minSpan={20}
-              showMaxBadge={false}
-              windowMs={windowMs}
-            />
-          </View>
-        </Pressable>
-
-        <Pressable style={styles.cellWide} onPress={() => router.push(routes.controlCurrents)}>
-          <Text style={styles.label}>Current</Text>
-          <View style={styles.currentRow}>
-            <Text style={styles.subLabel}>Motor</Text>
-            <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
-              {formatValue(motorCurrent, telemetry.motorCurrent.formatWithUnit)}
-            </Text>
-          </View>
-          <View style={styles.currentRow}>
-            <Text style={styles.subLabel}>Batt</Text>
-            <Text style={styles.valueMuted} numberOfLines={1} adjustsFontSizeToFit>
-              {formatValue(batteryCurrent, telemetry.battCurrent.formatWithUnit)}
-            </Text>
+        <Pressable style={styles.section} onPress={() => router.push(routes.controlTemperatures)}>
+          <View style={styles.sectionGrid}>
+            <View style={styles.metricCell}>
+              <Text style={styles.subLabel}>Motor</Text>
+              <Text style={styles.value} numberOfLines={1}>
+                {fmtVal(motorTemp, telemetry.motorTemp.formatWithUnit)}
+              </Text>
+              <Sparkline
+                points={motorTempSeries}
+                color={telemetry.motorTemp.color}
+                height={18}
+                fmtMax={telemetry.motorTemp.formatWithUnit}
+                showMaxBadge
+                minSpan={20}
+                windowMs={windowMs}
+              />
+            </View>
+            <View style={styles.metricCell}>
+              <Text style={styles.subLabel}>Ctrl</Text>
+              <Text style={styles.value} numberOfLines={1}>
+                {fmtVal(controllerTemp, telemetry.controllerTemp.formatWithUnit)}
+              </Text>
+              <Sparkline
+                points={controllerTempSeries}
+                color={telemetry.controllerTemp.color}
+                height={18}
+                fmtMax={telemetry.controllerTemp.formatWithUnit}
+                showMaxBadge
+                minSpan={20}
+                windowMs={windowMs}
+              />
+            </View>
           </View>
         </Pressable>
 
-        <Pressable style={styles.cell} onPress={() => router.push(routes.controlFootpad)}>
-          <Text style={styles.label}>Pad</Text>
-          <View style={styles.footpadRow}>
-            <View
-              style={[
-                styles.footpadDot,
-                adc1 != null && adc1 > FOOTPAD_ACTIVE_V && styles.footpadActive,
-              ]}
-            />
-            <View
-              style={[
-                styles.footpadDot,
-                adc2 != null && adc2 > FOOTPAD_ACTIVE_V && styles.footpadActive,
-              ]}
-            />
+        <Pressable style={styles.section} onPress={() => router.push(routes.controlCurrents)}>
+          <View style={styles.sectionGrid}>
+            <View style={styles.metricCell}>
+              <Text style={styles.subLabel}>Motor</Text>
+              <Text style={styles.value} numberOfLines={1}>
+                {fmtVal(motorCurrent, telemetry.motorCurrent.formatWithUnit)}
+              </Text>
+              <Sparkline
+                points={motorCurrentSeries}
+                color={telemetry.motorCurrent.color}
+                height={18}
+                fmtMax={telemetry.motorCurrent.formatWithUnit}
+                showMaxBadge
+                minSpan={20}
+                windowMs={windowMs}
+              />
+            </View>
+            <View style={styles.metricCell}>
+              <Text style={styles.subLabel}>Batt</Text>
+              <Text style={styles.value} numberOfLines={1}>
+                {fmtVal(batteryCurrent, telemetry.battCurrent.formatWithUnit)}
+              </Text>
+              <Sparkline
+                points={batteryCurrentSeries}
+                color={telemetry.battCurrent.color}
+                height={18}
+                fmtMax={telemetry.battCurrent.formatWithUnit}
+                showMaxBadge
+                minSpan={20}
+                windowMs={windowMs}
+              />
+            </View>
           </View>
         </Pressable>
 
-        <Pressable style={styles.cell} onPress={() => router.push(routes.controlImu)}>
-          <Text style={styles.label}>IMU</Text>
-          <View style={styles.imuIcon}>
-            <View style={[styles.imuBoard, { transform: [{ rotate: `${pitchDeg}deg` }] }]} />
-          </View>
-        </Pressable>
+        <View style={styles.smallColumn}>
+          <Pressable style={styles.smallCell} onPress={() => router.push(routes.controlFootpad)}>
+            <View style={styles.footpadRow}>
+              <View
+                style={[
+                  styles.footpadDot,
+                  adc1 != null && adc1 > FOOTPAD_ACTIVE_V && styles.footpadActive,
+                ]}
+              />
+              <View
+                style={[
+                  styles.footpadDot,
+                  adc2 != null && adc2 > FOOTPAD_ACTIVE_V && styles.footpadActive,
+                ]}
+              />
+            </View>
+          </Pressable>
+
+          <Pressable style={styles.smallCell} onPress={() => router.push(routes.controlImu)}>
+            <View style={[styles.imuLine, { transform: [{ rotate: `${pitchDeg}deg` }] }]} />
+          </Pressable>
+        </View>
       </View>
     </View>
   )
 }
 
-function formatValue(value: number | null, format: (value: number) => string): string {
+function fmtVal(value: number | null, format: (value: number) => string): string {
   return value == null || !Number.isFinite(value) ? '-' : format(value)
 }
 
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
-    left: 6,
-    right: 6,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 10,
   },
   strip: {
-    minHeight: 64,
     flexDirection: 'row',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.22)',
-    backgroundColor: 'rgba(15, 23, 42, 0.42)',
-    overflow: 'hidden',
+    paddingTop: 6,
+    paddingBottom: 4,
   },
-  cell: {
-    width: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    gap: 5,
-  },
-  cellWide: {
+  section: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    gap: 2,
+    paddingHorizontal: 6,
   },
-  label: {
-    color: 'rgba(203, 213, 225, 0.78)',
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  tempRow: {
+  sectionGrid: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    maxWidth: '100%',
+    gap: 8,
   },
-  currentRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    maxWidth: '100%',
+  metricCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
   subLabel: {
     color: '#64748b',
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   value: {
     color: '#f8fafc',
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'monospace',
     fontWeight: '800',
   },
-  valueMuted: {
-    color: '#94a3b8',
-    fontSize: 11,
-    fontFamily: 'monospace',
-    fontWeight: '800',
+  smallColumn: {
+    width: 44,
+    justifyContent: 'space-evenly',
+    paddingRight: 6,
   },
-  sparkRow: {
-    height: 24,
-    width: '100%',
-    gap: 1,
+  smallCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
   },
   footpadRow: {
     flexDirection: 'row',
-    gap: 5,
+    gap: 6,
   },
   footpadDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#64748b',
-    backgroundColor: 'rgba(100, 116, 139, 0.22)',
+    borderColor: '#475569',
+    backgroundColor: 'transparent',
   },
   footpadActive: {
     borderColor: '#4ade80',
     backgroundColor: '#4ade80',
   },
-  imuIcon: {
-    width: 30,
-    height: 16,
-    justifyContent: 'center',
-  },
-  imuBoard: {
-    width: 30,
-    height: 7,
-    borderRadius: 4,
+  imuLine: {
+    width: 28,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: '#a78bfa',
   },
 })

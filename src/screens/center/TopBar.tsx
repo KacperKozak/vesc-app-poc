@@ -4,8 +4,9 @@ import {
   CaretDownIcon,
   GearSixIcon,
   PencilSimpleIcon,
-  PlugsConnectedIcon,
   PlugsIcon,
+  PowerIcon,
+  UserCircleIcon,
   XCircleIcon,
 } from 'phosphor-react-native'
 import { router } from 'expo-router'
@@ -28,6 +29,7 @@ interface TopBarProps {
   onToggleRecordDebug: () => void
   onDisconnect: () => void
   onRetryConnect: () => void
+  onOpenProfile?: () => void
 }
 
 export function TopBar({
@@ -42,6 +44,7 @@ export function TopBar({
   onToggleRecordDebug,
   onDisconnect,
   onRetryConnect,
+  onOpenProfile,
 }: TopBarProps) {
   const insets = useSafeAreaInsets()
   const [selectorOpen, setSelectorOpen] = useState(false)
@@ -63,42 +66,54 @@ export function TopBar({
 
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) }]} pointerEvents="box-none">
-      <View style={styles.pill}>
-        <Pressable style={styles.boardButton} onPress={() => setSelectorOpen(true)}>
-          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-          <Text style={styles.boardText} numberOfLines={1}>
-            {name}
-          </Text>
-          <CaretDownIcon size={12} color="#cbd5e1" weight="bold" />
+      <View style={styles.row}>
+        {/* Left: profile */}
+        <Pressable style={[styles.iconRound, styles.iconLeft]} onPress={onOpenProfile}>
+          <UserCircleIcon size={18} color="#cbd5e1" weight="bold" />
         </Pressable>
-        <View style={styles.divider} />
-        <Pressable style={styles.iconButton} onPress={() => router.push(routes.settings)}>
-          <GearSixIcon size={15} color="#e2e8f0" weight="bold" />
-        </Pressable>
-        <View style={styles.divider} />
+
+        {/* Center: board pill — View not Pressable, so nested buttons work */}
+        <View style={styles.pill}>
+          <Pressable style={styles.boardButton} onPress={() => setSelectorOpen(true)}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={styles.boardText} numberOfLines={1}>
+              {name}
+            </Text>
+            <CaretDownIcon size={12} color="#cbd5e1" weight="bold" />
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable
+            style={[styles.plugButton, !activeBoard && styles.iconRoundDisabled]}
+            disabled={!activeBoard}
+            onPress={() => {
+              if (!activeBoard) return
+              router.push({ pathname: routes.addBoardDetails, params: { boardId: activeBoard.id } })
+            }}
+          >
+            <PencilSimpleIcon size={14} color={activeBoard ? '#e2e8f0' : '#64748b'} weight="bold" />
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable
+            style={styles.plugButton}
+            onPress={canDisconnect ? onDisconnect : onRetryConnect}
+            disabled={!canDisconnect && !canRetry}
+          >
+            {canDisconnect ? (
+              <PowerIcon size={15} color="#fca5a5" weight="bold" />
+            ) : canRetry ? (
+              <PlugsIcon size={15} color="#facc15" weight="bold" />
+            ) : (
+              <XCircleIcon size={15} color="#94a3b8" weight="bold" />
+            )}
+          </Pressable>
+        </View>
+
+        {/* Right: gear */}
         <Pressable
-          style={styles.iconButton}
-          disabled={!activeBoard}
-          onPress={() => {
-            if (!activeBoard) return
-            router.push({ pathname: routes.addBoardDetails, params: { boardId: activeBoard.id } })
-          }}
+          style={[styles.iconRound, styles.iconRight]}
+          onPress={() => router.push(routes.settings)}
         >
-          <PencilSimpleIcon size={15} color={activeBoard ? '#e2e8f0' : '#64748b'} weight="bold" />
-        </Pressable>
-        <View style={styles.divider} />
-        <Pressable
-          style={styles.iconButton}
-          onPress={canDisconnect ? onDisconnect : onRetryConnect}
-          disabled={!canDisconnect && !canRetry}
-        >
-          {canDisconnect ? (
-            <PlugsConnectedIcon size={16} color="#fca5a5" weight="bold" />
-          ) : canRetry ? (
-            <PlugsIcon size={16} color="#facc15" weight="bold" />
-          ) : (
-            <XCircleIcon size={16} color="#94a3b8" weight="bold" />
-          )}
+          <GearSixIcon size={15} color="#cbd5e1" weight="bold" />
         </Pressable>
       </View>
 
@@ -129,14 +144,39 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    alignItems: 'center',
   },
-  pill: {
-    minHeight: 36,
-    maxWidth: 260,
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  iconRound: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.28)',
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+  },
+  iconRoundDisabled: {
+    opacity: 0.4,
+  },
+  iconLeft: {
+    position: 'absolute',
+    left: 10,
+  },
+  iconRight: {
+    position: 'absolute',
+    right: 10,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 38,
+    borderRadius: 19,
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.28)',
     backgroundColor: 'rgba(15, 23, 42, 0.72)',
@@ -148,8 +188,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingLeft: 10,
     paddingRight: 8,
-    minHeight: 36,
-    maxWidth: 124,
+    minHeight: 38,
   },
   statusDot: {
     width: 7,
@@ -160,16 +199,17 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 13,
     fontWeight: '800',
-    maxWidth: 84,
+    maxWidth: 120,
+    flexShrink: 1,
   },
   divider: {
     width: 1,
     height: 20,
     backgroundColor: 'rgba(148, 163, 184, 0.22)',
   },
-  iconButton: {
-    width: 34,
-    minHeight: 36,
+  plugButton: {
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
