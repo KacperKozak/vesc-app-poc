@@ -1,6 +1,14 @@
-import { useRef, useState } from 'react'
-import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native'
-import { router } from 'expo-router'
+import { useCallback, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  BackHandler,
+  ToastAndroid,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+} from 'react-native'
+import { router, useFocusEffect } from 'expo-router'
 import { ArrowLeftIcon, ClockCounterClockwiseIcon } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -54,6 +62,7 @@ export function CenterScreen({
   onToggleRecordDebug,
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
+  const backPressedOnce = useRef(false)
   const [mapFocused, setMapFocused] = useState(false)
   const [historySheetVisible, setHistorySheetVisible] = useState(false)
   const [historyLoadedOnce, setHistoryLoadedOnce] = useState(false)
@@ -98,10 +107,10 @@ export function CenterScreen({
   const nextRide = getNextRideSession(sessions, selectedSession)
   const showBaseOverlays = canShowBaseOverlays({ mapFocused, hasRide: rideActive })
 
-  const exitMapFocus = () => {
+  const exitMapFocus = useCallback(() => {
     setMapFocused(false)
     mapRef.current?.recenterLive()
-  }
+  }, [])
 
   const enterRideReview = async () => {
     setMapFocused(false)
@@ -115,16 +124,42 @@ export function CenterScreen({
     }
   }
 
-  const exitRideReview = () => {
+  const exitRideReview = useCallback(() => {
     void selectSession(null)
     setMapFocused(false)
     requestAnimationFrame(() => mapRef.current?.recenterLive())
-  }
+  }, [selectSession])
 
   const selectRide = (session: HistorySession) => {
     setHistorySheetVisible(false)
     void selectSession(session)
   }
+
+  useFocusEffect(
+    useCallback(() => {
+      const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (rideActive) {
+          exitRideReview()
+          return true
+        }
+        if (mapFocused) {
+          exitMapFocus()
+          return true
+        }
+        if (backPressedOnce.current) {
+          BackHandler.exitApp()
+          return true
+        }
+        backPressedOnce.current = true
+        ToastAndroid.show('Press back again to exit', ToastAndroid.SHORT)
+        setTimeout(() => {
+          backPressedOnce.current = false
+        }, 2000)
+        return true
+      })
+      return () => handler.remove()
+    }, [exitMapFocus, exitRideReview, mapFocused, rideActive]),
+  )
 
   if (!boardsLoaded) {
     return (
