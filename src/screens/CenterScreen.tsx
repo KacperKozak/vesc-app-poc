@@ -1,10 +1,15 @@
+import { useRef, useState } from 'react'
 import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
+import { useShallow } from 'zustand/react/shallow'
 
+import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
 import { FloatingBar } from '@/components/FloatingBar'
-import { TelemetryView } from '@/components/TelemetryView'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
+import { useBleStore } from '@/store/bleStore'
+import { useMapStore } from '@/store/mapStore'
+import { type MapStyleKey } from '@/constants/mapStyles'
 
 interface CenterScreenProps {
   activeBoard: Board | undefined
@@ -21,7 +26,22 @@ export function CenterScreen({
   onStopScan,
   onRetryConnect,
 }: CenterScreenProps) {
+  const mapRef = useRef<CenterMapHandle>(null)
+  const [mapStyleKey] = useState<MapStyleKey>('onedark')
+  const [heading, setHeading] = useState(0)
+  const [rotationLocked] = useState(false)
+  const [perspectiveEnabled, setPerspectiveEnabled] = useState(true)
+  const liveLocations = useBleStore((s) => s.liveLocationHistory)
+  const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore(
+    useShallow((s) => ({
+      targetLocation: s.targetLocation,
+      setTargetLocation: s.setTargetLocation,
+      clearTargetLocation: s.clearTargetLocation,
+    })),
+  )
   const hasBle = !!activeBoard?.bleId
+  void mapRef
+  void heading
 
   if (!boardsLoaded) {
     return (
@@ -69,7 +89,22 @@ export function CenterScreen({
 
   return (
     <View style={styles.container}>
-      <TelemetryView />
+      <CenterMap
+        ref={mapRef}
+        liveLocations={liveLocations}
+        rideGpsSamples={[]}
+        rideMarkers={[]}
+        rideActive={false}
+        mapStyleKey={mapStyleKey}
+        rotationLocked={rotationLocked}
+        perspectiveEnabled={perspectiveEnabled}
+        onPerspectiveChange={setPerspectiveEnabled}
+        onHeadingChange={setHeading}
+        onMapFocus={() => undefined}
+        onLongPressTarget={setTargetLocation}
+        targetLocation={targetLocation}
+        onClearTarget={clearTargetLocation}
+      />
       <FloatingBar
         bleStatus={bleStatus}
         activeBoard={activeBoard}
