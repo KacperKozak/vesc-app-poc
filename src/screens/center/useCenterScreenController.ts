@@ -92,6 +92,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     void selectSession(null)
     setHistorySheetVisible(false)
     setViewState('telemetry')
+    mapRef.current?.setPadding(0)
     requestAnimationFrame(() => mapRef.current?.recenterLive())
   }, [mapRef, selectSession])
 

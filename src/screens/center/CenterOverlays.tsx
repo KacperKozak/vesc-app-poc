@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import type { RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import { ArrowLeftIcon, ClockCounterClockwiseIcon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -105,6 +105,19 @@ export function CenterOverlays({
 }: CenterOverlaysProps) {
   const insets = useSafeAreaInsets()
   const aboveStripBottom = STRIP_CONTENT_HEIGHT + Math.max(insets.bottom, 6) + 8
+  const [panelHeight, setPanelHeight] = useState(0)
+
+  useEffect(() => {
+    if (!flags.showRideReview) {
+      mapRef.current?.setPadding(0)
+    }
+  }, [flags.showRideReview, mapRef])
+
+  useEffect(() => {
+    if (flags.showRideReview && panelHeight > 0) {
+      mapRef.current?.setPadding(panelHeight + 12)
+    }
+  }, [flags.showRideReview, mapRef, panelHeight])
 
   return (
     <>
@@ -168,11 +181,12 @@ export function CenterOverlays({
 
       {flags.showRideReview && selectedSession && (
         <>
-          <MapVignette visible mode="history" />
+          <MapVignette visible mode="history" panelHeight={panelHeight} />
           <HistoryTelemetryPanel
             samples={sessionSamples}
             loading={loadingSession}
             onSeek={onSeek}
+            onHeightChange={setPanelHeight}
           />
           <HistoryControls
             title={`${new Date(selectedSession.startAtMs).toLocaleString()} · ${

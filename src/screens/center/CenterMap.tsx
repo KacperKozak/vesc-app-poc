@@ -41,6 +41,7 @@ export interface CenterMapHandle {
   fitRide: () => void
   resetRotation: () => void
   togglePerspective: () => void
+  setPadding: (bottom: number) => void
 }
 
 interface CenterMapProps {
@@ -172,6 +173,13 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         cameraRef.current?.setCamera({
           pitch: enabled ? MAP_DEFAULTS.activePitch : 0,
           animationDuration: MAP_DEFAULTS.animationDuration,
+          animationMode: 'easeTo',
+        })
+      },
+      setPadding(bottom: number) {
+        cameraRef.current?.setCamera({
+          padding: { paddingBottom: bottom, paddingTop: 0, paddingLeft: 0, paddingRight: 0 },
+          animationDuration: bottom === 0 ? 0 : 300,
           animationMode: 'easeTo',
         })
       },

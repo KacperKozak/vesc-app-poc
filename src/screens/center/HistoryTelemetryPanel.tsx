@@ -18,12 +18,18 @@ interface HistoryTelemetryPanelProps {
   samples: TelemetrySample[]
   loading: boolean
   onSeek?: (timeMs: number) => void
+  onHeightChange?: (height: number) => void
 }
 
 const CHART_MAX_POINTS = 220
 const OPTIONAL_CHART_TAB_COUNT = OPTIONAL_CHART_METRICS.length
 
-export function HistoryTelemetryPanel({ samples, loading, onSeek }: HistoryTelemetryPanelProps) {
+export function HistoryTelemetryPanel({
+  samples,
+  loading,
+  onSeek,
+  onHeightChange,
+}: HistoryTelemetryPanelProps) {
   const insets = useSafeAreaInsets()
   const [headTimeMs, setHeadTimeMs] = useState<number | null>(null)
   const [activeCharts, setActiveCharts] = useState<Set<OptionalChartMetric>>(new Set())
@@ -153,7 +159,10 @@ export function HistoryTelemetryPanel({ samples, loading, onSeek }: HistoryTelem
 
   if (loading) {
     return (
-      <View style={[styles.panel, { bottom: bottomInset }]}>
+      <View
+        style={[styles.panel, { bottom: bottomInset }]}
+        onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
+      >
         <Text style={styles.empty}>Loading ride telemetry...</Text>
       </View>
     )
@@ -161,7 +170,10 @@ export function HistoryTelemetryPanel({ samples, loading, onSeek }: HistoryTelem
 
   if (!headSample || sortedSamples.length < 2) {
     return (
-      <View style={[styles.panel, { bottom: bottomInset }]}>
+      <View
+        style={[styles.panel, { bottom: bottomInset }]}
+        onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
+      >
         <Text style={styles.empty}>No board samples for this ride.</Text>
       </View>
     )
@@ -259,7 +271,10 @@ export function HistoryTelemetryPanel({ samples, loading, onSeek }: HistoryTelem
   }
 
   return (
-    <View style={[styles.panel, { bottom: bottomInset }]}>
+    <View
+      style={[styles.panel, { bottom: bottomInset }]}
+      onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
+    >
       <TelemetryLineChart
         label={telemetry.speed.label}
         value={telemetry.speed.formatWithUnit(headSample.speedKmh)}
