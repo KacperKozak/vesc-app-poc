@@ -1,10 +1,16 @@
-import { useMemo } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { useMemo, useState } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { TelemetryLineChart } from '@/components/charts/TelemetryLineChart'
-import { computeAutoRange, type TelemetryChartPoint } from '@/components/charts/chartMath'
+import { type TelemetryChartPoint, computeAutoRange } from '@/components/charts/chartMath'
+import {
+  OPTIONAL_CHART_METRICS,
+  toggleOptionalChartMetric,
+  type OptionalChartMetric,
+} from '@/components/history/historyChartMetrics'
 import { telemetry } from '@/constants/telemetry'
-import { downsampleTimeSeries } from '@/history/playback'
+import { downsampleTimeSeries, findNearestSampleIndexByTime } from '@/history/playback'
 import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
 import type { TelemetrySample } from '@/store/historyStore'
 
@@ -14,8 +20,13 @@ interface HistoryTelemetryPanelProps {
 }
 
 const CHART_MAX_POINTS = 220
+const OPTIONAL_CHART_TAB_COUNT = OPTIONAL_CHART_METRICS.length
 
 export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPanelProps) {
+  const insets = useSafeAreaInsets()
+  const [headTimeMs, setHeadTimeMs] = useState<number | null>(null)
+  const [activeCharts, setActiveCharts] = useState<Set<OptionalChartMetric>>(new Set())
+
   const sortedSamples = useMemo(
     () => [...samples].sort((a, b) => a.capturedAtMs - b.capturedAtMs),
     [samples],
@@ -24,15 +35,52 @@ export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPane
     () => downsampleTimeSeries(sortedSamples, CHART_MAX_POINTS, (sample) => sample.capturedAtMs),
     [sortedSamples],
   )
-  const latest = sortedSamples.at(-1) ?? null
+
+  const headSample = useMemo(() => {
+    if (headTimeMs == null) return sortedSamples.at(-1) ?? null
+    const idx = findNearestSampleIndexByTime(sortedSamples, headTimeMs)
+    return idx >= 0 ? sortedSamples[idx] : (sortedSamples.at(-1) ?? null)
+  }, [sortedSamples, headTimeMs])
+
   const speedPoints = useMemo<TelemetryChartPoint[]>(
+    () => chartSamples.map((s) => ({ date: new Date(s.capturedAtMs), value: s.speedKmh })),
+    [chartSamples],
+  )
+  const dutyPoints = useMemo<TelemetryChartPoint[]>(
     () =>
-      chartSamples.map((sample) => ({
-        date: new Date(sample.capturedAtMs),
-        value: sample.speedKmh,
+      chartSamples.map((s) => ({
+        date: new Date(s.capturedAtMs),
+        value: dutyPercent(s.dutyCycle, false),
       })),
     [chartSamples],
   )
+  const batteryVoltagePoints = useMemo<TelemetryChartPoint[]>(
+    () => chartSamples.map((s) => ({ date: new Date(s.capturedAtMs), value: s.batteryVoltage })),
+    [chartSamples],
+  )
+  const tempMotorPoints = useMemo<TelemetryChartPoint[]>(
+    () =>
+      chartSamples
+        .filter((s) => s.tempMotor != null)
+        .map((s) => ({ date: new Date(s.capturedAtMs), value: s.tempMotor! })),
+    [chartSamples],
+  )
+  const tempMosfetPoints = useMemo<TelemetryChartPoint[]>(
+    () =>
+      chartSamples
+        .filter((s) => s.tempMosfet != null)
+        .map((s) => ({ date: new Date(s.capturedAtMs), value: s.tempMosfet! })),
+    [chartSamples],
+  )
+  const motorCurrentPoints = useMemo<TelemetryChartPoint[]>(
+    () => chartSamples.map((s) => ({ date: new Date(s.capturedAtMs), value: s.motorCurrent })),
+    [chartSamples],
+  )
+  const batteryCurrentPoints = useMemo<TelemetryChartPoint[]>(
+    () => chartSamples.map((s) => ({ date: new Date(s.capturedAtMs), value: s.batteryCurrent })),
+    [chartSamples],
+  )
+
   const speedRange = useMemo(
     () =>
       computeAutoRange(speedPoints, {
@@ -44,76 +92,246 @@ export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPane
       }),
     [speedPoints],
   )
+  const batteryRange = useMemo(
+    () =>
+      computeAutoRange(batteryVoltagePoints, {
+        includeZero: false,
+        minSpan: 5,
+        paddingRatio: 0.1,
+        fallbackMin: 30,
+        fallbackMax: 60,
+      }),
+    [batteryVoltagePoints],
+  )
+  const tempMotorRange = useMemo(
+    () =>
+      computeAutoRange(tempMotorPoints, {
+        includeZero: false,
+        minSpan: 20,
+        paddingRatio: 0.1,
+        fallbackMin: 0,
+        fallbackMax: 100,
+      }),
+    [tempMotorPoints],
+  )
+  const tempMosfetRange = useMemo(
+    () =>
+      computeAutoRange(tempMosfetPoints, {
+        includeZero: false,
+        minSpan: 20,
+        paddingRatio: 0.1,
+        fallbackMin: 0,
+        fallbackMax: 100,
+      }),
+    [tempMosfetPoints],
+  )
+  const motorCurrentRange = useMemo(
+    () =>
+      computeAutoRange(motorCurrentPoints, {
+        includeZero: true,
+        minSpan: 10,
+        paddingRatio: 0.1,
+        fallbackMin: -5,
+        fallbackMax: 5,
+      }),
+    [motorCurrentPoints],
+  )
+  const batteryCurrentRange = useMemo(
+    () =>
+      computeAutoRange(batteryCurrentPoints, {
+        includeZero: true,
+        minSpan: 5,
+        paddingRatio: 0.1,
+        fallbackMin: -5,
+        fallbackMax: 5,
+      }),
+    [batteryCurrentPoints],
+  )
+
+  const bottomInset = Math.max(insets.bottom, 16) + 8
 
   if (loading) {
     return (
-      <View style={styles.panel}>
+      <View style={[styles.panel, { bottom: bottomInset }]}>
         <Text style={styles.empty}>Loading ride telemetry...</Text>
       </View>
     )
   }
 
-  if (!latest || sortedSamples.length < 2) {
+  if (!headSample || sortedSamples.length < 2) {
     return (
-      <View style={styles.panel}>
+      <View style={[styles.panel, { bottom: bottomInset }]}>
         <Text style={styles.empty}>No board samples for this ride.</Text>
       </View>
     )
   }
 
+  const headPoint: TelemetryChartPoint = {
+    date: new Date(headSample.capturedAtMs),
+    value: headSample.speedKmh,
+  }
+
+  const optionalChartConfig: Record<
+    OptionalChartMetric,
+    {
+      points: TelemetryChartPoint[]
+      range: ReturnType<typeof computeAutoRange>
+      label: string
+      value: string
+      headValue: number
+      color: string
+      formatValue: (v: number) => string
+    }
+  > = {
+    duty: {
+      points: dutyPoints,
+      range: computeAutoRange(dutyPoints, {
+        includeZero: true,
+        minSpan: 20,
+        paddingRatio: 0.1,
+        fallbackMin: 0,
+        fallbackMax: 100,
+      }),
+      label: telemetry.duty.label,
+      value: fmtDutyPercent(headSample.dutyCycle, false),
+      headValue: dutyPercent(headSample.dutyCycle, false),
+      color: telemetry.duty.color,
+      formatValue: (v) => `${v.toFixed(1)}%`,
+    },
+    battery: {
+      points: batteryVoltagePoints,
+      range: batteryRange,
+      label: telemetry.battVoltage.label,
+      value: telemetry.battVoltage.formatWithUnit(headSample.batteryVoltage),
+      headValue: headSample.batteryVoltage,
+      color: telemetry.battVoltage.color,
+      formatValue: (v) => telemetry.battVoltage.formatWithUnit(v),
+    },
+    tempMotor: {
+      points: tempMotorPoints,
+      range: tempMotorRange,
+      label: telemetry.motorTemp.label,
+      value:
+        headSample.tempMotor == null
+          ? '-'
+          : telemetry.motorTemp.formatWithUnit(headSample.tempMotor),
+      headValue: headSample.tempMotor ?? 0,
+      color: telemetry.motorTemp.color,
+      formatValue: (v) => telemetry.motorTemp.formatWithUnit(v),
+    },
+    tempController: {
+      points: tempMosfetPoints,
+      range: tempMosfetRange,
+      label: telemetry.controllerTemp.label,
+      value:
+        headSample.tempMosfet == null
+          ? '-'
+          : telemetry.controllerTemp.formatWithUnit(headSample.tempMosfet),
+      headValue: headSample.tempMosfet ?? 0,
+      color: telemetry.controllerTemp.color,
+      formatValue: (v) => telemetry.controllerTemp.formatWithUnit(v),
+    },
+    motorCurrent: {
+      points: motorCurrentPoints,
+      range: motorCurrentRange,
+      label: telemetry.motorCurrent.label,
+      value: telemetry.motorCurrent.formatWithUnit(headSample.motorCurrent),
+      headValue: headSample.motorCurrent,
+      color: telemetry.motorCurrent.color,
+      formatValue: (v) => telemetry.motorCurrent.formatWithUnit(v),
+    },
+    batteryCurrent: {
+      points: batteryCurrentPoints,
+      range: batteryCurrentRange,
+      label: telemetry.battCurrent.label,
+      value: telemetry.battCurrent.formatWithUnit(headSample.batteryCurrent),
+      headValue: headSample.batteryCurrent,
+      color: telemetry.battCurrent.color,
+      formatValue: (v) => telemetry.battCurrent.formatWithUnit(v),
+    },
+  }
+
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, { bottom: bottomInset }]}>
       <TelemetryLineChart
         label={telemetry.speed.label}
-        value={telemetry.speed.formatWithUnit(latest.speedKmh)}
+        value={telemetry.speed.formatWithUnit(headSample.speedKmh)}
         points={speedPoints}
         color={telemetry.speed.color}
         range={speedRange}
-        currentPoint={{
-          date: new Date(latest.capturedAtMs),
-          value: latest.speedKmh,
-        }}
+        currentPoint={headPoint}
         height={48}
         containerStyle={styles.chart}
-        formatValue={(value) => telemetry.speed.formatWithUnit(value)}
+        formatValue={(v) => telemetry.speed.formatWithUnit(v)}
+        onPointSelected={(point) => setHeadTimeMs(point.date.getTime())}
       />
-      <View style={styles.metrics}>
-        <Metric label="Duty" value={fmtDutyPercent(latest.dutyCycle, false)} />
-        <Metric label="Batt" value={telemetry.battVoltage.formatWithUnit(latest.batteryVoltage)} />
-        <Metric
-          label="Motor"
-          value={
-            latest.tempMotor == null ? '-' : telemetry.motorTemp.formatWithUnit(latest.tempMotor)
-          }
-        />
-        <Metric
-          label="Ctrl"
-          value={
-            latest.tempMosfet == null
-              ? '-'
-              : telemetry.controllerTemp.formatWithUnit(latest.tempMosfet)
-          }
-        />
-        <Metric
-          label="Motor A"
-          value={telemetry.motorCurrent.formatWithUnit(latest.motorCurrent)}
-        />
-        <Metric
-          label="Batt A"
-          value={telemetry.battCurrent.formatWithUnit(latest.batteryCurrent)}
-        />
-      </View>
-    </View>
-  )
-}
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
-      </Text>
+      {OPTIONAL_CHART_METRICS.filter((m) => activeCharts.has(m.key)).map((metric) => {
+        const cfg = optionalChartConfig[metric.key]
+        return (
+          <TelemetryLineChart
+            key={metric.key}
+            label={cfg.label}
+            value={cfg.value}
+            points={cfg.points}
+            color={cfg.color}
+            range={cfg.range}
+            currentPoint={{ date: new Date(headSample.capturedAtMs), value: cfg.headValue }}
+            height={40}
+            containerStyle={styles.chart}
+            formatValue={cfg.formatValue}
+            onPointSelected={(point) => setHeadTimeMs(point.date.getTime())}
+          />
+        )
+      })}
+
+      <View style={styles.metricTabs}>
+        {OPTIONAL_CHART_METRICS.map((metric, index) => {
+          const active = activeCharts.has(metric.key)
+          const cfg = optionalChartConfig[metric.key]
+          return (
+            <Pressable
+              key={metric.key}
+              style={[
+                styles.metricTab,
+                index < OPTIONAL_CHART_METRICS.length - 1 && styles.metricTabDivider,
+                active && styles.metricTabActive,
+              ]}
+              onPress={() => setActiveCharts((prev) => toggleOptionalChartMetric(prev, metric.key))}
+            >
+              <View
+                style={[styles.metricTabLine, { backgroundColor: active ? cfg.color : '#1e293b' }]}
+              />
+              {metric.multilineLabel ? (
+                <View style={styles.metricTabTextStack}>
+                  <Text
+                    style={[styles.metricTabText, active && styles.metricTabTextActive]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {metric.multilineLabel[0]}
+                  </Text>
+                  <Text
+                    style={[styles.metricTabText, active && styles.metricTabTextActive]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {metric.multilineLabel[1]}
+                  </Text>
+                </View>
+              ) : (
+                <Text
+                  style={[styles.metricTabText, active && styles.metricTabTextActive]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {metric.label}
+                </Text>
+              )}
+            </Pressable>
+          )
+        })}
+      </View>
     </View>
   )
 }
@@ -123,39 +341,59 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 8,
     right: 8,
-    bottom: 8,
     zIndex: 20,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.22)',
-    backgroundColor: 'rgba(15, 23, 42, 0.82)',
-    padding: 8,
     gap: 8,
   },
   chart: {
     minHeight: 72,
   },
-  metrics: {
+  metricTabs: {
     flexDirection: 'row',
-    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+    overflow: 'hidden',
   },
-  metric: {
-    flex: 1,
+  metricTab: {
+    width: `${100 / OPTIONAL_CHART_TAB_COUNT}%`,
     minWidth: 0,
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 8,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
-  metricLabel: {
-    color: '#64748b',
-    fontSize: 9,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+  metricTabDivider: {
+    borderRightWidth: 1,
+    borderRightColor: '#334155',
   },
-  metricValue: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontFamily: 'monospace',
-    fontWeight: '900',
+  metricTabActive: {
+    backgroundColor: '#172554',
+  },
+  metricTabLine: {
+    width: '60%',
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
+  },
+  metricTabTextStack: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  metricTabText: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+    width: '100%',
+    textAlign: 'center',
+    lineHeight: 12,
+  },
+  metricTabTextActive: {
+    color: '#dbeafe',
   },
   empty: {
     color: '#94a3b8',

@@ -64,6 +64,10 @@ export function TelemetryLineChart({
   const [chartPageX, setChartPageX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const graphRef = useRef<View>(null)
+  const onPointSelectedRef = useRef(onPointSelected)
+  onPointSelectedRef.current = onPointSelected
+  const onGestureStartRef = useRef(onGestureStart)
+  onGestureStartRef.current = onGestureStart
 
   const onGraphLayout = useCallback((event: LayoutChangeEvent) => {
     setChartWidth(Math.round(event.nativeEvent.layout.width))
@@ -91,23 +95,24 @@ export function TelemetryLineChart({
 
   const selectAtPageX = useCallback(
     (x: number) => {
-      if (!onPointSelected) return
+      if (!onPointSelectedRef.current) return
       const point = findNearestChartPointAtX(points, x - chartPageX, chartWidth, windowMs)
       if (!point) return
-      onPointSelected(point)
+      onPointSelectedRef.current(point)
     },
-    [chartPageX, chartWidth, onPointSelected, points, windowMs],
+    [chartPageX, chartWidth, points, windowMs],
   )
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () =>
-          !!onPointSelected && points.length > 0 && chartWidth > 0,
-        onMoveShouldSetPanResponder: () => !!onPointSelected && points.length > 0 && chartWidth > 0,
+          !!onPointSelectedRef.current && points.length > 0 && chartWidth > 0,
+        onMoveShouldSetPanResponder: () =>
+          !!onPointSelectedRef.current && points.length > 0 && chartWidth > 0,
         onPanResponderGrant: (_event, gesture) => {
           setIsDragging(true)
-          onGestureStart?.()
+          onGestureStartRef.current?.()
           selectAtPageX(gesture.x0)
         },
         onPanResponderMove: (_event, gesture) => {
@@ -116,7 +121,7 @@ export function TelemetryLineChart({
         onPanResponderRelease: () => setIsDragging(false),
         onPanResponderTerminate: () => setIsDragging(false),
       }),
-    [chartWidth, onGestureStart, onPointSelected, points.length, selectAtPageX],
+    [chartWidth, points.length, selectAtPageX],
   )
 
   const yMid = (range.y.min + range.y.max) / 2
@@ -243,10 +248,6 @@ export function TelemetryLineChart({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    backgroundColor: '#111827',
     overflow: 'hidden',
     paddingHorizontal: 8,
     paddingTop: 6,

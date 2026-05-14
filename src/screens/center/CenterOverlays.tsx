@@ -166,6 +166,7 @@ export function CenterOverlays({
 
       {flags.showRideReview && selectedSession && (
         <>
+          <MapVignette visible />
           <HistoryTelemetryPanel samples={sessionSamples} loading={loadingSession} />
           <HistoryControls
             title={`${new Date(selectedSession.startAtMs).toLocaleString()} · ${
