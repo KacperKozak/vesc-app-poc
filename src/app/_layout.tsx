@@ -26,7 +26,7 @@ export default function RootLayout() {
         <Stack.Screen name={stackScreens.addBoardScan} options={{ title: 'Add Board' }} />
         <Stack.Screen name={stackScreens.addBoardDetails} options={{ title: 'Board Details' }} />
       </Stack>
-      <StatusBar style="light" />
+      <StatusBar style="light" translucent backgroundColor="transparent" />
     </GestureHandlerRootView>
   )
 }

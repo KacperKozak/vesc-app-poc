@@ -13,18 +13,30 @@ import { type MapStyleKey } from '@/constants/mapStyles'
 
 interface CenterScreenProps {
   activeBoard: Board | undefined
+  activeBoardId: string | null
+  boards: Board[]
   boardsLoaded: boolean
   bleStatus: string
+  recordDebugSession: boolean
   onStopScan: () => void
   onRetryConnect: () => void
+  onSelectBoard: (id: string) => void
+  onAddBoard: () => void
+  onToggleRecordDebug: () => void
 }
 
 export function CenterScreen({
   activeBoard,
+  activeBoardId: _activeBoardId,
+  boards: _boards,
   boardsLoaded,
   bleStatus,
+  recordDebugSession: _recordDebugSession,
   onStopScan,
   onRetryConnect,
+  onSelectBoard: _onSelectBoard,
+  onAddBoard: _onAddBoard,
+  onToggleRecordDebug: _onToggleRecordDebug,
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
   const [mapStyleKey] = useState<MapStyleKey>('onedark')
