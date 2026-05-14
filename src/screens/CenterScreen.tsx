@@ -1,20 +1,28 @@
 import { useRef, useState } from 'react'
 import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
-import { ArrowLeftIcon } from 'phosphor-react-native'
+import { ArrowLeftIcon, ClockCounterClockwiseIcon } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
 import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
 import { TopBar } from '@/screens/center/TopBar'
 import { LiveHud } from '@/screens/center/LiveHud'
 import { BottomTelemetryStrip } from '@/screens/center/BottomTelemetryStrip'
-import { canShowBaseOverlays } from '@/screens/center/centerState'
+import { HistoryControls } from '@/screens/center/HistoryControls'
+import {
+  canShowBaseOverlays,
+  getLatestSession,
+  getNextRideSession,
+  getPreviousRideSession,
+} from '@/screens/center/centerState'
 import { FloatingBar } from '@/components/FloatingBar'
+import { HistorySessionSheet } from '@/components/history/HistorySessionSheet'
 import { MapControls } from '@/components/map/MapControls'
 import { MapStyleSwitch } from '@/components/map/MapStyleSwitch'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
+import { useHistoryStore, type HistorySession } from '@/store/historyStore'
 import { useMapStore } from '@/store/mapStore'
 import { type MapStyleKey } from '@/constants/mapStyles'
 
@@ -47,11 +55,36 @@ export function CenterScreen({
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
   const [mapFocused, setMapFocused] = useState(false)
+  const [historySheetVisible, setHistorySheetVisible] = useState(false)
+  const [historyLoadedOnce, setHistoryLoadedOnce] = useState(false)
   const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('onedark')
   const [heading, setHeading] = useState(0)
   const [rotationLocked, setRotationLocked] = useState(false)
   const [perspectiveEnabled, setPerspectiveEnabled] = useState(true)
   const liveLocations = useBleStore((s) => s.liveLocationHistory)
+  const {
+    sessions,
+    selectedSession,
+    sessionGpsSamples,
+    sessionMarkers,
+    loadingSession,
+    loading: historyLoading,
+    error: historyError,
+    loadInitial,
+    selectSession,
+  } = useHistoryStore(
+    useShallow((s) => ({
+      sessions: s.sessions,
+      selectedSession: s.selectedSession,
+      sessionGpsSamples: s.sessionGpsSamples,
+      sessionMarkers: s.sessionMarkers,
+      loadingSession: s.loadingSession,
+      loading: s.loading,
+      error: s.error,
+      loadInitial: s.loadInitial,
+      selectSession: s.selectSession,
+    })),
+  )
   const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore(
     useShallow((s) => ({
       targetLocation: s.targetLocation,
@@ -60,11 +93,37 @@ export function CenterScreen({
     })),
   )
   const hasBle = !!activeBoard?.bleId
-  const showBaseOverlays = canShowBaseOverlays({ mapFocused, hasRide: false })
+  const rideActive = !!selectedSession
+  const previousRide = getPreviousRideSession(sessions, selectedSession)
+  const nextRide = getNextRideSession(sessions, selectedSession)
+  const showBaseOverlays = canShowBaseOverlays({ mapFocused, hasRide: rideActive })
 
   const exitMapFocus = () => {
     setMapFocused(false)
     mapRef.current?.recenterLive()
+  }
+
+  const enterRideReview = async () => {
+    setMapFocused(false)
+    if (!historyLoadedOnce) {
+      await loadInitial()
+      setHistoryLoadedOnce(true)
+    }
+    const latest = getLatestSession(useHistoryStore.getState().sessions)
+    if (latest) {
+      await selectSession(latest)
+    }
+  }
+
+  const exitRideReview = () => {
+    void selectSession(null)
+    setMapFocused(false)
+    requestAnimationFrame(() => mapRef.current?.recenterLive())
+  }
+
+  const selectRide = (session: HistorySession) => {
+    setHistorySheetVisible(false)
+    void selectSession(session)
   }
 
   if (!boardsLoaded) {
@@ -116,9 +175,9 @@ export function CenterScreen({
       <CenterMap
         ref={mapRef}
         liveLocations={liveLocations}
-        rideGpsSamples={[]}
-        rideMarkers={[]}
-        rideActive={false}
+        rideGpsSamples={sessionGpsSamples}
+        rideMarkers={sessionMarkers}
+        rideActive={rideActive}
         mapStyleKey={mapStyleKey}
         rotationLocked={rotationLocked}
         perspectiveEnabled={perspectiveEnabled}
@@ -152,6 +211,11 @@ export function CenterScreen({
           onRetryConnect={onRetryConnect}
         />
       )}
+      {showBaseOverlays && (
+        <Pressable style={styles.historyButton} onPress={() => void enterRideReview()}>
+          <ClockCounterClockwiseIcon size={18} color="#f8fafc" weight="bold" />
+        </Pressable>
+      )}
       {mapFocused && (
         <>
           <Pressable style={styles.backButton} onPress={exitMapFocus}>
@@ -172,6 +236,44 @@ export function CenterScreen({
           <MapStyleSwitch activeKey={mapStyleKey} onSelect={setMapStyleKey} />
         </>
       )}
+      {rideActive && (
+        <HistoryControls
+          title={`${new Date(selectedSession.startAtMs).toLocaleString()} · ${
+            selectedSession.deviceName
+          }`}
+          canPrevious={!!previousRide}
+          canNext={!!nextRide}
+          loading={loadingSession || historyLoading}
+          onBack={exitRideReview}
+          onPrevious={() => {
+            if (previousRide) void selectSession(previousRide)
+          }}
+          onNext={() => {
+            if (nextRide) void selectSession(nextRide)
+          }}
+          onOpenList={() => setHistorySheetVisible(true)}
+        />
+      )}
+      <HistorySessionSheet
+        visible={historySheetVisible}
+        sessions={sessions}
+        selectedSessionId={selectedSession?.id ?? null}
+        onClose={() => setHistorySheetVisible(false)}
+        onSelectSession={selectRide}
+      />
+      {historyLoadedOnce && !historyLoading && sessions.length === 0 && !selectedSession && (
+        <View style={styles.historyEmpty}>
+          <Text style={styles.historyEmptyTitle}>No rides yet</Text>
+          <Text style={styles.historyEmptyText}>Recorded rides will show here.</Text>
+        </View>
+      )}
+      {historyError ? (
+        <View style={styles.historyError}>
+          <Text style={styles.historyErrorText} selectable>
+            {historyError}
+          </Text>
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -236,5 +338,57 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.28)',
     backgroundColor: 'rgba(15, 23, 42, 0.72)',
+  },
+  historyButton: {
+    position: 'absolute',
+    right: 12,
+    bottom: 76,
+    zIndex: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.28)',
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+  },
+  historyEmpty: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    top: '45%',
+    zIndex: 25,
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    alignItems: 'center',
+  },
+  historyEmptyTitle: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  historyEmptyText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  historyError: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 76,
+    zIndex: 25,
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: 'rgba(69, 26, 26, 0.88)',
+    borderWidth: 1,
+    borderColor: '#7f1d1d',
+  },
+  historyErrorText: {
+    color: '#fecaca',
+    fontSize: 12,
+    fontWeight: '700',
   },
 })
