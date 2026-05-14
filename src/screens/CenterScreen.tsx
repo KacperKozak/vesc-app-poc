@@ -1,41 +1,12 @@
-import { useCallback, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  BackHandler,
-  ToastAndroid,
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-} from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
-import { ArrowLeftIcon, ClockCounterClockwiseIcon } from 'phosphor-react-native'
-import { useShallow } from 'zustand/react/shallow'
+import { useRef } from 'react'
+import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native'
+import { router } from 'expo-router'
 
 import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
-import { TopBar } from '@/screens/center/TopBar'
-import { LiveHud } from '@/screens/center/LiveHud'
-import { BottomTelemetryStrip } from '@/screens/center/BottomTelemetryStrip'
-import { MapVignette } from '@/screens/center/MapVignette'
-import { HistoryControls } from '@/screens/center/HistoryControls'
-import {
-  canShowBaseOverlays,
-  getLatestSession,
-  getNextRideSession,
-  getPreviousRideSession,
-} from '@/screens/center/centerState'
-import { FloatingBar } from '@/components/FloatingBar'
-import { HistorySessionSheet } from '@/components/history/HistorySessionSheet'
-import { MapControls } from '@/components/map/MapControls'
-import { MapStyleSwitch } from '@/components/map/MapStyleSwitch'
+import { CenterOverlays } from '@/screens/center/CenterOverlays'
+import { useCenterScreenController } from '@/screens/center/useCenterScreenController'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
-import { useBleStore } from '@/store/bleStore'
-import { useHistoryStore, type HistorySession } from '@/store/historyStore'
-import { useMapStore } from '@/store/mapStore'
-import { type MapStyleKey } from '@/constants/mapStyles'
-
-type CenterViewState = 'telemetry' | 'mapFocus' | 'rideReview' | 'historyEmpty'
 
 interface CenterScreenProps {
   activeBoard: Board | undefined
@@ -65,113 +36,8 @@ export function CenterScreen({
   onToggleRecordDebug,
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
-  const backPressedOnce = useRef(false)
-  const [viewState, setViewState] = useState<CenterViewState>('telemetry')
-  const [historySheetVisible, setHistorySheetVisible] = useState(false)
-  const [historyLoadedOnce, setHistoryLoadedOnce] = useState(false)
-  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('onedark')
-  const [heading, setHeading] = useState(0)
-  const [rotationLocked, setRotationLocked] = useState(false)
-  const [perspectiveEnabled, setPerspectiveEnabled] = useState(true)
-  const liveLocations = useBleStore((s) => s.liveLocationHistory)
-  const {
-    sessions,
-    selectedSession,
-    sessionGpsSamples,
-    sessionMarkers,
-    loadingSession,
-    loading: historyLoading,
-    error: historyError,
-    loadInitial,
-    selectSession,
-  } = useHistoryStore(
-    useShallow((s) => ({
-      sessions: s.sessions,
-      selectedSession: s.selectedSession,
-      sessionGpsSamples: s.sessionGpsSamples,
-      sessionMarkers: s.sessionMarkers,
-      loadingSession: s.loadingSession,
-      loading: s.loading,
-      error: s.error,
-      loadInitial: s.loadInitial,
-      selectSession: s.selectSession,
-    })),
-  )
-  const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore(
-    useShallow((s) => ({
-      targetLocation: s.targetLocation,
-      setTargetLocation: s.setTargetLocation,
-      clearTargetLocation: s.clearTargetLocation,
-    })),
-  )
+  const controller = useCenterScreenController({ mapRef })
   const hasBle = !!activeBoard?.bleId
-  const rideActive = viewState === 'rideReview' && !!selectedSession
-  const mapFocused = viewState === 'mapFocus'
-  const historyEmpty = viewState === 'historyEmpty'
-  const previousRide = getPreviousRideSession(sessions, selectedSession)
-  const nextRide = getNextRideSession(sessions, selectedSession)
-  const showBaseOverlays = canShowBaseOverlays({
-    mapFocused,
-    hasRide: rideActive || historyEmpty,
-  })
-
-  const exitMapFocus = useCallback(() => {
-    setViewState('telemetry')
-    mapRef.current?.recenterLive()
-  }, [])
-
-  const enterRideReview = async () => {
-    if (!historyLoadedOnce) {
-      await loadInitial()
-      setHistoryLoadedOnce(true)
-    }
-    const latest = getLatestSession(useHistoryStore.getState().sessions)
-    if (latest) {
-      await selectSession(latest)
-      setViewState('rideReview')
-      return
-    }
-    setViewState('historyEmpty')
-  }
-
-  const exitRideReview = useCallback(() => {
-    void selectSession(null)
-    setHistorySheetVisible(false)
-    setViewState('telemetry')
-    requestAnimationFrame(() => mapRef.current?.recenterLive())
-  }, [selectSession])
-
-  const selectRide = (session: HistorySession) => {
-    setHistorySheetVisible(false)
-    void selectSession(session)
-    setViewState('rideReview')
-  }
-
-  useFocusEffect(
-    useCallback(() => {
-      const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (viewState === 'rideReview' || viewState === 'historyEmpty') {
-          exitRideReview()
-          return true
-        }
-        if (viewState === 'mapFocus') {
-          exitMapFocus()
-          return true
-        }
-        if (backPressedOnce.current) {
-          BackHandler.exitApp()
-          return true
-        }
-        backPressedOnce.current = true
-        ToastAndroid.show('Press back again to exit', ToastAndroid.SHORT)
-        setTimeout(() => {
-          backPressedOnce.current = false
-        }, 2000)
-        return true
-      })
-      return () => handler.remove()
-    }, [exitMapFocus, exitRideReview, viewState]),
-  )
 
   if (!boardsLoaded) {
     return (
@@ -221,116 +87,57 @@ export function CenterScreen({
     <View style={styles.container}>
       <CenterMap
         ref={mapRef}
-        liveLocations={liveLocations}
-        rideGpsSamples={sessionGpsSamples}
-        rideMarkers={sessionMarkers}
-        rideActive={rideActive}
-        mapStyleKey={mapStyleKey}
-        rotationLocked={rotationLocked}
-        perspectiveEnabled={perspectiveEnabled}
-        onPerspectiveChange={setPerspectiveEnabled}
-        onHeadingChange={setHeading}
-        onMapFocus={() => {
-          if (viewState === 'telemetry') setViewState('mapFocus')
-        }}
-        onLongPressTarget={setTargetLocation}
-        targetLocation={targetLocation}
-        onClearTarget={clearTargetLocation}
+        liveLocations={controller.liveLocations}
+        rideGpsSamples={controller.sessionGpsSamples}
+        rideMarkers={controller.sessionMarkers}
+        rideActive={controller.rideActive}
+        mapStyleKey={controller.mapStyleKey}
+        rotationLocked={controller.rotationLocked}
+        perspectiveEnabled={controller.perspectiveEnabled}
+        onPerspectiveChange={controller.setPerspectiveEnabled}
+        onHeadingChange={controller.setHeading}
+        onMapFocus={controller.handleMapFocus}
+        onLongPressTarget={controller.setTargetLocation}
+        targetLocation={controller.targetLocation}
+        onClearTarget={controller.clearTargetLocation}
       />
-      <MapVignette visible={showBaseOverlays} />
-      <LiveHud visible={showBaseOverlays} />
-      <BottomTelemetryStrip visible={showBaseOverlays} />
-      <TopBar
-        visible={showBaseOverlays}
+      <CenterOverlays
+        flags={controller.flags}
+        mapRef={mapRef}
         boards={boards}
         activeBoardId={activeBoardId}
         activeBoard={activeBoard}
         bleStatus={bleStatus}
         recordDebugSession={recordDebugSession}
+        onStopScan={onStopScan}
+        onRetryConnect={onRetryConnect}
         onSelectBoard={onSelectBoard}
         onAddBoard={onAddBoard}
         onToggleRecordDebug={onToggleRecordDebug}
-        onDisconnect={onStopScan}
-        onRetryConnect={onRetryConnect}
+        heading={controller.heading}
+        rotationLocked={controller.rotationLocked}
+        perspectiveEnabled={controller.perspectiveEnabled}
+        targetLocation={controller.targetLocation}
+        clearTargetLocation={controller.clearTargetLocation}
+        mapStyleKey={controller.mapStyleKey}
+        setMapStyleKey={controller.setMapStyleKey}
+        setRotationLocked={controller.setRotationLocked}
+        exitMapFocus={controller.exitMapFocus}
+        enterRideReview={controller.enterRideReview}
+        selectedSession={controller.selectedSession}
+        sessionSamples={controller.sessionSamples}
+        previousRide={controller.previousRide}
+        nextRide={controller.nextRide}
+        loadingSession={controller.loadingSession}
+        historyLoading={controller.historyLoading}
+        historyError={controller.historyError}
+        sessions={controller.sessions}
+        historySheetVisible={controller.historySheetVisible}
+        setHistorySheetVisible={controller.setHistorySheetVisible}
+        selectSession={controller.selectSession}
+        selectRide={controller.selectRide}
+        exitRideReview={controller.exitRideReview}
       />
-      {showBaseOverlays && (
-        <FloatingBar
-          bleStatus={bleStatus}
-          activeBoard={activeBoard}
-          onStopScan={onStopScan}
-          onRetryConnect={onRetryConnect}
-          bottomOffset={88}
-        />
-      )}
-      {showBaseOverlays && (
-        <Pressable style={styles.historyButton} onPress={() => void enterRideReview()}>
-          <ClockCounterClockwiseIcon size={18} color="#f8fafc" weight="bold" />
-        </Pressable>
-      )}
-      {mapFocused && (
-        <>
-          <Pressable style={styles.backButton} onPress={exitMapFocus}>
-            <ArrowLeftIcon size={20} color="#f8fafc" weight="bold" />
-          </Pressable>
-          <MapControls
-            heading={heading}
-            rotationLocked={rotationLocked}
-            perspectiveEnabled={perspectiveEnabled}
-            followGps={false}
-            showClearTarget={!!targetLocation}
-            onResetRotation={() => mapRef.current?.resetRotation()}
-            onToggleRotationLock={() => setRotationLocked((prev) => !prev)}
-            onTogglePerspective={() => mapRef.current?.togglePerspective()}
-            onRecenter={exitMapFocus}
-            onClearTarget={clearTargetLocation}
-          />
-          <MapStyleSwitch activeKey={mapStyleKey} onSelect={setMapStyleKey} />
-        </>
-      )}
-      {rideActive && (
-        <HistoryControls
-          title={`${new Date(selectedSession.startAtMs).toLocaleString()} · ${
-            selectedSession.deviceName
-          }`}
-          canPrevious={!!previousRide}
-          canNext={!!nextRide}
-          loading={loadingSession || historyLoading}
-          onBack={exitRideReview}
-          onPrevious={() => {
-            if (previousRide) void selectSession(previousRide)
-          }}
-          onNext={() => {
-            if (nextRide) void selectSession(nextRide)
-          }}
-          onOpenList={() => setHistorySheetVisible(true)}
-        />
-      )}
-      <HistorySessionSheet
-        visible={historySheetVisible}
-        sessions={sessions}
-        selectedSessionId={selectedSession?.id ?? null}
-        onClose={() => setHistorySheetVisible(false)}
-        onSelectSession={selectRide}
-      />
-      {historyEmpty && (
-        <HistoryControls
-          title="No rides yet"
-          canPrevious={false}
-          canNext={false}
-          loading={false}
-          onBack={exitRideReview}
-          onPrevious={() => undefined}
-          onNext={() => undefined}
-          onOpenList={() => setHistorySheetVisible(true)}
-        />
-      )}
-      {historyError ? (
-        <View style={styles.historyError}>
-          <Text style={styles.historyErrorText} selectable>
-            {historyError}
-          </Text>
-        </View>
-      ) : null}
     </View>
   )
 }
@@ -381,50 +188,5 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontWeight: '600',
     fontSize: 14,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 44,
-    left: 12,
-    zIndex: 30,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.28)',
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
-  },
-  historyButton: {
-    position: 'absolute',
-    right: 12,
-    bottom: 76,
-    zIndex: 20,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.28)',
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
-  },
-  historyError: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 76,
-    zIndex: 25,
-    borderRadius: 10,
-    padding: 10,
-    backgroundColor: 'rgba(69, 26, 26, 0.88)',
-    borderWidth: 1,
-    borderColor: '#7f1d1d',
-  },
-  historyErrorText: {
-    color: '#fecaca',
-    fontSize: 12,
-    fontWeight: '700',
   },
 })
