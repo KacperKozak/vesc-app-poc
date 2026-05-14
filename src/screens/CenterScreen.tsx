@@ -35,6 +35,8 @@ import { useHistoryStore, type HistorySession } from '@/store/historyStore'
 import { useMapStore } from '@/store/mapStore'
 import { type MapStyleKey } from '@/constants/mapStyles'
 
+type CenterViewState = 'telemetry' | 'mapFocus' | 'rideReview' | 'historyEmpty'
+
 interface CenterScreenProps {
   activeBoard: Board | undefined
   activeBoardId: string | null
@@ -64,7 +66,7 @@ export function CenterScreen({
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
   const backPressedOnce = useRef(false)
-  const [mapFocused, setMapFocused] = useState(false)
+  const [viewState, setViewState] = useState<CenterViewState>('telemetry')
   const [historySheetVisible, setHistorySheetVisible] = useState(false)
   const [historyLoadedOnce, setHistoryLoadedOnce] = useState(false)
   const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('onedark')
@@ -103,18 +105,22 @@ export function CenterScreen({
     })),
   )
   const hasBle = !!activeBoard?.bleId
-  const rideActive = !!selectedSession
+  const rideActive = viewState === 'rideReview' && !!selectedSession
+  const mapFocused = viewState === 'mapFocus'
+  const historyEmpty = viewState === 'historyEmpty'
   const previousRide = getPreviousRideSession(sessions, selectedSession)
   const nextRide = getNextRideSession(sessions, selectedSession)
-  const showBaseOverlays = canShowBaseOverlays({ mapFocused, hasRide: rideActive })
+  const showBaseOverlays = canShowBaseOverlays({
+    mapFocused,
+    hasRide: rideActive || historyEmpty,
+  })
 
   const exitMapFocus = useCallback(() => {
-    setMapFocused(false)
+    setViewState('telemetry')
     mapRef.current?.recenterLive()
   }, [])
 
   const enterRideReview = async () => {
-    setMapFocused(false)
     if (!historyLoadedOnce) {
       await loadInitial()
       setHistoryLoadedOnce(true)
@@ -122,28 +128,33 @@ export function CenterScreen({
     const latest = getLatestSession(useHistoryStore.getState().sessions)
     if (latest) {
       await selectSession(latest)
+      setViewState('rideReview')
+      return
     }
+    setViewState('historyEmpty')
   }
 
   const exitRideReview = useCallback(() => {
     void selectSession(null)
-    setMapFocused(false)
+    setHistorySheetVisible(false)
+    setViewState('telemetry')
     requestAnimationFrame(() => mapRef.current?.recenterLive())
   }, [selectSession])
 
   const selectRide = (session: HistorySession) => {
     setHistorySheetVisible(false)
     void selectSession(session)
+    setViewState('rideReview')
   }
 
   useFocusEffect(
     useCallback(() => {
       const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (rideActive) {
+        if (viewState === 'rideReview' || viewState === 'historyEmpty') {
           exitRideReview()
           return true
         }
-        if (mapFocused) {
+        if (viewState === 'mapFocus') {
           exitMapFocus()
           return true
         }
@@ -159,7 +170,7 @@ export function CenterScreen({
         return true
       })
       return () => handler.remove()
-    }, [exitMapFocus, exitRideReview, mapFocused, rideActive]),
+    }, [exitMapFocus, exitRideReview, viewState]),
   )
 
   if (!boardsLoaded) {
@@ -219,7 +230,9 @@ export function CenterScreen({
         perspectiveEnabled={perspectiveEnabled}
         onPerspectiveChange={setPerspectiveEnabled}
         onHeadingChange={setHeading}
-        onMapFocus={() => setMapFocused(true)}
+        onMapFocus={() => {
+          if (viewState === 'telemetry') setViewState('mapFocus')
+        }}
         onLongPressTarget={setTargetLocation}
         targetLocation={targetLocation}
         onClearTarget={clearTargetLocation}
@@ -299,13 +312,13 @@ export function CenterScreen({
         onClose={() => setHistorySheetVisible(false)}
         onSelectSession={selectRide}
       />
-      {historyLoadedOnce && !historyLoading && sessions.length === 0 && !selectedSession && (
+      {historyEmpty && (
         <HistoryControls
           title="No rides yet"
           canPrevious={false}
           canNext={false}
           loading={false}
-          onBack={() => setHistoryLoadedOnce(false)}
+          onBack={exitRideReview}
           onPrevious={() => undefined}
           onNext={() => undefined}
           onOpenList={() => setHistorySheetVisible(true)}
