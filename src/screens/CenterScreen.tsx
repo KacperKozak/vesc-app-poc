@@ -100,6 +100,7 @@ export function CenterScreen({
         onLongPressTarget={controller.setTargetLocation}
         targetLocation={controller.targetLocation}
         onClearTarget={controller.clearTargetLocation}
+        seekPosition={controller.seekGpsPosition}
       />
       <CenterOverlays
         flags={controller.flags}
@@ -137,6 +138,7 @@ export function CenterScreen({
         selectSession={controller.selectSession}
         selectRide={controller.selectRide}
         exitRideReview={controller.exitRideReview}
+        onSeek={controller.onSeek}
       />
     </View>
   )

@@ -17,12 +17,13 @@ import type { TelemetrySample } from '@/store/historyStore'
 interface HistoryTelemetryPanelProps {
   samples: TelemetrySample[]
   loading: boolean
+  onSeek?: (timeMs: number) => void
 }
 
 const CHART_MAX_POINTS = 220
 const OPTIONAL_CHART_TAB_COUNT = OPTIONAL_CHART_METRICS.length
 
-export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPanelProps) {
+export function HistoryTelemetryPanel({ samples, loading, onSeek }: HistoryTelemetryPanelProps) {
   const insets = useSafeAreaInsets()
   const [headTimeMs, setHeadTimeMs] = useState<number | null>(null)
   const [activeCharts, setActiveCharts] = useState<Set<OptionalChartMetric>>(new Set())
@@ -166,6 +167,12 @@ export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPane
     )
   }
 
+  const handlePointSelected = (point: TelemetryChartPoint) => {
+    const ms = point.date.getTime()
+    setHeadTimeMs(ms)
+    onSeek?.(ms)
+  }
+
   const headPoint: TelemetryChartPoint = {
     date: new Date(headSample.capturedAtMs),
     value: headSample.speedKmh,
@@ -263,7 +270,7 @@ export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPane
         height={48}
         containerStyle={styles.chart}
         formatValue={(v) => telemetry.speed.formatWithUnit(v)}
-        onPointSelected={(point) => setHeadTimeMs(point.date.getTime())}
+        onPointSelected={(point) => handlePointSelected(point)}
       />
 
       {OPTIONAL_CHART_METRICS.filter((m) => activeCharts.has(m.key)).map((metric) => {
@@ -280,7 +287,7 @@ export function HistoryTelemetryPanel({ samples, loading }: HistoryTelemetryPane
             height={40}
             containerStyle={styles.chart}
             formatValue={cfg.formatValue}
-            onPointSelected={(point) => setHeadTimeMs(point.date.getTime())}
+            onPointSelected={(point) => handlePointSelected(point)}
           />
         )
       })}

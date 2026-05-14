@@ -62,6 +62,7 @@ interface CenterOverlaysProps {
   selectSession: (session: HistorySession | null) => Promise<void>
   selectRide: (session: HistorySession) => void
   exitRideReview: () => void
+  onSeek: (timeMs: number) => void
 }
 
 export function CenterOverlays({
@@ -100,6 +101,7 @@ export function CenterOverlays({
   selectSession,
   selectRide,
   exitRideReview,
+  onSeek,
 }: CenterOverlaysProps) {
   const insets = useSafeAreaInsets()
   const aboveStripBottom = STRIP_CONTENT_HEIGHT + Math.max(insets.bottom, 6) + 8
@@ -166,8 +168,12 @@ export function CenterOverlays({
 
       {flags.showRideReview && selectedSession && (
         <>
-          <MapVignette visible />
-          <HistoryTelemetryPanel samples={sessionSamples} loading={loadingSession} />
+          <MapVignette visible mode="history" />
+          <HistoryTelemetryPanel
+            samples={sessionSamples}
+            loading={loadingSession}
+            onSeek={onSeek}
+          />
           <HistoryControls
             title={`${new Date(selectedSession.startAtMs).toLocaleString()} · ${
               selectedSession.deviceName

@@ -215,7 +215,7 @@ export function TelemetryLineChart({
               <SvgCircle
                 cx={markerPosition.x}
                 cy={markerPosition.y}
-                r={isDragging ? 6 : 4}
+                r={4}
                 fill="#0f172a"
                 stroke={color}
                 strokeWidth={2}

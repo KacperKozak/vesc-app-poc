@@ -57,6 +57,7 @@ interface CenterMapProps {
   onLongPressTarget: (target: { latitude: number; longitude: number }) => void
   targetLocation: { latitude: number; longitude: number } | null
   onClearTarget: () => void
+  seekPosition: HistoryGpsSample | null
 }
 
 export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function CenterMap(
@@ -74,6 +75,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     onLongPressTarget,
     targetLocation,
     onClearTarget,
+    seekPosition,
   },
   ref,
 ) {
@@ -328,6 +330,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       {rideActive && rideRoute.at(-1) && (
         <MapPin id="center-ride-end" coordinate={rideRoute.at(-1)!} color={theme.error.color} />
       )}
+      {rideActive &&
+        seekPosition &&
+        seekPosition.latitude != null &&
+        seekPosition.longitude != null && (
+          <MapPin
+            id="center-seek-position"
+            coordinate={[seekPosition.longitude, seekPosition.latitude]}
+            color={MAP_DEFAULTS.markerColor}
+          />
+        )}
       {rideActive &&
         rideMarkers.map((marker) => {
           const idx = findNearestSampleIndexByTime(rideGpsSamples, marker.occurredAtMs)

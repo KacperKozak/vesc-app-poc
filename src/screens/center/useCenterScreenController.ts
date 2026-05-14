@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { BackHandler, ToastAndroid } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
@@ -18,6 +18,7 @@ import { useBleStore } from '@/store/bleStore'
 import { useHistoryStore, type HistorySession } from '@/store/historyStore'
 import { useMapStore } from '@/store/mapStore'
 import { type MapStyleKey } from '@/constants/mapStyles'
+import { findNearestSampleIndexByTime } from '@/history/playback'
 
 interface UseCenterScreenControllerArgs {
   mapRef: RefObject<CenterMapHandle | null>
@@ -32,6 +33,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
   const [heading, setHeading] = useState(0)
   const [rotationLocked, setRotationLocked] = useState(false)
   const [perspectiveEnabled, setPerspectiveEnabled] = useState(true)
+  const [seekTimeMs, setSeekTimeMs] = useState<number | null>(null)
   const liveLocations = useBleStore((s) => s.liveLocationHistory)
   const {
     sessions,
@@ -65,6 +67,16 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       clearTargetLocation: s.clearTargetLocation,
     })),
   )
+
+  useEffect(() => {
+    setSeekTimeMs(null)
+  }, [selectedSession])
+
+  const seekGpsPosition = useMemo(() => {
+    if (seekTimeMs == null || sessionGpsSamples.length === 0) return null
+    const idx = findNearestSampleIndexByTime(sessionGpsSamples, seekTimeMs)
+    return idx >= 0 ? sessionGpsSamples[idx] : null
+  }, [seekTimeMs, sessionGpsSamples])
 
   const flags = getCenterOverlayFlags(viewState)
   const rideActive = flags.showRideReview && !!selectedSession
@@ -169,5 +181,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     selectRide,
     handleMapFocus,
     exitMapFocus,
+    seekGpsPosition,
+    onSeek: setSeekTimeMs,
   }
 }
