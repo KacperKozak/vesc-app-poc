@@ -7,6 +7,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { type ReactNode } from 'react'
 import Animated, { useAnimatedProps, type SharedValue } from 'react-native-reanimated'
 import { useRouter } from 'expo-router'
 import Svg, { Defs, Line, Path, RadialGradient, Stop } from 'react-native-svg'
@@ -34,6 +35,7 @@ interface DualGaugeProps {
   compact?: boolean
   transparent?: boolean
   split?: boolean
+  middleSlot?: ReactNode
   containerStyle?: StyleProp<ViewStyle>
 }
 
@@ -346,6 +348,7 @@ export function DualGauge({
   compact = false,
   transparent = false,
   split = false,
+  middleSlot,
   containerStyle,
 }: DualGaugeProps) {
   const router = useRouter()
@@ -384,6 +387,8 @@ export function DualGauge({
             alerts={speedAlerts}
           />
         </Pressable>
+
+        {split && middleSlot && <View style={styles.middleSlot}>{middleSlot}</View>}
 
         <Pressable
           style={[styles.halfPressable, split && styles.halfPressableSplit]}
@@ -446,6 +451,10 @@ const styles = StyleSheet.create({
     flex: 0,
     width: 138,
     maxWidth: '39%',
+  },
+  middleSlot: {
+    flex: 1,
+    justifyContent: 'flex-start',
   },
   quarterWrap: {
     width: '100%',

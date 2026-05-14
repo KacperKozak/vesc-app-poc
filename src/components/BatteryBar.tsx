@@ -1,8 +1,10 @@
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useRouter } from 'expo-router'
 
 import { Sparkline, type SparklinePoint } from '@/components/charts/Sparkline'
 import { telemetry } from '@/constants/telemetry'
 import { theme } from '@/constants/theme'
+import { routes } from '@/navigation/routes'
 
 interface Props {
   /** Current battery state-of-charge in percent (0–100), or null if unknown. */
@@ -28,10 +30,6 @@ function pickColor(percent: number | null): string {
   return telemetry.battVoltage.color
 }
 
-/**
- * Compact battery indicator: tiny "BATTERY" label, 10-min sparkline filling
- * the middle, % + voltage on the right. Sits at the top of the telemetry view.
- */
 export function BatteryBar({
   percent,
   voltage,
@@ -43,8 +41,11 @@ export function BatteryBar({
   containerStyle,
 }: Props) {
   const color = pickColor(percent)
+  const router = useRouter()
   return (
-    <View
+    <Pressable
+      onPress={() => router.push(routes.controlBattery)}
+      android_ripple={{ color: 'rgba(148,163,184,0.18)', borderless: false, foreground: true }}
       style={[
         styles.wrap,
         compact && styles.wrapCompact,
@@ -52,60 +53,62 @@ export function BatteryBar({
         containerStyle,
       ]}
     >
-      <View style={styles.left}>
-        <Text style={styles.label}>BATTERY</Text>
-        {voltage != null ? (
-          <Text style={styles.voltage}>{telemetry.battVoltage.formatWithUnit(voltage)}</Text>
-        ) : null}
+      <View style={styles.topRow}>
+        <View style={styles.left}>
+          {voltage != null ? (
+            <Text style={styles.voltage}>{telemetry.battVoltage.formatWithUnit(voltage)}</Text>
+          ) : null}
+        </View>
+        <Text style={styles.percent} numberOfLines={1}>
+          {percent != null ? (
+            <>
+              {Math.round(percent)}
+              <Text style={styles.percentUnit}> %</Text>
+            </>
+          ) : (
+            '—'
+          )}
+        </Text>
       </View>
-      <View style={styles.middle}>
-        {series && series.length > 1 ? (
-          <Sparkline
-            points={series}
-            color={color}
-            height={28}
-            range={PCT_RANGE}
-            windowMs={windowMs}
-          />
-        ) : hint ? (
-          <Text style={styles.hint}>{hint}</Text>
-        ) : null}
-      </View>
-      <Text style={styles.percent} numberOfLines={1}>
-        {percent != null ? (
-          <>
-            {Math.round(percent)}
-            <Text style={styles.percentUnit}> %</Text>
-          </>
-        ) : (
-          '—'
-        )}
-      </Text>
-    </View>
+      {series && series.length > 1 ? (
+        <Sparkline
+          points={series}
+          color={color}
+          height={compact ? 18 : 24}
+          range={PCT_RANGE}
+          windowMs={windowMs}
+        />
+      ) : hint ? (
+        <Text style={styles.hint}>{hint}</Text>
+      ) : null}
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#1e293b',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
     marginHorizontal: 4,
     marginBottom: 6,
-    gap: 12,
+    gap: 6,
   },
   wrapCompact: {
-    paddingVertical: 4,
-    paddingHorizontal: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     marginHorizontal: 0,
     marginBottom: 0,
-    gap: 6,
+    gap: 4,
   },
   wrapTransparent: {
     backgroundColor: 'transparent',
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   left: {
     alignItems: 'flex-start',
@@ -116,20 +119,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.6,
   },
-  middle: {
-    flex: 1,
-    justifyContent: 'center',
-  },
   percent: {
     color: '#f1f5f9',
-    fontSize: 22,
+    fontSize: 16,
     fontFamily: 'monospace',
     fontWeight: '700',
-    lineHeight: 24,
+    lineHeight: 18,
   },
   percentUnit: {
     color: '#64748b',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '500',
   },
   voltage: {

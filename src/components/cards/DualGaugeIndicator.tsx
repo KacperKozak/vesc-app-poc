@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import type { StyleProp, ViewStyle } from 'react-native'
 
 import { DualGauge } from '@/components/charts/DualGauge'
@@ -14,6 +14,7 @@ interface DualGaugeIndicatorProps {
   compact?: boolean
   transparent?: boolean
   split?: boolean
+  middleSlot?: ReactNode
   containerStyle?: StyleProp<ViewStyle>
 }
 
@@ -21,6 +22,7 @@ export function DualGaugeIndicator({
   compact,
   transparent,
   split,
+  middleSlot,
   containerStyle,
 }: DualGaugeIndicatorProps) {
   const speedSeries = useLiveMetric(liveSelectors.speed)
@@ -66,6 +68,7 @@ export function DualGaugeIndicator({
       compact={compact}
       transparent={transparent}
       split={split}
+      middleSlot={middleSlot}
       containerStyle={containerStyle}
     />
   )

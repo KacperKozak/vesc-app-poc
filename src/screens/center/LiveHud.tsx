@@ -16,12 +16,12 @@ export function LiveHud({ visible }: LiveHudProps) {
       style={[styles.wrap, { paddingTop: Math.max(insets.top + 46, 64) }]}
       pointerEvents="box-none"
     >
-      <View style={styles.battery}>
-        <BatteryIndicator compact transparent />
-      </View>
-      <View style={styles.gauge}>
-        <DualGaugeIndicator compact transparent split />
-      </View>
+      <DualGaugeIndicator
+        compact
+        transparent
+        split
+        middleSlot={<BatteryIndicator compact transparent />}
+      />
     </View>
   )
 }
@@ -33,15 +33,5 @@ const styles = StyleSheet.create({
     left: 6,
     right: 6,
     zIndex: 10,
-  },
-  battery: {
-    alignSelf: 'center',
-    width: 176,
-    maxWidth: '54%',
-    transform: [{ scale: 0.68 }],
-    marginBottom: -30,
-  },
-  gauge: {
-    width: '100%',
   },
 })
