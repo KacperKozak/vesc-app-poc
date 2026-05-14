@@ -1,13 +1,17 @@
 import { useRef, useState } from 'react'
 import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
+import { ArrowLeftIcon } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
 import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
 import { TopBar } from '@/screens/center/TopBar'
 import { LiveHud } from '@/screens/center/LiveHud'
 import { BottomTelemetryStrip } from '@/screens/center/BottomTelemetryStrip'
+import { canShowBaseOverlays } from '@/screens/center/centerState'
 import { FloatingBar } from '@/components/FloatingBar'
+import { MapControls } from '@/components/map/MapControls'
+import { MapStyleSwitch } from '@/components/map/MapStyleSwitch'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
@@ -42,9 +46,10 @@ export function CenterScreen({
   onToggleRecordDebug,
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
-  const [mapStyleKey] = useState<MapStyleKey>('onedark')
+  const [mapFocused, setMapFocused] = useState(false)
+  const [mapStyleKey, setMapStyleKey] = useState<MapStyleKey>('onedark')
   const [heading, setHeading] = useState(0)
-  const [rotationLocked] = useState(false)
+  const [rotationLocked, setRotationLocked] = useState(false)
   const [perspectiveEnabled, setPerspectiveEnabled] = useState(true)
   const liveLocations = useBleStore((s) => s.liveLocationHistory)
   const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore(
@@ -55,8 +60,12 @@ export function CenterScreen({
     })),
   )
   const hasBle = !!activeBoard?.bleId
-  void mapRef
-  void heading
+  const showBaseOverlays = canShowBaseOverlays({ mapFocused, hasRide: false })
+
+  const exitMapFocus = () => {
+    setMapFocused(false)
+    mapRef.current?.recenterLive()
+  }
 
   if (!boardsLoaded) {
     return (
@@ -115,15 +124,15 @@ export function CenterScreen({
         perspectiveEnabled={perspectiveEnabled}
         onPerspectiveChange={setPerspectiveEnabled}
         onHeadingChange={setHeading}
-        onMapFocus={() => undefined}
+        onMapFocus={() => setMapFocused(true)}
         onLongPressTarget={setTargetLocation}
         targetLocation={targetLocation}
         onClearTarget={clearTargetLocation}
       />
-      <LiveHud visible />
-      <BottomTelemetryStrip visible />
+      <LiveHud visible={showBaseOverlays} />
+      <BottomTelemetryStrip visible={showBaseOverlays} />
       <TopBar
-        visible
+        visible={showBaseOverlays}
         boards={boards}
         activeBoardId={activeBoardId}
         activeBoard={activeBoard}
@@ -135,12 +144,34 @@ export function CenterScreen({
         onDisconnect={onStopScan}
         onRetryConnect={onRetryConnect}
       />
-      <FloatingBar
-        bleStatus={bleStatus}
-        activeBoard={activeBoard}
-        onStopScan={onStopScan}
-        onRetryConnect={onRetryConnect}
-      />
+      {showBaseOverlays && (
+        <FloatingBar
+          bleStatus={bleStatus}
+          activeBoard={activeBoard}
+          onStopScan={onStopScan}
+          onRetryConnect={onRetryConnect}
+        />
+      )}
+      {mapFocused && (
+        <>
+          <Pressable style={styles.backButton} onPress={exitMapFocus}>
+            <ArrowLeftIcon size={20} color="#f8fafc" weight="bold" />
+          </Pressable>
+          <MapControls
+            heading={heading}
+            rotationLocked={rotationLocked}
+            perspectiveEnabled={perspectiveEnabled}
+            followGps={false}
+            showClearTarget={!!targetLocation}
+            onResetRotation={() => mapRef.current?.resetRotation()}
+            onToggleRotationLock={() => setRotationLocked((prev) => !prev)}
+            onTogglePerspective={() => mapRef.current?.togglePerspective()}
+            onRecenter={exitMapFocus}
+            onClearTarget={clearTargetLocation}
+          />
+          <MapStyleSwitch activeKey={mapStyleKey} onSelect={setMapStyleKey} />
+        </>
+      )}
     </View>
   )
 }
@@ -191,5 +222,19 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontWeight: '600',
     fontSize: 14,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 44,
+    left: 12,
+    zIndex: 30,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.28)',
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
   },
 })
