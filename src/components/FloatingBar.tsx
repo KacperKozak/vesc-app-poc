@@ -1,4 +1,4 @@
-import { RecordIcon, StopCircleIcon } from 'phosphor-react-native'
+import { RecordIcon, StopIcon } from 'phosphor-react-native'
 import { useCallback } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useShallow } from 'zustand/react/shallow'
@@ -169,11 +169,13 @@ export function FloatingBar({
         onPress={toggleRecord}
       >
         {recording ? (
-          <StopCircleIcon size={22} color="#052e16" weight="fill" />
+          <StopIcon size={22} color="#fef2f2" weight="fill" />
         ) : (
-          <RecordIcon size={22} color="#f1f5f9" weight="fill" />
+          <RecordIcon size={22} color={theme.error.color} weight="fill" />
         )}
-        <Text style={[styles.fabLabel, recording && styles.fabLabelActive]}>REC</Text>
+        <Text style={[styles.fabLabel, recording && styles.fabLabelActive]}>
+          {recording ? 'STOP' : 'REC'}
+        </Text>
       </Pressable>
     </View>
   )
@@ -229,30 +231,25 @@ const styles = StyleSheet.create({
     height: 48,
     paddingHorizontal: 18,
     borderRadius: 24,
-    backgroundColor: '#dc2626',
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: theme.error.color,
     gap: 8,
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
   },
   fabActive: {
-    backgroundColor: theme.gps.color,
-    borderColor: theme.gps.border,
+    backgroundColor: theme.error.color,
+    borderColor: theme.error.color,
   },
   fabDisabled: {
     opacity: 0.45,
   },
   fabLabel: {
-    color: '#f1f5f9',
+    color: theme.error.color,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
   },
   fabLabelActive: {
-    color: '#052e16',
+    color: '#fef2f2',
   },
 })

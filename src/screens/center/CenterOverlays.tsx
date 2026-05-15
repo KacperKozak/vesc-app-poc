@@ -70,6 +70,9 @@ interface CenterOverlaysProps {
   history: CenterHistoryOverlayProps
 }
 
+const RECORD_BUTTON_HEIGHT = 48
+const HISTORY_BUTTON_SIZE = 54
+
 export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOverlaysProps) {
   const insets = useSafeAreaInsets()
   const aboveStripBottom = STRIP_CONTENT_HEIGHT + Math.max(insets.bottom * 0.5, 8) + 8
@@ -112,7 +115,12 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             bottomOffset={aboveStripBottom}
           />
           <Pressable
-            style={[styles.historyButton, { bottom: aboveStripBottom }]}
+            style={[
+              styles.historyButton,
+              {
+                bottom: aboveStripBottom - (HISTORY_BUTTON_SIZE - RECORD_BUTTON_HEIGHT) / 2,
+              },
+            ]}
             onPress={() => void history.enterHistoryMode()}
           >
             <ClockCounterClockwiseIcon size={18} color="#f8fafc" weight="bold" />
@@ -222,9 +230,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 12,
     zIndex: 20,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: HISTORY_BUTTON_SIZE,
+    height: HISTORY_BUTTON_SIZE,
+    borderRadius: HISTORY_BUTTON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
