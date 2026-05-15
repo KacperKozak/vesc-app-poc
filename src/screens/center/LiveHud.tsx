@@ -20,8 +20,8 @@ const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
     top: 0,
-    left: 6,
-    right: 6,
+    left: 0,
+    right: 0,
     zIndex: 10,
   },
 })

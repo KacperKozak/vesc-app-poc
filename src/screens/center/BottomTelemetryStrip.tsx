@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingTop: 6,
     paddingBottom: 2,
-    paddingHorizontal: 6,
+    paddingHorizontal: 20,
     gap: 8,
   },
   metricCell: {
