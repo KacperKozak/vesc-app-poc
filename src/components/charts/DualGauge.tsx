@@ -43,7 +43,7 @@ interface DualGaugeProps {
 const VB_W = 110
 const VB_H = 120
 const R = 80
-const STROKE = 2
+const STROKE = 1
 const MARKER_INSET = 10
 
 const GLOW_GRADIENT_ID_LEFT = 'dualGaugeGlowLeft'
@@ -150,10 +150,15 @@ const BG_ARC_RIGHT = arcPathRight(1)
 
 // ── Alert sub-components ──────────────────────────────────────────────────────
 
+const TICK_LENGHT = 2
+const TICK_WIDTH = 0.35
+
 function AlertTick({ side, fraction }: { side: 'left' | 'right'; fraction: number }) {
-  const inner = side === 'left' ? polarLeft(R - 3, fraction) : polarRight(R - 3, fraction)
+  const inner =
+    side === 'left' ? polarLeft(R - TICK_LENGHT, fraction) : polarRight(R - TICK_LENGHT, fraction)
   const outer =
-    side === 'left' ? polarLeft(R + STROKE / 2, fraction) : polarRight(R + STROKE / 2, fraction)
+    side === 'left' ? polarLeft(R - STROKE / 2, fraction) : polarRight(R - STROKE / 2, fraction)
+
   return (
     <Line
       x1={inner.x}
@@ -161,7 +166,7 @@ function AlertTick({ side, fraction }: { side: 'left' | 'right'; fraction: numbe
       x2={outer.x}
       y2={outer.y}
       stroke="#facc15"
-      strokeWidth={0.75}
+      strokeWidth={TICK_WIDTH}
       strokeLinecap="butt"
     />
   )
