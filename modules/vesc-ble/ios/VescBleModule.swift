@@ -159,6 +159,13 @@ public class VescBleModule: Module {
       ] as [String: Any?])
     }
 
+    AsyncFunction("getRefloatConfigSnapshot") { (promise: Promise) in
+      promise.reject(
+        "UNSUPPORTED_PLATFORM",
+        "Refloat config reading is Android-only until iOS BLE transport is implemented"
+      )
+    }
+
     AsyncFunction("getTotalProfileStats") { (promise: Promise) in
       promise.resolve(Self.emptyProfileStats())
     }

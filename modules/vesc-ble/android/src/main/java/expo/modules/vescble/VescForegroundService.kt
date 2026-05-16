@@ -64,6 +64,7 @@ class VescForegroundService : Service() {
         private var appInForeground = true
         private var pendingStart: PendingStart? = null
         private var pendingStop: PendingStop? = null
+        private var pendingConfigRead: PendingConfigRead? = null
         private var pendingGpsStart = false
         private var requestedTelemetryRecordingEnabled = false
         private var requestedLiveHistoryLimitMinutes = DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
@@ -90,6 +91,18 @@ class VescForegroundService : Service() {
             }
             context.startService(intent)
             instance?.consumePendingStop()
+        }
+
+        fun getRefloatConfigSnapshot(
+            onSuccess: (Map<String, Any?>) -> Unit,
+            onError: (String, String) -> Unit,
+        ) {
+            pendingConfigRead = PendingConfigRead(onSuccess, onError)
+            instance?.consumePendingConfigRead()
+                ?: onError(
+                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED.name,
+                    "Board must be connected before reading Refloat config",
+                )
         }
 
         fun startGpsMonitoring(context: Context) {
@@ -187,6 +200,17 @@ class VescForegroundService : Service() {
     )
 
     private data class PendingStop(val onSuccess: () -> Unit)
+    private data class PendingConfigRead(
+        val onSuccess: (Map<String, Any?>) -> Unit,
+        val onError: (String, String) -> Unit,
+    )
+    private data class ActiveConfigRead(
+        val pending: PendingConfigRead,
+        val wasPolling: Boolean,
+        val xmlBytes: ByteArray = ByteArray(0),
+        val expectedXmlLength: Int? = null,
+        val nextXmlOffset: Int = 0,
+    )
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val packetReassembler = VescPacketReassembler()
@@ -238,9 +262,13 @@ class VescForegroundService : Service() {
     private var isStoppingService = false
     private var autoReconnectRunnable: Runnable? = null
     private var reconnectScanCallback: ScanCallback? = null
+    private var activeConfigRead: ActiveConfigRead? = null
+    private var configTimeoutRunnable: Runnable? = null
     private var autoReconnectAttempt = 0
     private var generation = 0L
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
+    private val configChunkLength = 384
+    private val configTimeoutMs = 4_000L
     private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val bluetoothAdapter: BluetoothAdapter
@@ -299,6 +327,40 @@ class VescForegroundService : Service() {
             isStoppingService = true
             stopSelf()
         }
+    }
+
+    private fun consumePendingConfigRead() {
+        val pending = pendingConfigRead ?: return
+        pendingConfigRead = null
+        if (activeConfigRead != null) {
+            pending.onError(
+                RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
+                "Refloat config read already in flight",
+            )
+            return
+        }
+        if (boardConfig == null || boardStatus != BoardPhase.Connected) {
+            pending.onError(
+                RefloatConfigErrorCode.BOARD_NOT_CONNECTED.name,
+                "Board must be connected before reading Refloat config",
+            )
+            return
+        }
+        val id = canId
+        if (id == null) {
+            pending.onError(
+                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
+                "Cannot read Refloat config before CAN id discovery",
+            )
+            return
+        }
+        val wasPolling = pollRunnable != null
+        stopPolling()
+        activeConfigRead = ActiveConfigRead(
+            pending = pending,
+            wasPolling = wasPolling,
+        )
+        sendNextConfigXmlChunk(id)
     }
 
     private fun consumePendingGpsStart() {
@@ -467,6 +529,8 @@ class VescForegroundService : Service() {
                     startPolling()
                 }
             }
+            COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
+            COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
             COMM_CUSTOM_APP_DATA -> {
                 val now = System.currentTimeMillis()
                 val parsed = parseRefloatGetAllData(
@@ -490,6 +554,154 @@ class VescForegroundService : Service() {
                 recordTelemetry(parsed)
             }
         }
+    }
+
+    private fun handleConfigXmlPayload(payload: ByteArray) {
+        val active = activeConfigRead ?: return
+        val parsed = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload) ?: run {
+            failConfigRead(
+                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
+                "Unexpected Refloat config XML response",
+            )
+            return
+        }
+        if (parsed.confInd != 0) {
+            failConfigRead(
+                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
+                "Unexpected Refloat config XML index ${parsed.confInd}",
+            )
+            return
+        }
+        clearConfigTimeout()
+        val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
+        active.xmlBytes.copyInto(merged)
+        parsed.chunk.copyInto(merged, active.xmlBytes.size)
+        val nextOffset = parsed.offset + parsed.chunk.size
+        activeConfigRead = active.copy(
+            xmlBytes = merged,
+            expectedXmlLength = parsed.totalLength,
+            nextXmlOffset = nextOffset,
+        )
+        val id = canId ?: run {
+            failConfigRead(
+                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
+                "CAN id unavailable during Refloat config read",
+            )
+            return
+        }
+        if (nextOffset >= parsed.totalLength) {
+            sendConfigBytesRequest(id)
+        } else {
+            sendNextConfigXmlChunk(id)
+        }
+    }
+
+    private fun handleConfigBytesPayload(payload: ByteArray) {
+        val active = activeConfigRead ?: return
+        val parsed = RefloatConfigProtocol.parseCustomConfigResponse(payload) ?: run {
+            failConfigRead(
+                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
+                "Unexpected Refloat config response",
+            )
+            return
+        }
+        if (parsed.confInd != 0) {
+            failConfigRead(
+                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
+                "Unexpected Refloat config index ${parsed.confInd}",
+            )
+            return
+        }
+        clearConfigTimeout()
+        val can = canId ?: run {
+            failConfigRead(
+                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
+                "CAN id unavailable during Refloat config read",
+            )
+            return
+        }
+        try {
+            val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
+            val snapshot = RefloatConfigDecoder.decode(
+                schema = schema,
+                rawConfig = parsed.config,
+                boardId = boardConfig?.appBoardId,
+                canId = can,
+                capturedAt = System.currentTimeMillis(),
+            )
+            completeConfigRead(snapshot.toMap())
+        } catch (e: RefloatConfigSchemaException) {
+            failConfigRead(
+                RefloatConfigErrorCode.UNSUPPORTED_SCHEMA,
+                e.message ?: "Unsupported Refloat config schema",
+            )
+        } catch (e: RefloatConfigDecodeException) {
+            failConfigRead(
+                RefloatConfigErrorCode.CONFIG_DECODE_FAILED,
+                e.message ?: "Failed to decode Refloat config",
+            )
+        }
+    }
+
+    private fun sendNextConfigXmlChunk(id: Int) {
+        val active = activeConfigRead ?: return
+        val offset = active.nextXmlOffset
+        val expected = active.expectedXmlLength
+        val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
+            .coerceAtLeast(0)
+        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT)
+        val sent = sendPayload(
+            RefloatConfigProtocol.buildGetCustomConfigXml(
+                canId = id,
+                confInd = 0,
+                length = length,
+                offset = offset,
+            ),
+        )
+        if (!sent) {
+            failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+        }
+    }
+
+    private fun sendConfigBytesRequest(id: Int) {
+        armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT)
+        val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
+        if (!sent) {
+            failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+        }
+    }
+
+    private fun armConfigTimeout(code: RefloatConfigErrorCode) {
+        clearConfigTimeout()
+        configTimeoutRunnable = Runnable {
+            failConfigRead(code, "Timed out reading Refloat config")
+        }
+        mainHandler.postDelayed(configTimeoutRunnable!!, configTimeoutMs)
+    }
+
+    private fun clearConfigTimeout() {
+        configTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        configTimeoutRunnable = null
+    }
+
+    private fun completeConfigRead(snapshot: Map<String, Any?>) {
+        val active = activeConfigRead ?: return
+        activeConfigRead = null
+        clearConfigTimeout()
+        if (active.wasPolling && boardConfig != null && canId != null) {
+            startPolling()
+        }
+        active.pending.onSuccess(snapshot)
+    }
+
+    private fun failConfigRead(code: RefloatConfigErrorCode, message: String) {
+        val active = activeConfigRead ?: return
+        activeConfigRead = null
+        clearConfigTimeout()
+        if (active.wasPolling && boardConfig != null && canId != null) {
+            startPolling()
+        }
+        active.pending.onError(code.name, message)
     }
 
     private fun startPolling() {
@@ -592,6 +804,12 @@ class VescForegroundService : Service() {
     }
 
     private fun stopCurrentBoardSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
+        if (activeConfigRead != null) {
+            failConfigRead(
+                RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
+                "Board session stopped during Refloat config read",
+            )
+        }
         val stoppedConfig = boardConfig
         autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
         autoReconnectRunnable = null

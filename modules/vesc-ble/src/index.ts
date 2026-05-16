@@ -245,6 +245,33 @@ export interface TelemetrySummary {
   droppedPendingSamples: number
 }
 
+export interface RefloatConfigField {
+  id: string
+  label: string
+  value: number | boolean | string
+  unit: string | null
+  min: number | null
+  max: number | null
+  readOnly: true
+}
+
+export interface RefloatConfigGroup {
+  id: string
+  title: string
+  fields: RefloatConfigField[]
+}
+
+export interface RefloatConfigSnapshot {
+  capturedAt: number
+  boardId: string | null
+  canId: number
+  schemaHash: string
+  rawConfigHash: string
+  rawConfigLength: number
+  groups: RefloatConfigGroup[]
+  missingFieldIds: string[]
+}
+
 export interface ProfileStats {
   distanceM: number | null
   rideCount: number
@@ -319,6 +346,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
     limit?: number
   }): Promise<HistoryRange>
   getTelemetrySummary(): Promise<TelemetrySummary>
+  getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
   getTotalProfileStats(): Promise<ProfileStats>
   getMonthlyProfileStats(options: ProfileStatsMonth): Promise<ProfileStats>
   getProfileStatMonths(): Promise<ProfileStatsMonth[]>
@@ -428,6 +456,10 @@ export async function getHistoryRange(options: {
 
 export async function getTelemetrySummary(): Promise<TelemetrySummary> {
   return native.getTelemetrySummary()
+}
+
+export async function getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot> {
+  return native.getRefloatConfigSnapshot()
 }
 
 export async function getTotalProfileStats(): Promise<ProfileStats> {

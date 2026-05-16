@@ -133,6 +133,12 @@ class VescBleModule : Module() {
     AsyncFunction("getTelemetrySummary") {
       runBlocking { TelemetryRepository.get(context.applicationContext).getSummary() }
     }
+    AsyncFunction("getRefloatConfigSnapshot") { promise: Promise ->
+      VescForegroundService.getRefloatConfigSnapshot(
+        onSuccess = { snapshot -> promise.resolve(snapshot) },
+        onError = { code, message -> promise.reject(code, message, null) },
+      )
+    }
     AsyncFunction("getTotalProfileStats") {
       runBlocking { ProfileStatsRepository.get(context.applicationContext).getTotalProfileStats() }
     }
