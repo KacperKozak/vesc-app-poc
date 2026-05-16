@@ -268,7 +268,7 @@ function StatsGrid({ items }: { items: StatItem[] }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#111827',
   },
   content: {
     padding: 16,
