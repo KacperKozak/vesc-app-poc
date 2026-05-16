@@ -1,5 +1,6 @@
 export const routes = {
   home: '/',
+  profile: '/profile',
   settings: '/settings',
   addBoardScan: '/addBoard/scan',
   addBoardDetails: '/addBoard/details',
@@ -15,6 +16,7 @@ export const routes = {
 
 export const stackScreens = {
   home: 'index',
+  profile: 'profile',
   settings: 'settings',
   addBoardScan: 'addBoard/scan',
   addBoardDetails: 'addBoard/details',

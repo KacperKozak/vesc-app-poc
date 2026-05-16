@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { CaretDownIcon, GearSixIcon, PencilSimpleIcon, PowerIcon } from 'phosphor-react-native'
+import {
+  CaretDownIcon,
+  GearSixIcon,
+  PencilSimpleIcon,
+  PowerIcon,
+  UserCircleIcon,
+} from 'phosphor-react-native'
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -51,6 +57,12 @@ export function TopBar({
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) }]} pointerEvents="box-none">
       <View style={styles.row}>
+        <Pressable
+          style={[styles.iconRound, styles.iconLeft]}
+          onPress={() => router.push(routes.profile)}
+        >
+          <UserCircleIcon size={17} color="#cbd5e1" weight="bold" />
+        </Pressable>
         <View style={styles.pill}>
           <Pressable style={styles.boardButton} onPress={() => setSelectorOpen(true)}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
@@ -135,6 +147,10 @@ const styles = StyleSheet.create({
   iconRight: {
     position: 'absolute',
     right: 10,
+  },
+  iconLeft: {
+    position: 'absolute',
+    left: 10,
   },
   pill: {
     flexDirection: 'row',

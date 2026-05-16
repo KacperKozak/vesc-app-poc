@@ -2,6 +2,8 @@ import { Pressable, StyleSheet, View } from 'react-native'
 import { ArrowLeftIcon, TrashIcon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { ScreenTitle } from '@/components/navigation/ScreenTitle'
+
 interface HistoryControlsProps {
   loading: boolean
   canRemove: boolean
@@ -17,7 +19,9 @@ export function HistoryControls({ loading, canRemove, onBack, onRemove }: Histor
         <Pressable style={styles.iconButton} onPress={onBack}>
           <ArrowLeftIcon size={19} color="#f8fafc" weight="bold" />
         </Pressable>
-        <View style={styles.spacer} />
+        <View style={styles.titleWrap}>
+          <ScreenTitle title="History" />
+        </View>
         <Pressable
           style={[
             styles.iconButton,
@@ -46,8 +50,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  spacer: {
+  titleWrap: {
     flex: 1,
+    alignItems: 'center',
   },
   iconButton: {
     width: 38,
