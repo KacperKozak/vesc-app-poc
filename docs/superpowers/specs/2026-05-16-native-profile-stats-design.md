@@ -32,7 +32,8 @@ export interface ProfileStats {
   topSpeedKmh: number
   avgSpeedKmh: number
   longestRideM: number | null
-  faultCount: number
+  batteryUsedWh: number | null
+  batteryRegenWh: number | null
 }
 
 export interface ProfileStatsMonth {
@@ -53,6 +54,7 @@ Native profile stats use the same conceptual session rules as current history se
 - calculate session duration from first sample time to last sample time
 - use only VESC board odometer distance for ride distance
 - do not use GPS route distance as a fallback for profile stats
+- calculate battery energy from VESC battery voltage, battery current, and sample timing
 - count month membership by session start time
 
 `getTotalProfileStats()` aggregates all sessions across all stored telemetry.
@@ -69,9 +71,12 @@ Native profile stats use the same conceptual session rules as current history se
 - `topSpeedKmh`: highest observed VESC board speed across included sessions.
 - `avgSpeedKmh`: distance-weighted average when odometer distance and duration exist; otherwise sample-weighted average from VESC board bucket speeds.
 - `longestRideM`: highest odometer-derived session distance, or `null` when distance is unavailable.
-- `faultCount`: sum of telemetry fault counts.
+- `batteryUsedWh`: gross consumed battery energy, or `null` when energy cannot be calculated.
+- `batteryRegenWh`: regenerated battery energy, or `null` when energy cannot be calculated.
 
-For empty datasets, native returns zero counts and `null` distance fields:
+Battery energy is calculated from board telemetry only. For each valid adjacent sample interval, native integrates `batteryVoltage * batteryCurrent` over elapsed time. Positive power contributes to `batteryUsedWh`; negative power contributes its absolute value to `batteryRegenWh`. Unrealistic or very large sample gaps are excluded from energy integration so reconnect gaps do not inflate totals.
+
+For empty datasets, native returns zero counts and `null` measurement fields:
 
 ```ts
 {
@@ -81,7 +86,8 @@ For empty datasets, native returns zero counts and `null` distance fields:
   topSpeedKmh: 0,
   avgSpeedKmh: 0,
   longestRideM: null,
-  faultCount: 0
+  batteryUsedWh: null,
+  batteryRegenWh: null
 }
 ```
 
@@ -92,14 +98,14 @@ For empty datasets, native returns zero counts and `null` distance fields:
 Top section:
 
 - prominent all-time distance
-- compact all-time cards for rides, ride time, top speed, longest ride, average speed, and faults
+- compact all-time cards for rides, ride time, top speed, longest ride, average speed, battery used, and regen
 
 Month section:
 
 - header row with previous arrow, month picker button, and next arrow
 - arrows navigate among months returned by `getProfileStatMonths()`
 - picker opens a compact month selector
-- cards show selected month distance, rides, ride time, average speed, top speed, longest ride, and faults
+- cards show selected month distance, rides, ride time, average speed, top speed, longest ride, battery used, and regen
 - when no telemetry exists, show empty all-time/month stats and a concise empty message
 
 Icons use `phosphor-react-native` with `Icon`-suffixed exports.
@@ -133,7 +139,8 @@ Native tests cover:
 - month list ordering
 - device changes and boundary/gap session splits
 - VESC board odometer distance only, with no GPS fallback
-- fault count, top speed, longest ride, and average speed aggregation
+- battery used and regen energy integration
+- top speed, longest ride, and average speed aggregation
 
 TypeScript checks cover the new bridge types and profile call sites.
 
