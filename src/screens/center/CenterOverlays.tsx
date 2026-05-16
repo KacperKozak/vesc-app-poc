@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useCallback, useEffect, useState, type RefObject } from 'react'
 import { ArrowLeftIcon, ClockCounterClockwiseIcon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -171,6 +171,12 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
       {mode === 'history' && history.selectedSession && (
         <>
           <MapVignette mode={mode} panelHeight={panelHeight} />
+          {history.loadingSession && (
+            <View pointerEvents="none" style={styles.mapLoading}>
+              <View style={styles.mapLoadingDim} />
+              <ActivityIndicator size="large" color="#38bdf8" />
+            </View>
+          )}
           <HistoryTelemetryPanel
             startAtMs={history.selectedSession.startAtMs}
             endAtMs={history.selectedSession.endAtMs}
@@ -279,5 +285,15 @@ const styles = StyleSheet.create({
     color: '#fecaca',
     fontSize: 12,
     fontWeight: '700',
+  },
+  mapLoading: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapLoadingDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(2, 6, 23, 0.34)',
   },
 })

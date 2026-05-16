@@ -200,17 +200,6 @@ export function HistoryTelemetryPanel({
 
   const bottomInset = Math.max(insets.bottom, 16) + 8
 
-  if (loading) {
-    return (
-      <View
-        style={[styles.panel, { bottom: bottomInset }]}
-        onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
-      >
-        <Text style={styles.empty}>Loading ride telemetry...</Text>
-      </View>
-    )
-  }
-
   if (!headSample || sortedSamples.length < 2) {
     return (
       <View
@@ -327,18 +316,14 @@ export function HistoryTelemetryPanel({
           <CaretLeftIcon size={20} color="#f8fafc" weight="bold" />
         </Pressable>
         <Pressable style={styles.titleButton} onPress={onOpenList}>
-          {loading ? (
-            <Text style={styles.titleLoading}>Loading...</Text>
-          ) : (
-            <View style={styles.titleContent}>
-              <Text style={styles.titleTime} numberOfLines={1}>
-                {formatRideTime(startAtMs, endAtMs)}
-              </Text>
-              <Text style={styles.titleMeta} numberOfLines={1}>
-                {formatRideDate(startAtMs, endAtMs)} · {deviceName}
-              </Text>
-            </View>
-          )}
+          <View style={styles.titleContent}>
+            <Text style={styles.titleTime} numberOfLines={1}>
+              {formatRideTime(startAtMs, endAtMs)}
+            </Text>
+            <Text style={styles.titleMeta} numberOfLines={1}>
+              {formatRideDate(startAtMs, endAtMs)} · {deviceName}
+            </Text>
+          </View>
           <CaretDownIcon size={12} color="#64748b" weight="bold" />
         </Pressable>
         <Pressable
@@ -487,12 +472,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 9,
     fontWeight: '600',
-  },
-  titleLoading: {
-    flex: 1,
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: '700',
   },
   chart: {
     minHeight: 72,
