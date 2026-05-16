@@ -51,8 +51,8 @@ Native profile stats use the same conceptual session rules as current history se
 - split sessions after gaps greater than 10 minutes
 - split sessions after disconnect, app stop, or error boundaries
 - calculate session duration from first sample time to last sample time
-- prefer odometer-derived distance when available
-- fall back to GPS distance when odometer distance is unavailable
+- use only VESC board odometer distance for ride distance
+- do not use GPS route distance as a fallback for profile stats
 - count month membership by session start time
 
 `getTotalProfileStats()` aggregates all sessions across all stored telemetry.
@@ -63,12 +63,12 @@ Native profile stats use the same conceptual session rules as current history se
 
 ## Stat Meanings
 
-- `distanceM`: sum of session distances, or `null` when no session has distance data.
+- `distanceM`: sum of VESC board odometer session distances, or `null` when no session has odometer distance data.
 - `rideCount`: number of grouped sessions.
 - `rideTimeMs`: sum of session durations.
-- `topSpeedKmh`: highest observed board or GPS speed across included sessions.
-- `avgSpeedKmh`: distance-weighted average when distance and duration exist; otherwise sample-weighted average from bucket speeds.
-- `longestRideM`: highest session distance, or `null` when distance is unavailable.
+- `topSpeedKmh`: highest observed VESC board speed across included sessions.
+- `avgSpeedKmh`: distance-weighted average when odometer distance and duration exist; otherwise sample-weighted average from VESC board bucket speeds.
+- `longestRideM`: highest odometer-derived session distance, or `null` when distance is unavailable.
 - `faultCount`: sum of telemetry fault counts.
 
 For empty datasets, native returns zero counts and `null` distance fields:
@@ -132,7 +132,7 @@ Native tests cover:
 - calendar month filtering
 - month list ordering
 - device changes and boundary/gap session splits
-- odometer distance preference and GPS fallback
+- VESC board odometer distance only, with no GPS fallback
 - fault count, top speed, longest ride, and average speed aggregation
 
 TypeScript checks cover the new bridge types and profile call sites.
