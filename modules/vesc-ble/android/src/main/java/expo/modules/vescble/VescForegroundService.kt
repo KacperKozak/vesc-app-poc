@@ -452,24 +452,37 @@ class VescForegroundService : Service() {
         gattClient.connect(device)
         connectTimeout = Runnable {
             if (pendingConnect == start) {
+                Log.w(
+                    VESC_SESSION_TAG,
+                    "connect timeout device=$deviceId attempt=$connectAttempt status=$boardStatus canId=$canId",
+                )
                 failStart(start, "CONNECT_TIMEOUT", "Timed out connecting to board")
             }
         }
         mainHandler.postDelayed(connectTimeout!!, 12_000)
-        Log.d(VESC_SESSION_TAG, "connectGatt $deviceId attempt=$connectAttempt")
+        Log.d(
+            VESC_SESSION_TAG,
+            "connect start device=$deviceId attempt=$connectAttempt autoReconnect=${start.boardConfig.autoReconnect}",
+        )
     }
 
     private val gattListener = object : VescGattListener {
         override fun onGattConnected() {
+            Log.d(VESC_SESSION_TAG, "connect phase: gatt connected")
             setStatus(BoardPhase.Discovering)
         }
 
         override fun onGattSubscribing() {
+            Log.d(VESC_SESSION_TAG, "connect phase: subscribing")
             setStatus(BoardPhase.Subscribing)
         }
 
         override fun onGattDisconnected(status: Int, intentional: Boolean) {
             val wasConnecting = pendingConnect
+            Log.w(
+                VESC_SESSION_TAG,
+                "gatt disconnected status=$status intentional=$intentional wasConnecting=${wasConnecting != null} boardStatus=$boardStatus",
+            )
             cancelConnectTimeout()
             stopPolling()
             if (!intentional && activeConfigRead != null) {
@@ -499,10 +512,12 @@ class VescForegroundService : Service() {
         }
 
         override fun onGattReady() {
+            Log.d(VESC_SESSION_TAG, "connect phase: gatt ready")
             resolveBleConnect()
         }
 
         override fun onGattFailure(code: String, message: String) {
+            Log.w(VESC_SESSION_TAG, "gatt failure code=$code message=$message boardStatus=$boardStatus")
             failPendingConnect(code, message)
         }
 
@@ -514,15 +529,19 @@ class VescForegroundService : Service() {
     private fun resolveBleConnect() {
         cancelConnectTimeout()
         val start = pendingConnect ?: return
+        Log.d(VESC_SESSION_TAG, "connect resolved attempt=$connectAttempt canId=$canId")
         pendingConnect = null
         boardStatus = BoardPhase.WaitingForTelemetry
         boardError = null
         emitState()
         showNotification("Discovering board...")
         start.onSuccess()
-        mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
-        mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
-        if (canId != null) startPolling()
+        if (canId != null) {
+            startPolling()
+        } else {
+            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
+            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
+        }
         armBoardReadyTimeout(start.boardConfig)
     }
 
@@ -535,7 +554,7 @@ class VescForegroundService : Service() {
 
     private fun sendStartupPayload(payload: ByteArray) {
         if (activeConfigRead != null) return
-        sendPayload(payload)
+        sendPayloadWithRetry(payload)
     }
 
     private fun handlePayload(payload: ByteArray) {
@@ -547,7 +566,7 @@ class VescForegroundService : Service() {
                     canId = payload[1].toInt() and 0xff
                     emitState()
                     startPolling()
-                    sendPayload(byteArrayOf(
+                    sendPayloadWithRetry(byteArrayOf(
                         COMM_FORWARD_CAN.toByte(),
                         (payload[1].toInt() and 0xff).toByte(),
                         COMM_FW_VERSION.toByte(),
@@ -813,7 +832,7 @@ class VescForegroundService : Service() {
         pollRunnable = object : Runnable {
             override fun run() {
                 lastPollAt = System.currentTimeMillis()
-                sendPayload(byteArrayOf(
+                sendPayloadWithRetry(byteArrayOf(
                     COMM_FORWARD_CAN.toByte(),
                     id.toByte(),
                     COMM_CUSTOM_APP_DATA.toByte(),
@@ -895,6 +914,14 @@ class VescForegroundService : Service() {
 
     private fun sendPayload(payload: ByteArray): Boolean {
         return gattClient.sendPayload(payload)
+    }
+
+    private fun sendPayloadWithRetry(payload: ByteArray): Boolean {
+        val sent = sendPayload(payload)
+        if (!sent) {
+            mainHandler.postDelayed({ sendPayload(payload) }, 120)
+        }
+        return sent
     }
 
     private fun updateLatency(now: Long): Int? {
