@@ -274,7 +274,8 @@ class VescForegroundService : Service() {
     private var generation = 0L
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private val configChunkLength = 384
-    private val configTimeoutMs = 4_000L
+    private val configSchemaTimeoutMs = 10_000L
+    private val configReadTimeoutMs = 8_000L
     private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val bluetoothAdapter: BluetoothAdapter
@@ -721,7 +722,7 @@ class VescForegroundService : Service() {
         val expected = active.expectedXmlLength
         val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
             .coerceAtLeast(0)
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT)
+        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT, configSchemaTimeoutMs)
         val sent = sendPayload(
             RefloatConfigProtocol.buildGetCustomConfigXml(
                 canId = id,
@@ -736,7 +737,7 @@ class VescForegroundService : Service() {
     }
 
     private fun sendConfigBytesRequest(id: Int) {
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT)
+        armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
         val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
         if (!sent) {
             failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
@@ -762,12 +763,12 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun armConfigTimeout(code: RefloatConfigErrorCode) {
+    private fun armConfigTimeout(code: RefloatConfigErrorCode, timeoutMs: Long) {
         clearConfigTimeout()
         configTimeoutRunnable = Runnable {
             failConfigRead(code, "Timed out reading Refloat config")
         }
-        mainHandler.postDelayed(configTimeoutRunnable!!, configTimeoutMs)
+        mainHandler.postDelayed(configTimeoutRunnable!!, timeoutMs)
     }
 
     private fun clearConfigTimeout() {
