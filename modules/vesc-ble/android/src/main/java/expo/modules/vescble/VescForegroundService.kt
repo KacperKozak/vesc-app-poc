@@ -586,19 +586,15 @@ class VescForegroundService : Service() {
 
     private fun handleConfigXmlPayload(payload: ByteArray) {
         val active = activeConfigRead ?: return
-        val parsed = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload) ?: run {
-            failConfigRead(
-                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                "Unexpected Refloat config XML response",
-            )
-            return
-        }
-        if (parsed.confInd != 0) {
-            failConfigRead(
-                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                "Unexpected Refloat config XML index ${parsed.confInd}",
-            )
-            return
+        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
+            is RefloatConfigProtocolResult.Success -> result.value
+            is RefloatConfigProtocolResult.Failure -> {
+                failConfigRead(
+                    RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
+                    result.message,
+                )
+                return
+            }
         }
         clearConfigTimeout()
         val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
@@ -626,19 +622,15 @@ class VescForegroundService : Service() {
 
     private fun handleConfigBytesPayload(payload: ByteArray) {
         val active = activeConfigRead ?: return
-        val parsed = RefloatConfigProtocol.parseCustomConfigResponse(payload) ?: run {
-            failConfigRead(
-                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                "Unexpected Refloat config response",
-            )
-            return
-        }
-        if (parsed.confInd != 0) {
-            failConfigRead(
-                RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                "Unexpected Refloat config index ${parsed.confInd}",
-            )
-            return
+        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
+            is RefloatConfigProtocolResult.Success -> result.value
+            is RefloatConfigProtocolResult.Failure -> {
+                failConfigRead(
+                    RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
+                    result.message,
+                )
+                return
+            }
         }
         clearConfigTimeout()
         val can = canId ?: run {
@@ -651,11 +643,17 @@ class VescForegroundService : Service() {
         try {
             val schema = try {
                 RefloatConfigSchemaParser.parse(active.xmlBytes)
-            } catch (e: RefloatConfigSchemaException) {
-                Log.w(VESC_SESSION_TAG, "Remote Refloat schema unsupported, using bundled schema", e)
-                RefloatConfigSchemaParser.parse(
-                    assets.open("refloat-settings.xml").use { it.readBytes() },
-                )
+            } catch (remoteError: RefloatConfigSchemaException) {
+                Log.w(VESC_SESSION_TAG, "Remote Refloat schema unsupported, using bundled schema", remoteError)
+                try {
+                    RefloatConfigSchemaParser.parse(
+                        assets.open("refloat-settings.xml").use { it.readBytes() },
+                    )
+                } catch (bundledError: RefloatConfigSchemaException) {
+                    throw RefloatConfigSchemaException(
+                        "UNSUPPORTED_SCHEMA: remote schema failed (${remoteError.message}); bundled schema failed (${bundledError.message})",
+                    )
+                }
             }
             val snapshot = RefloatConfigDecoder.decode(
                 schema = schema,

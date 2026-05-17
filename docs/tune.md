@@ -25,14 +25,14 @@ interpolate(x, [inputMin, inputMax], [outputMin, outputMax])
 
 Display values are rounded after conversion to the underlying field value.
 
-| Slider | UI range | Step | Underlying behavior |
-| --- | ---: | ---: | --- |
-| Aggressiveness | `-5..10` | `1` | Writes PID and Mahony filter values together. |
-| Nose stiffness | `0..10` | `1` | Writes acceleration torque tiltback strength. |
-| Tail stiffness | `0..10` | `1` | Writes regen/braking torque tiltback strength. |
-| Carve tilt | `0..15` | `1` | Writes turn tiltback strength directly. |
-| Brake tilt | `0..5` | `1` | Writes brake tiltback strength directly. |
-| ATR intensity | `0..15` | `1` | Writes uphill and downhill ATR strength together. |
+| Slider         | UI range | Step | Underlying behavior                               |
+| -------------- | -------: | ---: | ------------------------------------------------- |
+| Aggressiveness | `-5..10` |  `1` | Writes PID and Mahony filter values together.     |
+| Nose stiffness |  `0..10` |  `1` | Writes acceleration torque tiltback strength.     |
+| Tail stiffness |  `0..10` |  `1` | Writes regen/braking torque tiltback strength.    |
+| Carve tilt     |  `0..15` |  `1` | Writes turn tiltback strength directly.           |
+| Brake tilt     |   `0..5` |  `1` | Writes brake tiltback strength directly.          |
+| ATR intensity  |  `0..15` |  `1` | Writes uphill and downhill ATR strength together. |
 
 ## Basic Slider Formulas
 
@@ -41,13 +41,13 @@ Display values are rounded after conversion to the underlying field value.
 The aggressiveness slider is a compound ride-feel control. It writes five
 underlying fields:
 
-| Field | Formula |
-| --- | --- |
-| `kp` | `round(interpolate(x, [-5, 10], [15, 30]), 0)` |
-| `kp2` | `round(interpolate(x, [-5, 10], [0.4, 1.1]), 1)` |
-| `ki` | `round(interpolate(x, [-5, 10], [0.015, 0.03]), 3)` |
-| `mahony_kp` | `round(interpolate(x, [-5, 10], [2.2, 1.5]), 1)` |
-| `mahony_kp_roll` | `round(interpolate(x, [-5, 10], [2.2, 1.5]), 1)` |
+| Field            | Formula                                             |
+| ---------------- | --------------------------------------------------- |
+| `kp`             | `round(interpolate(x, [-5, 10], [15, 30]), 0)`      |
+| `kp2`            | `round(interpolate(x, [-5, 10], [0.4, 1.1]), 1)`    |
+| `ki`             | `round(interpolate(x, [-5, 10], [0.015, 0.03]), 3)` |
+| `mahony_kp`      | `round(interpolate(x, [-5, 10], [2.2, 1.5]), 1)`    |
+| `mahony_kp_roll` | `round(interpolate(x, [-5, 10], [2.2, 1.5]), 1)`    |
 
 The displayed slider value is derived from `kp - 20`, clamped to `[-5, 10]`.
 That means `kp = 20` displays as neutral `0`, lower `kp` displays negative, and
@@ -81,10 +81,10 @@ torquetilt_strength / 0.03
 At the UI range endpoints:
 
 | Slider | `torquetilt_strength` |
-| ---: | ---: |
-| `0` | `0.00 deg/A` |
-| `5` | `0.15 deg/A` |
-| `10` | `0.30 deg/A` |
+| -----: | --------------------: |
+|    `0` |          `0.00 deg/A` |
+|    `5` |          `0.15 deg/A` |
+|   `10` |          `0.30 deg/A` |
 
 Behaviorally, this applies nose lift based on positive output current. It can
 increase acceleration and uphill aggressiveness even when ATR is absent or weak.
@@ -106,10 +106,10 @@ torquetilt_strength_regen / 0.03
 At the UI range endpoints:
 
 | Slider | `torquetilt_strength_regen` |
-| ---: | ---: |
-| `0` | `0.00 deg/A` |
-| `5` | `0.15 deg/A` |
-| `10` | `0.30 deg/A` |
+| -----: | --------------------------: |
+|    `0` |                `0.00 deg/A` |
+|    `5` |                `0.15 deg/A` |
+|   `10` |                `0.30 deg/A` |
 
 Behaviorally, this applies nose lowering based on negative output current
 regen. It can increase braking and downhill aggressiveness even when ATR is
@@ -133,10 +133,10 @@ interpolate(max(atr_strength_up, atr_strength_down), [0, 2], [0, 15])
 At useful points:
 
 | Slider | `atr_strength_up` | `atr_strength_down` |
-| ---: | ---: | ---: |
-| `0` | `0.0` | `0.0` |
-| `7.5` | `1.0` | `1.0` |
-| `15` | `2.0` | `2.0` |
+| -----: | ----------------: | ------------------: |
+|    `0` |             `0.0` |               `0.0` |
+|  `7.5` |             `1.0` |               `1.0` |
+|   `15` |             `2.0` |               `2.0` |
 
 Behaviorally, ATR applies nose lift or lowering based on adaptive torque
 response rather than raw current alone. It is meant to respond to the difference
@@ -176,16 +176,16 @@ order.
 
 ### General
 
-| Field | Label | Notes |
-| --- | --- | --- |
-| `kp` | Angle P | Main proportional angle response. Higher values make the board respond more strongly to nose angle error. |
-| `kp2` | Rate P | Responds to angular velocity. Acts like a damping/derivative component and is especially noticeable in fast or aggressive maneuvers. |
-| `kp_brake` | Angle P (Braking) | Multiplier for angle response while braking. |
-| `kp2_brake` | Rate P (Braking) | Multiplier for rate response while braking. |
-| `ki` | Angle I | Integral correction. |
-| `ki_limit` | I Term Limit | Limits integral term authority. |
-| `mahony_kp` | Pitch KP | Pitch-axis Mahony filter accelerometer correction. Higher values feel looser and linger more; lower values feel snappier. |
-| `mahony_kp_roll` | Roll KP | Roll-axis Mahony filter correction. Lower than pitch can help the nose hold up in turns and make tight carves feel stiffer. |
+| Field            | Label             | Notes                                                                                                                                |
+| ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `kp`             | Angle P           | Main proportional angle response. Higher values make the board respond more strongly to nose angle error.                            |
+| `kp2`            | Rate P            | Responds to angular velocity. Acts like a damping/derivative component and is especially noticeable in fast or aggressive maneuvers. |
+| `kp_brake`       | Angle P (Braking) | Multiplier for angle response while braking.                                                                                         |
+| `kp2_brake`      | Rate P (Braking)  | Multiplier for rate response while braking.                                                                                          |
+| `ki`             | Angle I           | Integral correction.                                                                                                                 |
+| `ki_limit`       | I Term Limit      | Limits integral term authority.                                                                                                      |
+| `mahony_kp`      | Pitch KP          | Pitch-axis Mahony filter accelerometer correction. Higher values feel looser and linger more; lower values feel snappier.            |
+| `mahony_kp_roll` | Roll KP           | Roll-axis Mahony filter correction. Lower than pitch can help the nose hold up in turns and make tight carves feel stiffer.          |
 
 Rate P and Angle P should be treated as related ride-feel values. If Angle P is
 changed substantially, Rate P usually needs to move in a similar proportion to
@@ -193,19 +193,19 @@ preserve feel.
 
 ### ATR
 
-| Field | Label | Notes |
-| --- | --- | --- |
-| `atr_strength_up` | ATR Uphill Strength | Nose lift applied from ATR response. |
-| `atr_strength_down` | ATR Downhill Strength | Nose lowering applied from ATR response. |
-| `atr_threshold_up` | Threshold Angle Up | Angle threshold for uphill ATR behavior. |
-| `atr_threshold_down` | Threshold Angle Down | Angle threshold for downhill ATR behavior. |
-| `atr_speed_boost` | Speed Boost | Boosts ATR response with speed. |
-| `atr_angle_limit` | Tiltback Angle Limit | Maximum ATR tiltback angle. |
-| `atr_on_speed` | Max Tiltback Speed | Maximum speed for applying ATR tiltback. |
-| `atr_off_speed` | Max Tiltback Release Speed | Maximum speed for releasing ATR tiltback. |
-| `atr_response_boost` | Tiltback Response Boost | Boost factor for tiltback response. |
-| `atr_transition_boost` | Tiltback Transition Boost | Boost factor around response transitions. |
-| `atr_filter` | Current Filter | Current filter frequency. |
+| Field                  | Label                      | Notes                                          |
+| ---------------------- | -------------------------- | ---------------------------------------------- |
+| `atr_strength_up`      | ATR Uphill Strength        | Nose lift applied from ATR response.           |
+| `atr_strength_down`    | ATR Downhill Strength      | Nose lowering applied from ATR response.       |
+| `atr_threshold_up`     | Threshold Angle Up         | Angle threshold for uphill ATR behavior.       |
+| `atr_threshold_down`   | Threshold Angle Down       | Angle threshold for downhill ATR behavior.     |
+| `atr_speed_boost`      | Speed Boost                | Boosts ATR response with speed.                |
+| `atr_angle_limit`      | Tiltback Angle Limit       | Maximum ATR tiltback angle.                    |
+| `atr_on_speed`         | Max Tiltback Speed         | Maximum speed for applying ATR tiltback.       |
+| `atr_off_speed`        | Max Tiltback Release Speed | Maximum speed for releasing ATR tiltback.      |
+| `atr_response_boost`   | Tiltback Response Boost    | Boost factor for tiltback response.            |
+| `atr_transition_boost` | Tiltback Transition Boost  | Boost factor around response transitions.      |
+| `atr_filter`           | Current Filter             | Current filter frequency.                      |
 | `atr_amps_accel_ratio` | Amps to Acceleration Ratio | Ratio used for acceleration-side ATR behavior. |
 | `atr_amps_decel_ratio` | Amps to Deceleration Ratio | Ratio used for deceleration-side ATR behavior. |
 
@@ -215,45 +215,45 @@ firmware discussions.
 
 ### Torque Tiltback
 
-| Field | Label | Notes |
-| --- | --- | --- |
-| `torquetilt_strength` | Strength | Nose lift based on positive output current. Basic "Nose stiffness" writes this. |
-| `torquetilt_strength_regen` | Strength (Regen) | Nose lowering based on negative regen current. Basic "Tail stiffness" writes this. |
-| `torquetilt_start_current` | Start Current Threshold | Current threshold before torque tiltback starts. |
-| `torquetilt_angle_limit` | Tiltback Angle Limit | Maximum torque tiltback angle. |
-| `torquetilt_on_speed` | Max Tiltback Speed | Maximum speed for applying torque tiltback. |
-| `torquetilt_off_speed` | Max Tiltback Release Speed | Maximum speed for releasing torque tiltback. |
+| Field                       | Label                      | Notes                                                                              |
+| --------------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
+| `torquetilt_strength`       | Strength                   | Nose lift based on positive output current. Basic "Nose stiffness" writes this.    |
+| `torquetilt_strength_regen` | Strength (Regen)           | Nose lowering based on negative regen current. Basic "Tail stiffness" writes this. |
+| `torquetilt_start_current`  | Start Current Threshold    | Current threshold before torque tiltback starts.                                   |
+| `torquetilt_angle_limit`    | Tiltback Angle Limit       | Maximum torque tiltback angle.                                                     |
+| `torquetilt_on_speed`       | Max Tiltback Speed         | Maximum speed for applying torque tiltback.                                        |
+| `torquetilt_off_speed`      | Max Tiltback Release Speed | Maximum speed for releasing torque tiltback.                                       |
 
 Typical strength range for basic controls is `0.00..0.30 deg/A`; broader
 advanced editors may allow up to `1.00 deg/A`.
 
 ### Turn Tiltback
 
-| Field | Label | Notes |
-| --- | --- | --- |
-| `turntilt_strength` | Strength | Basic "Carve tilt" writes this directly. |
-| `turntilt_angle_limit` | Tiltback Angle Limit | Maximum turn tiltback angle. |
-| `turntilt_start_angle` | Turn Aggregate Threshold | Turn aggregate threshold before response starts. |
-| `turntilt_start_erpm` | ERPM Threshold | Speed threshold before response starts. |
-| `turntilt_speed` | Max Tiltback Speed | Maximum speed for applying turn tiltback. |
-| `turntilt_erpm_boost` | Speed Boost % | Boost percentage based on ERPM. |
-| `turntilt_erpm_boost_end` | Speed Boost Max ERPM | ERPM where boost reaches its maximum. |
-| `turntilt_yaw_aggregate` | Turn Aggregate Target | Target accumulated yaw/turn value. |
+| Field                     | Label                    | Notes                                            |
+| ------------------------- | ------------------------ | ------------------------------------------------ |
+| `turntilt_strength`       | Strength                 | Basic "Carve tilt" writes this directly.         |
+| `turntilt_angle_limit`    | Tiltback Angle Limit     | Maximum turn tiltback angle.                     |
+| `turntilt_start_angle`    | Turn Aggregate Threshold | Turn aggregate threshold before response starts. |
+| `turntilt_start_erpm`     | ERPM Threshold           | Speed threshold before response starts.          |
+| `turntilt_speed`          | Max Tiltback Speed       | Maximum speed for applying turn tiltback.        |
+| `turntilt_erpm_boost`     | Speed Boost %            | Boost percentage based on ERPM.                  |
+| `turntilt_erpm_boost_end` | Speed Boost Max ERPM     | ERPM where boost reaches its maximum.            |
+| `turntilt_yaw_aggregate`  | Turn Aggregate Target    | Target accumulated yaw/turn value.               |
 
 ### Brake Tilt
 
-| Field | Label | Notes |
-| --- | --- | --- |
-| `braketilt_strength` | Brake Tilt Strength | Basic "Brake tilt" writes this directly. |
+| Field                 | Label                | Notes                                     |
+| --------------------- | -------------------- | ----------------------------------------- |
+| `braketilt_strength`  | Brake Tilt Strength  | Basic "Brake tilt" writes this directly.  |
 | `braketilt_lingering` | Brake Tilt Lingering | Controls how brake tilt lingers/releases. |
 
 ### Tiltback
 
-| Field | Label | Notes |
-| --- | --- | --- |
-| `tiltback_constant` | Constant Tiltback | Constant nose angle offset. |
-| `tiltback_variable` | Variable Tiltback Rate | Variable tiltback amount per ERPM. |
-| `tiltback_variable_max` | Variable Tiltback Target | Maximum variable tiltback target. |
+| Field                   | Label                    | Notes                              |
+| ----------------------- | ------------------------ | ---------------------------------- |
+| `tiltback_constant`     | Constant Tiltback        | Constant nose angle offset.        |
+| `tiltback_variable`     | Variable Tiltback Rate   | Variable tiltback amount per ERPM. |
+| `tiltback_variable_max` | Variable Tiltback Target | Maximum variable tiltback target.  |
 
 ## UI Behavior Notes
 
@@ -278,12 +278,12 @@ commands. On a CAN-forwarded controller, each command is wrapped as:
 
 Relevant custom config commands:
 
-| Command | ID | Purpose |
-| --- | ---: | --- |
-| `COMM_GET_CUSTOM_CONFIG_XML` | `92` | Read the XML/schema for a custom config index. |
-| `COMM_GET_CUSTOM_CONFIG` | `93` | Read the current binary config bytes for a custom config index. |
-| `COMM_GET_CUSTOM_CONFIG_DEFAULT` | `94` | Read default binary config bytes. |
-| `COMM_SET_CUSTOM_CONFIG` | `95` | Write binary config bytes back to the controller. |
+| Command                          |   ID | Purpose                                                         |
+| -------------------------------- | ---: | --------------------------------------------------------------- |
+| `COMM_GET_CUSTOM_CONFIG_XML`     | `92` | Read the XML/schema for a custom config index.                  |
+| `COMM_GET_CUSTOM_CONFIG`         | `93` | Read the current binary config bytes for a custom config index. |
+| `COMM_GET_CUSTOM_CONFIG_DEFAULT` | `94` | Read default binary config bytes.                               |
+| `COMM_SET_CUSTOM_CONFIG`         | `95` | Write binary config bytes back to the controller.               |
 
 Observed read sequence:
 
@@ -360,23 +360,23 @@ commands, live control commands, accessory controls, and read commands.
 
 Relevant package command IDs:
 
-| Command | ID | Purpose |
-| --- | ---: | --- |
-| `FLYWHEEL` | `22` | Apply flywheel-related runtime action. |
-| `LIGHT_INFO` | `25` | Read light controller/runtime light info. |
-| `LIGHT_CTRL` | `26` | Apply live light control values. |
-| `LCM_INFO` | `27` | Read LCM-related info. |
-| `GET_INFO` | `33` | Read package/device info. |
-| `GET_RTDATA` | `34` | Read runtime data. |
-| `SET_TUNE` | `35` | Apply tune values at runtime. |
-| `SET_DEFAULT_TUNE` | `36` | Apply/reset default tune values. |
-| `SAVE_TUNE` | `37` | Persist current tune state. |
-| `RESTORE_TUNE` | `38` | Restore saved tune state. |
-| `TUNE_OTHER` | `39` | Apply miscellaneous tune values. |
-| `MOVE` | `40` | Apply live remote movement / remote tilt input. |
-| `BOOSTER` | `41` | Apply booster-related runtime action. |
-| `LOCK` | `45` | Toggle package-level lock state. |
-| `TONE` | `210` | Tone/horn/playback runtime channel. |
+| Command            |    ID | Purpose                                         |
+| ------------------ | ----: | ----------------------------------------------- |
+| `FLYWHEEL`         |  `22` | Apply flywheel-related runtime action.          |
+| `LIGHT_INFO`       |  `25` | Read light controller/runtime light info.       |
+| `LIGHT_CTRL`       |  `26` | Apply live light control values.                |
+| `LCM_INFO`         |  `27` | Read LCM-related info.                          |
+| `GET_INFO`         |  `33` | Read package/device info.                       |
+| `GET_RTDATA`       |  `34` | Read runtime data.                              |
+| `SET_TUNE`         |  `35` | Apply tune values at runtime.                   |
+| `SET_DEFAULT_TUNE` |  `36` | Apply/reset default tune values.                |
+| `SAVE_TUNE`        |  `37` | Persist current tune state.                     |
+| `RESTORE_TUNE`     |  `38` | Restore saved tune state.                       |
+| `TUNE_OTHER`       |  `39` | Apply miscellaneous tune values.                |
+| `MOVE`             |  `40` | Apply live remote movement / remote tilt input. |
+| `BOOSTER`          |  `41` | Apply booster-related runtime action.           |
+| `LOCK`             |  `45` | Toggle package-level lock state.                |
+| `TONE`             | `210` | Tone/horn/playback runtime channel.             |
 
 This implies two possible edit strategies:
 
@@ -396,14 +396,14 @@ draft/apply/save semantics if both paths are ever supported.
 The custom app data channel is not limited to tune sliders. It is a small
 Refloat-specific runtime API. Confirmed categories:
 
-| Category | Commands | Can Change On The Fly |
-| --- | --- | --- |
-| Runtime data reads | `GET_INFO`, `GET_RTDATA`, `GET_ALL_DATA`, `PRINT_INFO`, `LIGHT_INFO`, `LCM_INFO` | Nothing persisted; reads package version, board state, angles, input tilt, throttle, speed/duty, and light/controller metadata. |
-| Tune editing | `SET_TUNE`, `SET_DEFAULT_TUNE`, `TUNE_OTHER`, `BOOSTER` | Live tune state and helper/advanced tune values. These affect behavior immediately but should be considered temporary until saved. |
-| Tune persistence actions | `SAVE_TUNE`, `RESTORE_TUNE` | Save current runtime tune state or restore saved tune state. These are actions, not field writes. |
-| Movement / tilt input | `MOVE`, `LOCK`, `FLYWHEEL` | Live movement, Remote Tilt input, lock state, and flywheel-related action. Treat as immediate control input. |
-| Lighting | `LIGHT_CTRL` | Headlight and status brightness. The observed control payload uses `headlightBrightness` and `statusBrightness`; headlight is scaled to roughly half before sending and status brightness has a minimum of `5`. |
-| Sound / tones | `TONE` | Tone support/version, horn, play, and stop actions. Tone handler install is a separate script/LISP flow; playback control then uses the `TONE` runtime channel. |
+| Category                 | Commands                                                                         | Can Change On The Fly                                                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime data reads       | `GET_INFO`, `GET_RTDATA`, `GET_ALL_DATA`, `PRINT_INFO`, `LIGHT_INFO`, `LCM_INFO` | Nothing persisted; reads package version, board state, angles, input tilt, throttle, speed/duty, and light/controller metadata.                                                                                 |
+| Tune editing             | `SET_TUNE`, `SET_DEFAULT_TUNE`, `TUNE_OTHER`, `BOOSTER`                          | Live tune state and helper/advanced tune values. These affect behavior immediately but should be considered temporary until saved.                                                                              |
+| Tune persistence actions | `SAVE_TUNE`, `RESTORE_TUNE`                                                      | Save current runtime tune state or restore saved tune state. These are actions, not field writes.                                                                                                               |
+| Movement / tilt input    | `MOVE`, `LOCK`, `FLYWHEEL`                                                       | Live movement, Remote Tilt input, lock state, and flywheel-related action. Treat as immediate control input.                                                                                                    |
+| Lighting                 | `LIGHT_CTRL`                                                                     | Headlight and status brightness. The observed control payload uses `headlightBrightness` and `statusBrightness`; headlight is scaled to roughly half before sending and status brightness has a minimum of `5`. |
+| Sound / tones            | `TONE`                                                                           | Tone support/version, horn, play, and stop actions. Tone handler install is a separate script/LISP flow; playback control then uses the `TONE` runtime channel.                                                 |
 
 The practical split is:
 
@@ -430,12 +430,12 @@ There are two setup/config pieces:
 
 Important Remote Tilt field behavior:
 
-| Field | Behavior |
-| --- | --- |
-| `inputtilt_angle_limit` | Maximum dynamic tiltback angle. The board scales input percentage into this angle. Example: a 10 degree limit with 50% input gives a 5 degree tilt target. |
-| `inputtilt_speed` | Rate limit for moving toward the requested tilt angle, in degrees per second. |
-| `inputtilt_invert_throttle` | Direction mapping. Default `true` means forward input lowers the nose and backward input lifts the nose. |
-| `inputtilt_deadband` | Center deadband before input starts changing the setpoint. Example: 10% deadband ignores the first +/-10% around center and rescales from there. |
+| Field                       | Behavior                                                                                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inputtilt_angle_limit`     | Maximum dynamic tiltback angle. The board scales input percentage into this angle. Example: a 10 degree limit with 50% input gives a 5 degree tilt target. |
+| `inputtilt_speed`           | Rate limit for moving toward the requested tilt angle, in degrees per second.                                                                              |
+| `inputtilt_invert_throttle` | Direction mapping. Default `true` means forward input lowers the nose and backward input lifts the nose.                                                   |
+| `inputtilt_deadband`        | Center deadband before input starts changing the setpoint. Example: 10% deadband ignores the first +/-10% around center and rescales from there.           |
 
 When Remote Tilt is toggled from the UI, the flow is:
 
@@ -476,10 +476,10 @@ path, not a persisted tune setting.
 Moving the board forward/backward while disengaged is governed by the Remote
 Throttle config fields:
 
-| Field | Behavior |
-| --- | --- |
-| `remote_throttle_current_max` | Maximum current available for remote throttle when the board is disengaged. Actual current scales linearly with throttle percentage. Default is `0 A`; recommended values in the schema are `5..10 A`. |
-| `remote_throttle_grace_period` | Delay after disengagement before remote throttle is allowed. Default is `10 s`. |
+| Field                          | Behavior                                                                                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `remote_throttle_current_max`  | Maximum current available for remote throttle when the board is disengaged. Actual current scales linearly with throttle percentage. Default is `0 A`; recommended values in the schema are `5..10 A`. |
+| `remote_throttle_grace_period` | Delay after disengagement before remote throttle is allowed. Default is `10 s`.                                                                                                                        |
 
 Safety implication: this feature can spin the motor from the app. A production
 implementation should require an explicit arming state, show a hazard warning,
@@ -507,14 +507,14 @@ encoding.
 
 Known version-sensitive field semantics:
 
-| Area | Affected fields | Compatibility note |
-| --- | --- | --- |
-| High/low voltage pushback | `tiltback_hv`, `tiltback_lv` | Refloat 1.2 with VESC firmware `6.05+` supports per-cell voltage values. Older `6.02` setups use total pack voltage, e.g. `4.3V * cell_count` for high voltage and `3.0V * cell_count` for low voltage. |
-| I term limit | `ki_limit` | Older firmware exposed this concept as `Deadzone`; the modern value is scaled up 10x. A previous `Deadzone = 3` corresponds to `ki_limit = 30A`. |
-| ATR strength | `atr_strength_up`, `atr_strength_down` | Older `5.3 ATR` values are scaled 10x smaller. A previous ATR strength of `0.10` corresponds to modern `1.0`. |
-| BMS temperature alert | BMS temperature threshold fields | Some BMS-related options require VESC firmware `6.06+` and sufficiently recent BMS firmware. |
-| Parking brake | `parking_brake_mode` | Firmware `6.05+` applies parking brake by shorting motor phases; older behavior may differ. |
-| Audible feedback | haptic/audible feedback fields | Some generated tones rely on `foc_play_tone` behavior from firmware `6.05`; other modes use current modulation instead. |
+| Area                      | Affected fields                        | Compatibility note                                                                                                                                                                                      |
+| ------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| High/low voltage pushback | `tiltback_hv`, `tiltback_lv`           | Refloat 1.2 with VESC firmware `6.05+` supports per-cell voltage values. Older `6.02` setups use total pack voltage, e.g. `4.3V * cell_count` for high voltage and `3.0V * cell_count` for low voltage. |
+| I term limit              | `ki_limit`                             | Older firmware exposed this concept as `Deadzone`; the modern value is scaled up 10x. A previous `Deadzone = 3` corresponds to `ki_limit = 30A`.                                                        |
+| ATR strength              | `atr_strength_up`, `atr_strength_down` | Older `5.3 ATR` values are scaled 10x smaller. A previous ATR strength of `0.10` corresponds to modern `1.0`.                                                                                           |
+| BMS temperature alert     | BMS temperature threshold fields       | Some BMS-related options require VESC firmware `6.06+` and sufficiently recent BMS firmware.                                                                                                            |
+| Parking brake             | `parking_brake_mode`                   | Firmware `6.05+` applies parking brake by shorting motor phases; older behavior may differ.                                                                                                             |
+| Audible feedback          | haptic/audible feedback fields         | Some generated tones rely on `foc_play_tone` behavior from firmware `6.05`; other modes use current modulation instead.                                                                                 |
 
 For our app, this means write support should be gated by schema validation and
 field presence, not just a displayed firmware version. If a value has changed
