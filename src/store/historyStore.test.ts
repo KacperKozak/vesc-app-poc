@@ -1,6 +1,12 @@
 import { beforeEach, expect, mock, test } from 'bun:test'
 
-import type { TelemetryHistoryBlock, TelemetrySummary } from 'vesc-ble'
+import type {
+  HistoryGpsSample,
+  HistoryMarker,
+  TelemetryHistoryBlock,
+  TelemetrySample,
+  TelemetrySummary,
+} from 'vesc-ble'
 
 const summary: TelemetrySummary = {
   sampleCount: 0,
@@ -11,7 +17,15 @@ const summary: TelemetrySummary = {
 }
 
 const getTelemetryHistory = mock(async () => [] as TelemetryHistoryBlock[])
-const getHistoryRange = mock(async () => ({ boardSamples: [], gpsSamples: [], markers: [] }))
+type HistoryRangeResult = {
+  boardSamples: TelemetrySample[]
+  gpsSamples: HistoryGpsSample[]
+  markers: HistoryMarker[]
+}
+
+const getHistoryRange = mock(
+  async (): Promise<HistoryRangeResult> => ({ boardSamples: [], gpsSamples: [], markers: [] }),
+)
 const getTelemetrySummary = mock(async () => summary)
 const clearTelemetryHistory = mock(async () => {})
 const deleteTelemetryRange = mock(async () => 0)
@@ -62,6 +76,36 @@ function block(overrides: Partial<TelemetryHistoryBlock>): TelemetryHistoryBlock
     boundaryBefore: overrides.boundaryBefore ?? 'none',
     boundaryMessage: overrides.boundaryMessage ?? null,
     gapBeforeMs: overrides.gapBeforeMs ?? null,
+  }
+}
+
+function sample(overrides: Partial<TelemetrySample>): TelemetrySample {
+  return {
+    id: overrides.id ?? 1,
+    capturedAtMs: overrides.capturedAtMs ?? 0,
+    deviceId: overrides.deviceId ?? 'dev-a',
+    deviceName: overrides.deviceName ?? 'Board A',
+    speedKmh: overrides.speedKmh ?? 0,
+    batteryVoltage: overrides.batteryVoltage ?? 50,
+    motorCurrent: overrides.motorCurrent ?? 0,
+    batteryCurrent: overrides.batteryCurrent ?? 0,
+    dutyCycle: overrides.dutyCycle ?? 0,
+    pitch: overrides.pitch ?? 0,
+    roll: overrides.roll ?? 0,
+    balancePitch: overrides.balancePitch ?? 0,
+    balanceCurrent: overrides.balanceCurrent ?? 0,
+    erpm: overrides.erpm ?? 0,
+    state: overrides.state ?? 0,
+    switchState: overrides.switchState ?? 0,
+    adc1: overrides.adc1 ?? 0,
+    adc2: overrides.adc2 ?? 0,
+    odometer: overrides.odometer ?? null,
+    tempMosfet: overrides.tempMosfet ?? null,
+    tempMotor: overrides.tempMotor ?? null,
+    hasFault: overrides.hasFault ?? false,
+    faultCode: overrides.faultCode ?? 0,
+    latitude: overrides.latitude ?? null,
+    longitude: overrides.longitude ?? null,
   }
 }
 
@@ -121,4 +165,49 @@ test('removes selected session from history and selects next ride', async () => 
   expect(useHistoryStore.getState().sessionSamples).toEqual([])
   expect(useHistoryStore.getState().sessionGpsSamples).toEqual([])
   expect(useHistoryStore.getState().sessionMarkers).toEqual([])
+})
+
+test('keeps current ride data visible while selecting another ride', async () => {
+  const current = block({ id: 'current', startAtMs: 2_000_000, endAtMs: 2_060_000 })
+  const next = block({ id: 'next', startAtMs: 1_000_000, endAtMs: 1_060_000 })
+  const currentSample = sample({ id: 10, capturedAtMs: current.startAtMs })
+  const nextSample = sample({ id: 20, capturedAtMs: next.startAtMs })
+  getTelemetryHistory.mockResolvedValueOnce([current, next])
+  getHistoryRange.mockResolvedValueOnce({
+    boardSamples: [currentSample],
+    gpsSamples: [],
+    markers: [],
+  })
+
+  const { useHistoryStore } = await import('./historyStore')
+
+  await useHistoryStore.getState().loadInitial()
+  await useHistoryStore.getState().selectSession(useHistoryStore.getState().sessions[0])
+
+  let resolveNextRange: (value: HistoryRangeResult) => void = () => {}
+  getHistoryRange.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveNextRange = resolve
+      }),
+  )
+
+  const selectNext = useHistoryStore
+    .getState()
+    .selectSession(useHistoryStore.getState().sessions[1])
+
+  expect(useHistoryStore.getState().loadingSession).toBe(true)
+  expect(useHistoryStore.getState().selectedSession?.id).toBe(
+    useHistoryStore.getState().sessions[0].id,
+  )
+  expect(useHistoryStore.getState().sessionSamples).toEqual([currentSample])
+
+  resolveNextRange({ boardSamples: [nextSample], gpsSamples: [], markers: [] })
+  await selectNext
+
+  expect(useHistoryStore.getState().loadingSession).toBe(false)
+  expect(useHistoryStore.getState().selectedSession?.id).toBe(
+    useHistoryStore.getState().sessions[1].id,
+  )
+  expect(useHistoryStore.getState().sessionSamples).toEqual([nextSample])
 })

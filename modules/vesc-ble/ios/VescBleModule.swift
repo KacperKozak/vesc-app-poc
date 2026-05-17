@@ -159,6 +159,25 @@ public class VescBleModule: Module {
       ] as [String: Any?])
     }
 
+    AsyncFunction("getRefloatConfigSnapshot") { (promise: Promise) in
+      promise.reject(
+        "UNSUPPORTED_PLATFORM",
+        "Refloat config reading is Android-only until iOS BLE transport is implemented"
+      )
+    }
+
+    AsyncFunction("getTotalProfileStats") { (promise: Promise) in
+      promise.resolve(Self.emptyProfileStats())
+    }
+
+    AsyncFunction("getMonthlyProfileStats") { (_: [String: Any], promise: Promise) in
+      promise.resolve(Self.emptyProfileStats())
+    }
+
+    AsyncFunction("getProfileStatMonths") { (promise: Promise) in
+      promise.resolve([] as [Any])
+    }
+
     AsyncFunction("deleteTelemetryBefore") { (_: Double, promise: Promise) in
       promise.resolve(0)
     }
@@ -487,5 +506,18 @@ public class VescBleModule: Module {
   private static func saveSettings(_ settings: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: settings) else { return }
     UserDefaults.standard.set(data, forKey: "vesc_ble_settings")
+  }
+
+  private static func emptyProfileStats() -> [String: Any?] {
+    [
+      "distanceM": nil,
+      "rideCount": 0,
+      "rideTimeMs": 0,
+      "topSpeedKmh": 0,
+      "avgSpeedKmh": 0,
+      "longestRideM": nil,
+      "batteryUsedWh": nil,
+      "batteryRegenWh": nil,
+    ]
   }
 }

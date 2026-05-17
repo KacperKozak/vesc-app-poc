@@ -30,16 +30,15 @@ async function ensureCleanWorkingTree() {
   console.log('✓ Working tree is clean')
 }
 
-async function ensureBranch(branch: string) {
-  const current = await $`git branch --show-current`.cwd(root).text()
-  if (current.trim() !== branch) {
-    console.error(`✗ Must be on "${branch}" branch to release (current: ${current.trim()})`)
-    process.exit(1)
-  }
-  console.log(`✓ On branch "${branch}"`)
+const branch = (await $`git branch --show-current`.cwd(root).text()).trim()
+const isDevBranch = branch === 'dev'
+
+if (isDevBranch) {
+  console.log('✓ On branch "dev" — full release')
+} else {
+  console.log(`→ On branch "${branch}" — branch build (no version bump, no merge)`)
 }
 
-await ensureBranch('dev')
 await ensureCleanWorkingTree()
 await run('Pull latest', 'git pull')
 await run('TypeScript check', 'bun run ts')
@@ -47,35 +46,40 @@ await run('Lint', 'bun run lint')
 await run('Tests', 'bun run test')
 await run('Build release APK', 'bun run build:release')
 
-// Bump version in package.json
 const pkgPath = join(root, 'package.json')
 const pkg = JSON.parse(await Bun.file(pkgPath).text())
-const oldVersion: string = pkg.version
-const newVersion = bumpVersion(oldVersion, isPatch)
-pkg.version = newVersion
-await Bun.write(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
-console.log(`\n→ Version bumped ${oldVersion} → ${newVersion}`)
+const baseVersion: string = pkg.version
 
-// Commit + push version bump on dev
-await run('Commit version bump', `git add package.json && git commit -m "${newVersion}"`)
-await run('Push dev', 'git push')
+let apkLabel: string
 
-// Merge dev → main
-await run('Switch to main', 'git checkout main')
-await run('Pull main', 'git pull')
-await run('Merge dev → main', `git merge dev --no-ff -m "release: ${newVersion}"`)
-await run('Push main', 'git push')
+if (isDevBranch) {
+  const newVersion = bumpVersion(baseVersion, isPatch)
+  pkg.version = newVersion
+  await Bun.write(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+  console.log(`\n→ Version bumped ${baseVersion} → ${newVersion}`)
 
-// Back to dev
-await run('Switch back to dev', 'git checkout dev')
+  await run('Commit version bump', `git add package.json && git commit -m "${newVersion}"`)
+  await run('Push dev', 'git push')
+
+  await run('Switch to main', 'git checkout main')
+  await run('Pull main', 'git pull')
+  await run('Merge dev → main', `git merge dev --no-ff -m "release: ${newVersion}"`)
+  await run('Push main', 'git push')
+  await run('Switch back to dev', 'git checkout dev')
+
+  apkLabel = `v${newVersion}`
+  console.log(`\n✓ Release ${newVersion} complete`)
+} else {
+  const safeBranch = branch.replace(/[^a-zA-Z0-9._-]/g, '-')
+  apkLabel = `v${baseVersion}-${safeBranch}`
+  console.log(`\n✓ Branch build ${apkLabel} complete`)
+}
 
 // Copy APK to Google Drive
 const apkSrc = join(root, 'android/app/build/outputs/apk/release/app-release.apk')
 const driveDir =
   '/Users/kacperkozak/Library/CloudStorage/GoogleDrive-dexted.xt@gmail.com/My Drive/Apps'
 await $`mkdir -p ${driveDir}`
-const apkDest = join(driveDir, `vibe-wheel-v${newVersion}.apk`)
+const apkDest = join(driveDir, `vibe-wheel-${apkLabel}.apk`)
 await Bun.write(apkDest, Bun.file(apkSrc))
 console.log(`✓ Copied APK → ${apkDest}`)
-
-console.log(`\n✓ Release ${newVersion} complete`)

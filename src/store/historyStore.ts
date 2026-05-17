@@ -51,6 +51,7 @@ interface HistoryActions {
 const PAGE_SIZE = 100
 let liveRefreshInFlight = false
 let liveRefreshVersion = 0
+let sessionLoadVersion = 0
 
 export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) => ({
   blocks: [],
@@ -190,6 +191,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
   },
 
   async selectSession(session) {
+    const version = ++sessionLoadVersion
     if (!session) {
       set({
         selectedSession: null,
@@ -202,10 +204,6 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
       return
     }
     set({
-      selectedSession: session,
-      sessionSamples: [],
-      sessionGpsSamples: [],
-      sessionMarkers: [],
       loadingSession: true,
       sessionTruncated: false,
       error: undefined,
@@ -217,16 +215,22 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         ...(session.deviceId ? { deviceId: session.deviceId } : {}),
         limit: 10_000,
       })
+      if (version !== sessionLoadVersion) return
       set({
+        selectedSession: session,
         sessionSamples: range.boardSamples,
         sessionGpsSamples: range.gpsSamples,
         sessionMarkers: range.markers,
         sessionTruncated: range.boardSamples.length >= 10_000 || range.gpsSamples.length >= 10_000,
       })
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) })
+      if (version === sessionLoadVersion) {
+        set({ error: err instanceof Error ? err.message : String(err) })
+      }
     } finally {
-      set({ loadingSession: false })
+      if (version === sessionLoadVersion) {
+        set({ loadingSession: false })
+      }
     }
   },
 
