@@ -42,6 +42,7 @@ internal class VescGattClient(
     private var intentionalDisconnect = false
 
     fun connect(device: BluetoothDevice) {
+        Log.d(VESC_SESSION_TAG, "gatt connect request device=${device.address}")
         gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
@@ -71,7 +72,8 @@ internal class VescGattClient(
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     listener.onGattConnected()
-                    gatt.requestMtu(517)
+                    val requested = gatt.requestMtu(517)
+                    Log.d(VESC_SESSION_TAG, "gatt requestMtu requested=$requested")
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     val wasIntentional = intentionalDisconnect
@@ -84,12 +86,15 @@ internal class VescGattClient(
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             Log.d(VESC_SESSION_TAG, "onMtuChanged mtu=$mtu status=$status")
-            if (!gatt.discoverServices()) {
+            val discoveryStarted = gatt.discoverServices()
+            Log.d(VESC_SESSION_TAG, "gatt discoverServices started=$discoveryStarted")
+            if (!discoveryStarted) {
                 listener.onGattFailure("DISCOVERY_FAILED", "Could not start service discovery")
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            Log.d(VESC_SESSION_TAG, "onServicesDiscovered status=$status")
             listener.onGattSubscribing()
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 listener.onGattFailure("DISCOVERY_FAILED", "Service discovery failed status=$status")
@@ -103,8 +108,9 @@ internal class VescGattClient(
                 return
             }
             txChar = tx
-            gatt.setCharacteristicNotification(rx, true)
-            gatt.setCharacteristicNotification(tx, true)
+            val rxNotify = gatt.setCharacteristicNotification(rx, true)
+            val txNotify = gatt.setCharacteristicNotification(tx, true)
+            Log.d(VESC_SESSION_TAG, "gatt set notifications rx=$rxNotify tx=$txNotify")
 
             val rxCccd = rx.getDescriptor(CCCD_UUID)
             if (rxCccd == null) {
@@ -113,10 +119,11 @@ internal class VescGattClient(
             }
             pendingCccdWrites = 1
             if (tx.getDescriptor(CCCD_UUID) != null) pendingCccdWrites = 2
+            Log.d(VESC_SESSION_TAG, "gatt cccd writes pending=$pendingCccdWrites")
             writeCccd(gatt, rxCccd)
 
             cccdTimeout = Runnable {
-                Log.w(VESC_SESSION_TAG, "CCCD ack timeout, resolving connect")
+                Log.w(VESC_SESSION_TAG, "CCCD ack timeout, resolving connect pending=$pendingCccdWrites")
                 listener.onGattReady()
             }
             handler.postDelayed(cccdTimeout!!, 4000)
@@ -124,6 +131,7 @@ internal class VescGattClient(
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             if (descriptor.uuid != CCCD_UUID) return
+            Log.d(VESC_SESSION_TAG, "onDescriptorWrite status=$status pendingBefore=$pendingCccdWrites")
             pendingCccdWrites--
             if (pendingCccdWrites > 0) {
                 val txCccd = gatt.getService(NUS_SERVICE_UUID)
@@ -134,6 +142,7 @@ internal class VescGattClient(
                     return
                 }
             }
+            cancelCccdTimeout()
             listener.onGattReady()
         }
 
@@ -158,12 +167,15 @@ internal class VescGattClient(
             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         }
         val ok = g.writeCharacteristic(tx, bytes, writeType) == BluetoothStatusCodes.SUCCESS
+        if (!ok) Log.w(VESC_SESSION_TAG, "gatt writeCharacteristic failed bytes=${bytes.size} writeType=$writeType")
         if (ok) recorder()?.recordChunk("tx", bytes)
         return ok
     }
 
     private fun writeCccd(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor) {
-        gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        val ok = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ==
+            BluetoothStatusCodes.SUCCESS
+        Log.d(VESC_SESSION_TAG, "gatt writeCccd started=$ok")
     }
 
     private fun cancelCccdTimeout() {

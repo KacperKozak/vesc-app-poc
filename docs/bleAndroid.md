@@ -88,7 +88,13 @@ if (char.uuid == NUS_RX_UUID || char.uuid == NUS_TX_UUID) { emit() }
 
 **Write type**: first 3 writes use `WRITE_TYPE_DEFAULT` (write-with-response) to confirm connectivity. Subsequent writes use `WRITE_TYPE_NO_RESPONSE` for throughput.
 
-**CCCD timeout fallback**: if `onDescriptorWrite` never fires (edge case on some bonded states), a 4-second timeout resolves the connect promise anyway.
+**CCCD timeout fallback**: if `onDescriptorWrite` never fires (edge case on some bonded states), a 4-second timeout resolves the connect promise anyway. Always cancel this timeout when all descriptor writes succeed. A stale CCCD timeout can call the ready path twice and create confusing reconnect/ready logs even though subscription already completed.
+
+**Fast connect write priority**: when a saved board already has a CAN id, start telemetry polling immediately and do not also send startup discovery probes (`COMM_FW_VERSION` / `COMM_PING_CAN`) on the same connect path. Android GATT accepts only one write in flight; immediate polling plus startup probes can return GATT busy, delay the first telemetry packet, and briefly push auto-connect into `reconnecting`.
+
+**Short write retry**: poll/startup writes should tolerate a transient Android GATT busy result with one short retry (~100-150ms). Do not solve this by adding long connect delays; that makes first connection feel broken. Prefer fewer competing writes and a tight retry.
+
+**Tune/config reads**: Refloat custom config reads are high-volume BLE/CAN work. Treat them as a separate operation from normal telemetry startup. Do not run config reads concurrently with startup probes, and avoid adding fallback traffic while a config read is active.
 
 ---
 

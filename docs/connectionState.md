@@ -94,6 +94,20 @@ if settings allow auto-connect and native board phase is `idle` or `error`.
 Native owns the actual connection after that. The foreground service keeps BLE work
 alive while JS is backgrounded or frozen.
 
+### Fast Connect Stability
+
+The fastest stable path is not to wait longer; it is to avoid competing native
+writes during startup.
+
+- `connected` means first valid telemetry arrived, not just GATT ready.
+- When a saved board already has a CAN id, native should start telemetry polling
+  directly and skip extra startup discovery probes.
+- GATT descriptor timeout fallbacks must be canceled after successful CCCD writes,
+  otherwise a stale timeout can double-resolve the connection.
+- Tune/config reads should not compete with initial telemetry startup. If a config
+  read starts while the board is still settling, prefer gating/queuing over adding
+  long connection delays.
+
 ## Recording
 
 Recording means real ride recording:

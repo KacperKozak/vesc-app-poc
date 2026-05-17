@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from 'expo-router'
-import { ArrowsClockwiseIcon, InfoIcon, WarningCircleIcon } from 'phosphor-react-native'
+import {
+  ArrowsClockwiseIcon,
+  BluetoothSlashIcon,
+  InfoIcon,
+  WarningCircleIcon,
+} from 'phosphor-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   getRefloatConfigSnapshot,
@@ -10,6 +15,8 @@ import {
 } from 'vesc-ble'
 
 import { InfoModal } from '@/components/InfoModal'
+import { Placeholder } from '@/components/Placeholder'
+import { useBleStore } from '@/store/bleStore'
 
 type LoadState =
   | { phase: 'loading'; snapshot: RefloatConfigSnapshot | null; error: string | null }
@@ -189,6 +196,9 @@ function basicSlidersFromSnapshot(snapshot: RefloatConfigSnapshot): BasicSliderI
 
 export default function TuneScreen() {
   const navigation = useNavigation()
+  const bleStatus = useBleStore((s) => s.status)
+  const boardConnected = bleStatus === 'connected'
+
   const [state, setState] = useState<LoadState>({
     phase: 'loading',
     snapshot: null,
@@ -211,26 +221,27 @@ export default function TuneScreen() {
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    if (boardConnected) load()
+  }, [boardConnected, load])
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          style={[styles.headerButton, state.phase === 'loading' && styles.headerButtonDisabled]}
-          onPress={() => void load()}
-          disabled={state.phase === 'loading'}
-        >
-          {state.phase === 'loading' ? (
-            <ActivityIndicator size="small" color="#38bdf8" />
-          ) : (
-            <ArrowsClockwiseIcon size={17} color="#cbd5e1" weight="bold" />
-          )}
-        </Pressable>
-      ),
+      headerRight: () =>
+        boardConnected ? (
+          <Pressable
+            style={[styles.headerButton, state.phase === 'loading' && styles.headerButtonDisabled]}
+            onPress={() => void load()}
+            disabled={state.phase === 'loading'}
+          >
+            {state.phase === 'loading' ? (
+              <ActivityIndicator size="small" color="#38bdf8" />
+            ) : (
+              <ArrowsClockwiseIcon size={17} color="#cbd5e1" weight="bold" />
+            )}
+          </Pressable>
+        ) : null,
     })
-  }, [load, navigation, state.phase])
+  }, [boardConnected, load, navigation, state.phase])
 
   const snapshot = state.snapshot
   const basicSliders = useMemo(
@@ -260,14 +271,22 @@ export default function TuneScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {state.phase === 'loading' && !snapshot ? (
+      {!boardConnected ? (
+        <Placeholder
+          icon={BluetoothSlashIcon}
+          title="Board not connected"
+          description="Connect to a board to read tune config"
+        />
+      ) : null}
+
+      {boardConnected && state.phase === 'loading' && !snapshot ? (
         <View style={styles.centerState}>
           <ActivityIndicator color="#38bdf8" />
           <Text style={styles.stateText}>Reading board config...</Text>
         </View>
       ) : null}
 
-      {state.phase === 'error' && !snapshot ? (
+      {boardConnected && state.phase === 'error' && !snapshot ? (
         <View style={styles.centerState}>
           <WarningCircleIcon size={28} color="#f87171" />
           <Text style={styles.errorText}>{state.error}</Text>
@@ -277,7 +296,7 @@ export default function TuneScreen() {
         </View>
       ) : null}
 
-      {snapshot ? (
+      {boardConnected && snapshot ? (
         <ScrollView
           contentContainerStyle={styles.content}
           contentInsetAdjustmentBehavior="automatic"
@@ -492,6 +511,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 15,
   },
+
   errorText: {
     color: '#fecaca',
     fontSize: 15,
