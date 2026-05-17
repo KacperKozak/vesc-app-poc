@@ -84,6 +84,7 @@ const HISTORY_BUTTON_SIZE = 54
 export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOverlaysProps) {
   const insets = useSafeAreaInsets()
   const aboveStripBottom = STRIP_CONTENT_HEIGHT + Math.max(insets.bottom * 0.5, 8) + 8
+  const historyPanelBottom = Math.max(insets.bottom, 16) + 8
   const [panelHeight, setPanelHeight] = useState(0)
   const [removeConfirmVisible, setRemoveConfirmVisible] = useState(false)
 
@@ -234,10 +235,14 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
 
       <HistorySessionSheet
         visible={history.historySheetVisible}
+        bottomOffset={historyPanelBottom + panelHeight + 8}
         sessions={history.sessions}
         selectedSessionId={history.selectedSession?.id ?? null}
         onClose={() => history.setHistorySheetVisible(false)}
-        onSelectSession={history.selectRide}
+        onSelectSession={(session) => {
+          history.setHistorySheetVisible(false)
+          history.selectRide(session)
+        }}
       />
 
       {mode === 'history' && history.historyError ? (

@@ -1,18 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   BatteryChargingVerticalIcon,
   BatteryPlusVerticalIcon,
-  CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
   ClockCountdownIcon,
@@ -40,6 +31,7 @@ import {
   getAdjacentMonths,
   selectInitialMonth,
 } from '@/profile/profileStats'
+import { Select, type SelectOption } from '@/components/Select'
 
 const EMPTY_STATS: ProfileStats = {
   distanceM: null,
@@ -67,7 +59,6 @@ export default function ProfileScreen() {
   const [selectedMonth, setSelectedMonth] = useState<ProfileStatsMonth>(selectInitialMonth([]))
   const [loading, setLoading] = useState(true)
   const [monthLoading, setMonthLoading] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadInitial = useCallback(async () => {
@@ -113,6 +104,26 @@ export default function ProfileScreen() {
   const monthItems = useMemo(() => statsToItems(monthlyStats), [monthlyStats])
   const adjacent = useMemo(() => getAdjacentMonths(months, selectedMonth), [months, selectedMonth])
 
+  const monthOptions: SelectOption[] = useMemo(
+    () =>
+      (months.length ? months : [selectedMonth]).map((m) => ({
+        label: formatMonthLabel(m),
+        value: `${m.year}-${m.month}`,
+      })),
+    [months, selectedMonth],
+  )
+
+  const selectedMonthValue = `${selectedMonth.year}-${selectedMonth.month}`
+
+  const handleMonthSelect = useCallback(
+    (val: string) => {
+      const [year, month] = val.split('-').map(Number)
+      const found = months.find((m) => m.year === year && m.month === month)
+      if (found) void loadMonth(found)
+    },
+    [months, loadMonth],
+  )
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -131,10 +142,13 @@ export default function ProfileScreen() {
           >
             <CaretLeftIcon size={16} color="#94a3b8" weight="bold" />
           </Pressable>
-          <Pressable style={styles.monthPicker} onPress={() => setPickerOpen(true)}>
-            <Text style={styles.monthPickerText}>{formatMonthLabel(selectedMonth)}</Text>
-            <CaretDownIcon size={14} color="#64748b" weight="bold" />
-          </Pressable>
+          <Select
+            options={monthOptions}
+            value={selectedMonthValue}
+            onChange={handleMonthSelect}
+            placeholder="Select month"
+            style={styles.monthSelect}
+          />
           <Pressable
             style={[styles.navButton, !adjacent.next && styles.navDisabled]}
             onPress={() => adjacent.next && void loadMonth(adjacent.next)}
@@ -159,30 +173,6 @@ export default function ProfileScreen() {
           </Pressable>
         ) : null}
       </ScrollView>
-
-      <Modal
-        visible={pickerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerOpen(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalSheet}>
-            {(months.length ? months : [selectedMonth]).map((month) => (
-              <Pressable
-                key={`${month.year}-${month.month}`}
-                style={styles.modalRow}
-                onPress={() => {
-                  setPickerOpen(false)
-                  void loadMonth(month)
-                }}
-              >
-                <Text style={styles.modalRowText}>{formatMonthLabel(month)}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   )
 }
@@ -327,22 +317,9 @@ const styles = StyleSheet.create({
   navDisabled: {
     opacity: 0.35,
   },
-  monthPicker: {
+  monthSelect: {
     flex: 1,
-    height: 40,
     borderRadius: 20,
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#334155',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  monthPickerText: {
-    color: '#f1f5f9',
-    fontSize: 14,
-    fontWeight: '600',
   },
   loadingWrap: {
     padding: 18,
@@ -370,29 +347,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     marginTop: 4,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.72)',
-    justifyContent: 'flex-end',
-    padding: 16,
-  },
-  modalSheet: {
-    backgroundColor: '#1e293b',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#334155',
-    overflow: 'hidden',
-  },
-  modalRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#334155',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  modalRowText: {
-    color: '#f1f5f9',
-    fontSize: 15,
-    fontWeight: '600',
   },
 })
