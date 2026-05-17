@@ -252,6 +252,7 @@ class VescForegroundService : Service() {
     private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
     private var canId: Int? = null
+    private var fwVersionString: String? = null
     private var connectTimeout: Runnable? = null
     private var boardReadyTimeout: Runnable? = null
     private var pendingConnect: PendingStart? = null
@@ -534,11 +535,17 @@ class VescForegroundService : Service() {
     private fun handlePayload(payload: ByteArray) {
         if (payload.isEmpty()) return
         when (payload[0].toInt() and 0xff) {
+            COMM_FW_VERSION -> handleFwVersionPayload(payload)
             COMM_PING_CAN -> {
                 if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
                     emitState()
                     startPolling()
+                    sendPayload(byteArrayOf(
+                        COMM_FORWARD_CAN.toByte(),
+                        (payload[1].toInt() and 0xff).toByte(),
+                        COMM_FW_VERSION.toByte(),
+                    ))
                 }
             }
             COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
@@ -546,6 +553,7 @@ class VescForegroundService : Service() {
             COMM_FORWARD_CAN -> {
                 if (payload.size >= 3) {
                     when (payload[2].toInt() and 0xff) {
+                        COMM_FW_VERSION -> handleFwVersionPayload(payload.copyOfRange(2, payload.size))
                         COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
                         COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
                     }
@@ -655,6 +663,7 @@ class VescForegroundService : Service() {
                 boardId = boardConfig?.appBoardId,
                 canId = can,
                 capturedAt = System.currentTimeMillis(),
+                fwVersion = fwVersionString,
             )
             completeConfigRead(snapshot.toMap())
         } catch (e: RefloatConfigSchemaException) {
@@ -677,6 +686,35 @@ class VescForegroundService : Service() {
                 e.message ?: "Failed to read Refloat config",
             )
         }
+    }
+
+    private fun handleFwVersionPayload(payload: ByteArray) {
+        if (payload.size < 3) return
+        val hex = payload.joinToString(" ") { "%02x".format(it) }
+        Log.d(VESC_SESSION_TAG, "FW version raw (${payload.size} bytes): $hex")
+        val major = payload[1].toInt() and 0xff
+        val minor = payload[2].toInt() and 0xff
+        var hwNameEnd = 3
+        while (hwNameEnd < payload.size && payload[hwNameEnd] != 0.toByte()) hwNameEnd++
+        val hwName = if (hwNameEnd > 3) String(payload, 3, hwNameEnd - 3, Charsets.UTF_8) else null
+        // After HW name null: 12 UUID + 1 paired + 1 test version + 1 hw type = 15 bytes
+        var offset = hwNameEnd + 1 + 15
+        val customConfigs = mutableListOf<String>()
+        if (offset < payload.size) {
+            val count = payload[offset].toInt() and 0xff
+            offset++
+            for (i in 0 until count) {
+                val start = offset
+                while (offset < payload.size && payload[offset] != 0.toByte()) offset++
+                if (offset > start) customConfigs.add(String(payload, start, offset - start, Charsets.UTF_8))
+                offset++
+            }
+        }
+        val parts = mutableListOf("FW $major.${"%02d".format(minor)}")
+        if (hwName != null) parts.add(hwName)
+        if (customConfigs.isNotEmpty()) parts.add(customConfigs.joinToString(", "))
+        fwVersionString = parts.joinToString(" · ")
+        Log.d(VESC_SESSION_TAG, "FW version: $fwVersionString")
     }
 
     private fun sendNextConfigXmlChunk(id: Int) {
@@ -888,6 +926,7 @@ class VescForegroundService : Service() {
         telemetryStore = null
         pendingConnect = null
         canId = null
+        fwVersionString = null
         telemetry = null
         recentTelemetry.clear()
         generation += 1

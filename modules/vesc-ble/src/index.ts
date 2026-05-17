@@ -270,6 +270,7 @@ export interface RefloatConfigSnapshot {
   rawConfigLength: number
   groups: RefloatConfigGroup[]
   missingFieldIds: string[]
+  fwVersion: string | null
 }
 
 export interface ProfileStats {

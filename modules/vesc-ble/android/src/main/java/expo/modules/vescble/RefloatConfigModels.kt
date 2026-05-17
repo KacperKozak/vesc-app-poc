@@ -52,6 +52,7 @@ internal data class RefloatConfigSnapshot(
   val rawConfigLength: Int,
   val groups: List<RefloatConfigGroup>,
   val missingFieldIds: List<String>,
+  val fwVersion: String?,
 ) {
   fun toMap(): Map<String, Any?> = mapOf(
     "capturedAt" to capturedAt,
@@ -62,6 +63,7 @@ internal data class RefloatConfigSnapshot(
     "rawConfigLength" to rawConfigLength,
     "groups" to groups.map { it.toMap() },
     "missingFieldIds" to missingFieldIds,
+    "fwVersion" to fwVersion,
   )
 }
 
@@ -97,14 +99,14 @@ internal val REFLOAT_TUNE_GROUPS = listOf(
     id = "atr",
     title = "ATR",
     fields = listOf(
-      RefloatTuneFieldDefinition("atr_strength_up", "ATR Uphill Strength"),
-      RefloatTuneFieldDefinition("atr_strength_down", "ATR Downhill Strength"),
+      RefloatTuneFieldDefinition("atr_uphill_strength", "ATR Uphill Strength"),
+      RefloatTuneFieldDefinition("atr_downhill_strength", "ATR Downhill Strength"),
       RefloatTuneFieldDefinition("atr_threshold_up", "Threshold Angle Up", "deg"),
       RefloatTuneFieldDefinition("atr_threshold_down", "Threshold Angle Down", "deg"),
       RefloatTuneFieldDefinition("atr_speed_boost", "Speed Boost", "%"),
       RefloatTuneFieldDefinition("atr_angle_limit", "Tiltback Angle Limit", "deg"),
-      RefloatTuneFieldDefinition("atr_speed", "Max Tiltback Speed", "deg/s"),
-      RefloatTuneFieldDefinition("atr_release_speed", "Max Tiltback Release Speed", "deg/s"),
+      RefloatTuneFieldDefinition("atr_on_speed", "Max Tiltback Speed", "deg/s"),
+      RefloatTuneFieldDefinition("atr_off_speed", "Max Tiltback Release Speed", "deg/s"),
       RefloatTuneFieldDefinition("atr_response_boost", "Tiltback Response Boost", "x"),
       RefloatTuneFieldDefinition("atr_transition_boost", "Tiltback Transition Boost", "x"),
       RefloatTuneFieldDefinition("atr_filter", "Current Filter", "Hz"),
@@ -121,9 +123,9 @@ internal val REFLOAT_TUNE_GROUPS = listOf(
       RefloatTuneFieldDefinition("turntilt_start_angle", "Turn Aggregate Threshold", "deg"),
       RefloatTuneFieldDefinition("turntilt_start_erpm", "ERPM Threshold", "ERPM"),
       RefloatTuneFieldDefinition("turntilt_speed", "Max Tiltback Speed", "deg/s"),
-      RefloatTuneFieldDefinition("turntilt_speed_boost", "Speed Boost %", "%"),
-      RefloatTuneFieldDefinition("turntilt_boost_erpm", "Speed Boost Max ERPM", "ERPM"),
-      RefloatTuneFieldDefinition("turntilt_target", "Turn Aggregate Target", "deg"),
+      RefloatTuneFieldDefinition("turntilt_erpm_boost", "Speed Boost %", "%"),
+      RefloatTuneFieldDefinition("turntilt_erpm_boost_end", "Speed Boost Max ERPM", "ERPM"),
+      RefloatTuneFieldDefinition("turntilt_yaw_aggregate", "Turn Aggregate Target", "deg"),
     ),
   ),
   RefloatTuneGroupDefinition(
@@ -134,8 +136,8 @@ internal val REFLOAT_TUNE_GROUPS = listOf(
       RefloatTuneFieldDefinition("torquetilt_strength_regen", "Strength (Regen)", "deg/A"),
       RefloatTuneFieldDefinition("torquetilt_start_current", "Start Current Threshold", "A"),
       RefloatTuneFieldDefinition("torquetilt_angle_limit", "Tiltback Angle Limit", "deg"),
-      RefloatTuneFieldDefinition("torquetilt_speed", "Max Tiltback Speed", "deg/s"),
-      RefloatTuneFieldDefinition("torquetilt_release_speed", "Max Tiltback Release Speed", "deg/s"),
+      RefloatTuneFieldDefinition("torquetilt_on_speed", "Max Tiltback Speed", "deg/s"),
+      RefloatTuneFieldDefinition("torquetilt_off_speed", "Max Tiltback Release Speed", "deg/s"),
     ),
   ),
   RefloatTuneGroupDefinition(
@@ -152,7 +154,7 @@ internal val REFLOAT_TUNE_GROUPS = listOf(
     fields = listOf(
       RefloatTuneFieldDefinition("tiltback_constant", "Constant Tiltback", "deg"),
       RefloatTuneFieldDefinition("tiltback_variable", "Variable Tiltback Rate", "deg/1000 ERPM"),
-      RefloatTuneFieldDefinition("tiltback_variable_target", "Variable Tiltback Target", "deg"),
+      RefloatTuneFieldDefinition("tiltback_variable_max", "Variable Tiltback Target", "deg"),
     ),
   ),
 )

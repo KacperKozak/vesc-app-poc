@@ -90,6 +90,7 @@ export default function TuneScreen() {
           ) : null}
 
           <View style={styles.metaRow}>
+            {snapshot.fwVersion ? <Text style={styles.metaText}>{snapshot.fwVersion}</Text> : null}
             <Text style={styles.metaText}>CAN {snapshot.canId}</Text>
             <Text style={styles.metaText}>{snapshot.rawConfigLength} bytes</Text>
             {snapshot.missingFieldIds.length > 0 ? (
