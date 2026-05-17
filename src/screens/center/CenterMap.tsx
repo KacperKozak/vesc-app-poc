@@ -383,7 +383,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   )
 })
 
-const EDGE_GUARD_WIDTH = 20
+const EDGE_GUARD_WIDTH = 40
 
 const styles = StyleSheet.create({
   mapContainer: {
@@ -398,6 +398,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     width: EDGE_GUARD_WIDTH,
+    backgroundColor: 'rgba(0,0,0,0.001)',
   },
   edgeGuardRight: {
     position: 'absolute',
@@ -405,6 +406,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: EDGE_GUARD_WIDTH,
+    backgroundColor: 'rgba(0,0,0,0.001)',
   },
   emptyContainer: {
     ...StyleSheet.absoluteFillObject,

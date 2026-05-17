@@ -1,12 +1,12 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { CaretRightIcon, WarningCircleIcon } from 'phosphor-react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { telemetry } from '@/constants/telemetry'
 import type { HistorySession } from '@/store/historyStore'
 
 interface HistorySessionSheetProps {
   visible: boolean
+  bottomOffset: number
   sessions: HistorySession[]
   selectedSessionId: string | null
   onClose: () => void
@@ -15,17 +15,18 @@ interface HistorySessionSheetProps {
 
 export function HistorySessionSheet({
   visible,
+  bottomOffset,
   sessions,
   selectedSessionId,
   onClose,
   onSelectSession,
 }: HistorySessionSheetProps) {
-  const insets = useSafeAreaInsets()
+  if (!visible) return null
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]}>
-        <View style={styles.handle} />
+    <>
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View style={[styles.panel, { bottom: bottomOffset }]}>
         <Text style={styles.title}>Rides</Text>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           {sessions.length === 0 ? (
@@ -36,7 +37,11 @@ export function HistorySessionSheet({
               return (
                 <Pressable
                   key={session.id}
-                  style={[styles.row, selected && styles.rowSelected]}
+                  style={({ pressed }) => [
+                    styles.row,
+                    selected && styles.rowSelected,
+                    pressed && styles.rowPressed,
+                  ]}
                   onPress={() => onSelectSession(session)}
                 >
                   <View style={styles.rowMain}>
@@ -66,7 +71,7 @@ export function HistorySessionSheet({
           )}
         </ScrollView>
       </View>
-    </Modal>
+    </>
   )
 }
 
@@ -84,30 +89,34 @@ function formatDistance(distanceM: number | null): string {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 24,
   },
-  sheet: {
+  panel: {
+    position: 'absolute',
+    left: '50%',
+    zIndex: 25,
+    width: 280,
+    maxHeight: 360,
+    transform: [{ translateX: -140 }],
     backgroundColor: '#131c2e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '82%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#334155',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 16,
   },
   title: {
     color: '#cbd5e1',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
+    paddingTop: 12,
     paddingBottom: 8,
   },
   scroll: {
@@ -115,7 +124,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 12,
-    paddingBottom: 6,
+    paddingBottom: 8,
     gap: 8,
   },
   emptyText: {
@@ -136,6 +145,9 @@ const styles = StyleSheet.create({
   },
   rowSelected: {
     borderColor: '#3b82f6',
+  },
+  rowPressed: {
+    backgroundColor: '#172554',
   },
   rowMain: {
     flex: 1,

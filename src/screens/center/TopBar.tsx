@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   CaretDownIcon,
@@ -39,6 +39,7 @@ export function TopBar({
   onDisconnect,
 }: TopBarProps) {
   const insets = useSafeAreaInsets()
+  const pillRef = useRef<View>(null)
   const [selectorOpen, setSelectorOpen] = useState(false)
 
   const canDisconnect =
@@ -63,7 +64,7 @@ export function TopBar({
         >
           <UserCircleIcon size={17} color="#cbd5e1" weight="bold" />
         </Pressable>
-        <View style={styles.pill}>
+        <View ref={pillRef} style={styles.pill}>
           <Pressable style={styles.boardButton} onPress={() => setSelectorOpen(true)}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
             <Text style={styles.boardText} numberOfLines={1}>
@@ -99,6 +100,7 @@ export function TopBar({
 
       <BoardSelectorSheet
         visible={selectorOpen}
+        triggerRef={pillRef}
         boards={boards}
         activeBoardId={activeBoardId}
         recordDebugSession={recordDebugSession}

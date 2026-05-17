@@ -1,5 +1,4 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import {
   CheckCircleIcon,
   LightningIcon,
@@ -14,9 +13,11 @@ import { routes } from '@/navigation/routes'
 
 import type { Board } from '@/store/boardStore'
 import { theme } from '@/constants/theme'
+import { Dropdown } from './Dropdown'
 
 interface BoardSelectorSheetProps {
   visible: boolean
+  triggerRef: React.RefObject<View | null>
   boards: Board[]
   activeBoardId: string | null
   recordDebugSession: boolean
@@ -28,6 +29,7 @@ interface BoardSelectorSheetProps {
 
 export function BoardSelectorSheet({
   visible,
+  triggerRef,
   boards,
   activeBoardId,
   recordDebugSession,
@@ -36,135 +38,128 @@ export function BoardSelectorSheet({
   onAddBoard,
   onToggleRecordDebug,
 }: BoardSelectorSheetProps) {
-  const insets = useSafeAreaInsets()
-
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom || 20 }]}>
-        <View style={styles.handle} />
-
+    <Dropdown
+      visible={visible}
+      triggerRef={triggerRef}
+      onClose={onClose}
+      matchTriggerWidth={false}
+      minWidth={280}
+    >
+      <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Your Boards</Text>
-        <ScrollView bounces={false} style={styles.scroll}>
-          {boards.map((board) => {
-            const isActive = board.id === activeBoardId
-            return (
+
+        {boards.map((board) => {
+          const isActive = board.id === activeBoardId
+          return (
+            <Pressable
+              key={board.id}
+              style={({ pressed }) => [
+                styles.boardRow,
+                isActive && styles.boardRowActive,
+                pressed && styles.boardRowPressed,
+              ]}
+              onPress={() => onSelectBoard(board.id)}
+            >
+              <View style={[styles.boardIcon, isActive && styles.boardIconActive]}>
+                <LightningIcon
+                  size={16}
+                  color={isActive ? theme.wheel.color : '#6b7280'}
+                  weight={isActive ? 'fill' : 'regular'}
+                />
+              </View>
+              <View style={styles.boardInfo}>
+                <Text style={[styles.boardName, isActive && styles.boardNameActive]}>
+                  {board.name}
+                </Text>
+                {board.isStarred && (
+                  <View style={styles.starBadge}>
+                    <StarIcon size={10} color="#facc15" weight="fill" />
+                    <Text style={styles.starText}>Main</Text>
+                  </View>
+                )}
+              </View>
+              {isActive && <CheckCircleIcon size={20} color={theme.wheel.color} weight="fill" />}
               <Pressable
-                key={board.id}
-                style={[styles.boardRow, isActive && styles.boardRowActive]}
-                onPress={() => onSelectBoard(board.id)}
+                onPress={(e) => {
+                  e.stopPropagation()
+                  onClose()
+                  router.push({ pathname: routes.addBoardDetails, params: { boardId: board.id } })
+                }}
+                hitSlop={8}
               >
-                <View style={[styles.boardIcon, isActive && styles.boardIconActive]}>
-                  <LightningIcon
-                    size={16}
-                    color={isActive ? theme.wheel.color : '#6b7280'}
-                    weight={isActive ? 'fill' : 'regular'}
-                  />
-                </View>
-                <View style={styles.boardInfo}>
-                  <Text style={[styles.boardName, isActive && styles.boardNameActive]}>
-                    {board.name}
-                  </Text>
-                  {board.isStarred && (
-                    <View style={styles.starBadge}>
-                      <StarIcon size={10} color="#facc15" weight="fill" />
-                      <Text style={styles.starText}>Main</Text>
-                    </View>
-                  )}
-                </View>
-                {isActive && <CheckCircleIcon size={20} color={theme.wheel.color} weight="fill" />}
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation()
-                    router.push({ pathname: routes.addBoardDetails, params: { boardId: board.id } })
-                  }}
-                  hitSlop={8}
-                >
-                  <PencilSimpleIcon size={15} color="#475569" weight="bold" />
-                </Pressable>
+                <PencilSimpleIcon size={15} color="#475569" weight="bold" />
               </Pressable>
-            )
-          })}
+            </Pressable>
+          )
+        })}
 
-          <Pressable style={styles.addRow} onPress={onAddBoard}>
-            <View style={styles.addIcon}>
-              <PlusIcon size={16} color={theme.wheel.color} weight="bold" />
-            </View>
-            <Text style={styles.addText}>Add new board</Text>
-          </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.addRow, pressed && styles.boardRowPressed]}
+          onPress={onAddBoard}
+        >
+          <View style={styles.addIcon}>
+            <PlusIcon size={16} color={theme.wheel.color} weight="bold" />
+          </View>
+          <Text style={styles.addText}>Add new board</Text>
+        </Pressable>
 
-          <View style={styles.divider} />
-          <Pressable style={styles.debugRow} onPress={onToggleRecordDebug}>
-            {recordDebugSession ? (
-              <RecordIcon size={20} color={theme.wheel.color} weight="fill" />
-            ) : (
-              <RadioButtonIcon size={20} color="#4b5563" weight="regular" />
-            )}
-            <Text style={[styles.debugText, recordDebugSession && styles.debugTextActive]}>
-              Record next session
-            </Text>
-          </Pressable>
-        </ScrollView>
-      </View>
-    </Modal>
+        <View style={styles.divider} />
+
+        <Pressable
+          style={({ pressed }) => [styles.debugRow, pressed && styles.boardRowPressed]}
+          onPress={onToggleRecordDebug}
+        >
+          {recordDebugSession ? (
+            <RecordIcon size={20} color={theme.wheel.color} weight="fill" />
+          ) : (
+            <RadioButtonIcon size={20} color="#4b5563" weight="regular" />
+          )}
+          <Text style={[styles.debugText, recordDebugSession && styles.debugTextActive]}>
+            Record next session
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </Dropdown>
   )
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  sheet: {
-    backgroundColor: '#131c2e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#334155',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  scroll: {
-    paddingBottom: 8,
-  },
   sectionTitle: {
     color: '#64748b',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
   },
   divider: {
     height: 1,
     backgroundColor: '#1e293b',
-    marginHorizontal: 20,
-    marginTop: 8,
+    marginHorizontal: 16,
+    marginTop: 4,
   },
   boardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 12,
+    marginHorizontal: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 10,
   },
   boardRowActive: {
     backgroundColor: '#1e293b',
   },
+  boardRowPressed: {
+    backgroundColor: '#253548',
+  },
   boardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: '#1e293b',
     alignItems: 'center',
     justifyContent: 'center',
@@ -178,7 +173,7 @@ const styles = StyleSheet.create({
   },
   boardName: {
     color: '#94a3b8',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   boardNameActive: {
@@ -197,16 +192,16 @@ const styles = StyleSheet.create({
   addRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 12,
+    marginHorizontal: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 10,
   },
   addIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     borderWidth: 1.5,
     borderColor: '#334155',
     borderStyle: 'dashed',
@@ -215,49 +210,19 @@ const styles = StyleSheet.create({
   },
   addText: {
     color: theme.wheel.color,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  recordingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 12,
-  },
-  recordingIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#1e1338',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recordingInfo: {
-    flex: 1,
-  },
-  recordingName: {
-    color: '#e2e8f0',
     fontSize: 14,
-    fontWeight: '600',
-  },
-  recordingMeta: {
-    color: '#64748b',
-    fontSize: 11,
-    marginTop: 2,
+    fontWeight: '700',
   },
   debugRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 10,
   },
   debugText: {
     color: '#64748b',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   debugTextActive: {
