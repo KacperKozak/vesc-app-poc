@@ -26,8 +26,8 @@ public class VescBleModule: Module {
   private var mockLat = 52.2297
   private var mockLon = 21.0122
   private var scanDeviceIndex = 0
-  private var boards = Self.loadArray(key: "vesc_ble_boards")
-  private var alertRules = Self.loadArray(key: "vesc_ble_alert_rules")
+  private var boards = VescBleModule.loadArray(key: "vesc_ble_boards")
+  private var alertRules = VescBleModule.loadArray(key: "vesc_ble_alert_rules")
 
   private let mockDevices: [[String: Any]] = [
     [
@@ -159,6 +159,25 @@ public class VescBleModule: Module {
       ] as [String: Any?])
     }
 
+    AsyncFunction("getRefloatConfigSnapshot") { (promise: Promise) in
+      promise.reject(
+        "UNSUPPORTED_PLATFORM",
+        "Refloat config reading is Android-only until iOS BLE transport is implemented"
+      )
+    }
+
+    AsyncFunction("getTotalProfileStats") { (promise: Promise) in
+      promise.resolve(Self.emptyProfileStats())
+    }
+
+    AsyncFunction("getMonthlyProfileStats") { (_: [String: Any], promise: Promise) in
+      promise.resolve(Self.emptyProfileStats())
+    }
+
+    AsyncFunction("getProfileStatMonths") { (promise: Promise) in
+      promise.resolve([] as [Any])
+    }
+
     AsyncFunction("deleteTelemetryBefore") { (_: Double, promise: Promise) in
       promise.resolve(0)
     }
@@ -218,10 +237,16 @@ public class VescBleModule: Module {
       promise.resolve(Self.loadSettings())
     }
 
-    AsyncFunction("updateSetting") { (key: String, value: Any?, promise: Promise) in
-      var settings = Self.loadSettings()
-      settings[key] = value
-      Self.saveSettings(settings)
+    AsyncFunction("updateSetting") { (key: String, jsonValue: String?, promise: Promise) in
+      var settings = VescBleModule.loadSettings()
+      if let jsonStr = jsonValue,
+         let data = jsonStr.data(using: .utf8),
+         let decoded = try? JSONSerialization.jsonObject(with: data, options: .allowFragments) {
+        settings[key] = decoded
+      } else {
+        settings.removeValue(forKey: key)
+      }
+      VescBleModule.saveSettings(settings)
       promise.resolve(nil)
     }
   }
@@ -481,5 +506,18 @@ public class VescBleModule: Module {
   private static func saveSettings(_ settings: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: settings) else { return }
     UserDefaults.standard.set(data, forKey: "vesc_ble_settings")
+  }
+
+  private static func emptyProfileStats() -> [String: Any?] {
+    [
+      "distanceM": nil,
+      "rideCount": 0,
+      "rideTimeMs": 0,
+      "topSpeedKmh": 0,
+      "avgSpeedKmh": 0,
+      "longestRideM": nil,
+      "batteryUsedWh": nil,
+      "batteryRegenWh": nil,
+    ]
   }
 }

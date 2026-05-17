@@ -1,4 +1,13 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
+import { type ReactNode } from 'react'
 import Animated, { useAnimatedProps, type SharedValue } from 'react-native-reanimated'
 import { useRouter } from 'expo-router'
 import Svg, { Defs, Line, Path, RadialGradient, Stop } from 'react-native-svg'
@@ -23,13 +32,18 @@ interface DualGaugeProps {
   dutyMax?: number
   speedAlerts?: DualGaugeAlert[]
   dutyAlerts?: DualGaugeAlert[]
+  compact?: boolean
+  transparent?: boolean
+  split?: boolean
+  middleSlot?: ReactNode
+  containerStyle?: StyleProp<ViewStyle>
 }
 
 // Quarter-arc geometry constants
 const VB_W = 110
 const VB_H = 120
 const R = 80
-const STROKE = 2
+const STROKE = 1
 const MARKER_INSET = 10
 
 const GLOW_GRADIENT_ID_LEFT = 'dualGaugeGlowLeft'
@@ -42,6 +56,14 @@ const LEFT_CX = 100
 const LEFT_CY = 100
 const RIGHT_CX = 10
 const RIGHT_CY = 100
+
+// Cropped viewBox per side — removes empty space so arc fills container width
+const CROP_PAD = 1
+const CROP_TOP = 12
+const VB_CROP_W = R + CROP_PAD * 2
+const VB_CROP_H = VB_H - CROP_TOP
+const VB_CROP_LEFT_X = LEFT_CX - R - CROP_PAD
+const VB_CROP_RIGHT_X = RIGHT_CX - CROP_PAD
 
 const AnimatedPath = Animated.createAnimatedComponent(Path)
 const AnimatedLine = Animated.createAnimatedComponent(Line)
@@ -128,10 +150,15 @@ const BG_ARC_RIGHT = arcPathRight(1)
 
 // ── Alert sub-components ──────────────────────────────────────────────────────
 
+const TICK_LENGHT = 2
+const TICK_WIDTH = 0.35
+
 function AlertTick({ side, fraction }: { side: 'left' | 'right'; fraction: number }) {
-  const inner = side === 'left' ? polarLeft(R - 3, fraction) : polarRight(R - 3, fraction)
+  const inner =
+    side === 'left' ? polarLeft(R - TICK_LENGHT, fraction) : polarRight(R - TICK_LENGHT, fraction)
   const outer =
-    side === 'left' ? polarLeft(R + STROKE / 2, fraction) : polarRight(R + STROKE / 2, fraction)
+    side === 'left' ? polarLeft(R - STROKE / 2, fraction) : polarRight(R - STROKE / 2, fraction)
+
   return (
     <Line
       x1={inner.x}
@@ -139,7 +166,7 @@ function AlertTick({ side, fraction }: { side: 'left' | 'right'; fraction: numbe
       x2={outer.x}
       y2={outer.y}
       stroke="#facc15"
-      strokeWidth={0.75}
+      strokeWidth={TICK_WIDTH}
       strokeLinecap="butt"
     />
   )
@@ -229,7 +256,10 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
 
   return (
     <View style={styles.quarterWrap}>
-      <Svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={styles.svg}>
+      <Svg
+        viewBox={`${isLeft ? VB_CROP_LEFT_X : VB_CROP_RIGHT_X} ${CROP_TOP} ${VB_CROP_W} ${VB_CROP_H}`}
+        style={styles.svg}
+      >
         <Defs>
           <RadialGradient id={glowId} gradientUnits="userSpaceOnUse" cx={cx} cy={cy} r={R}>
             <Stop offset="0" stopColor={color} stopOpacity={0} />
@@ -290,29 +320,6 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
         />
         <Text style={styles.unit}>{unit}</Text>
       </View>
-
-      {/* Tick labels */}
-      {isLeft ? (
-        <>
-          <Text style={[styles.tick, styles.tickBottomLeft]} pointerEvents="none">
-            {'0 '}
-            <Text style={styles.tickUnit}>{unit}</Text>
-          </Text>
-          <Text style={[styles.tick, styles.tickTopRight]} pointerEvents="none">
-            {max} <Text style={styles.tickUnit}>{unit}</Text>
-          </Text>
-        </>
-      ) : (
-        <>
-          <Text style={[styles.tick, styles.tickTopLeft]} pointerEvents="none">
-            {max} <Text style={styles.tickUnit}>{unit}</Text>
-          </Text>
-          <Text style={[styles.tick, styles.tickBottomRight]} pointerEvents="none">
-            {'0 '}
-            <Text style={styles.tickUnit}>{unit}</Text>
-          </Text>
-        </>
-      )}
     </View>
   )
 }
@@ -329,25 +336,28 @@ export function DualGauge({
   dutyMax = 100,
   speedAlerts = [],
   dutyAlerts = [],
+  compact = false,
+  transparent = false,
+  split = false,
+  containerStyle,
 }: DualGaugeProps) {
   const router = useRouter()
 
   return (
-    <View style={styles.wrap}>
-      <View style={{ flexDirection: 'row' }}>
+    <View
+      style={[
+        styles.wrap,
+        compact && styles.wrapCompact,
+        transparent && styles.wrapTransparent,
+        containerStyle,
+      ]}
+    >
+      <View style={[styles.row, split && styles.rowSplit]}>
         <Pressable
-          style={styles.halfPressable}
+          style={[styles.halfPressable, split && styles.halfPressableSplit]}
           onPress={() => router.push(routes.controlSpeed)}
           android_ripple={{ color: 'rgba(148,163,184,0.18)', borderless: false, foreground: true }}
         >
-          <QuarterArc
-            side="left"
-            value={speedValue}
-            max={speedMax}
-            color={telemetry.speed.color}
-            unit="km/h"
-            alerts={speedAlerts}
-          />
           {speedSeries && speedSeries.length > 1 && (
             <Sparkline
               points={speedSeries}
@@ -358,21 +368,21 @@ export function DualGauge({
               windowMs={windowMs}
             />
           )}
+          <QuarterArc
+            side="left"
+            value={speedValue}
+            max={speedMax}
+            color={telemetry.speed.color}
+            unit="km/h"
+            alerts={speedAlerts}
+          />
         </Pressable>
 
         <Pressable
-          style={styles.halfPressable}
+          style={[styles.halfPressable, split && styles.halfPressableSplit]}
           onPress={() => router.push(routes.controlDuty)}
           android_ripple={{ color: 'rgba(148,163,184,0.18)', borderless: false, foreground: true }}
         >
-          <QuarterArc
-            side="right"
-            value={dutyValue}
-            max={dutyMax}
-            color={telemetry.duty.color}
-            unit="%"
-            alerts={dutyAlerts}
-          />
           {dutySeries && dutySeries.length > 1 && (
             <Sparkline
               points={dutySeries}
@@ -383,6 +393,14 @@ export function DualGauge({
               windowMs={windowMs}
             />
           )}
+          <QuarterArc
+            side="right"
+            value={dutyValue}
+            max={dutyMax}
+            color={telemetry.duty.color}
+            unit="%"
+            alerts={dutyAlerts}
+          />
         </Pressable>
       </View>
     </View>
@@ -398,14 +416,32 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     position: 'relative',
   },
+  wrapCompact: {
+    paddingHorizontal: 20,
+    paddingVertical: 2,
+    marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  wrapTransparent: {
+    backgroundColor: 'transparent',
+  },
   halfPressable: {
     flex: 1,
-    overflow: 'hidden',
-    borderRadius: 8,
+    overflow: 'visible',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 32,
+  },
+  rowSplit: {
+    justifyContent: 'space-between',
+  },
+  halfPressableSplit: {
+    flex: 4,
   },
   quarterWrap: {
     width: '100%',
-    aspectRatio: VB_W / VB_H,
+    aspectRatio: VB_CROP_W / VB_CROP_H,
     position: 'relative',
   },
   svg: {
@@ -414,21 +450,19 @@ const styles = StyleSheet.create({
   },
   bowlLeft: {
     position: 'absolute',
-    // Anchor to the bottom-right area of the left arc (arc ends at top-center of viewBox)
     right: 0,
-    left: '20%',
-    top: '14%',
-    bottom: '6%',
+    left: '5%',
+    top: '10%',
+    bottom: '5%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   bowlRight: {
     position: 'absolute',
-    // Anchor to the bottom-left area of the right arc (arc ends at top-center of viewBox)
     left: 0,
-    right: '20%',
-    top: '14%',
-    bottom: '6%',
+    right: '5%',
+    top: '10%',
+    bottom: '5%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -446,35 +480,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: 'center',
     marginTop: 2,
-  },
-  tick: {
-    position: 'absolute',
-    color: '#cbd5e1',
-    fontSize: 10,
-    fontFamily: 'monospace',
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  tickUnit: {
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  // Left side ticks
-  tickBottomLeft: {
-    bottom: '6%',
-    left: '6%',
-  },
-  tickTopRight: {
-    top: '4%',
-    right: '6%',
-  },
-  // Right side ticks
-  tickTopLeft: {
-    top: '4%',
-    left: '6%',
-  },
-  tickBottomRight: {
-    bottom: '6%',
-    right: '6%',
   },
 })

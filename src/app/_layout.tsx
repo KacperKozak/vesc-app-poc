@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
+import { HeaderBackButton } from '@/components/navigation/HeaderBackButton'
 import { stackScreens } from '@/navigation/routes'
 import { useAlertsStore } from '@/store/alertsStore'
 
@@ -17,16 +18,21 @@ export default function RootLayout() {
         screenOptions={{
           headerStyle: { backgroundColor: '#111827' },
           headerTintColor: '#f9fafb',
-          headerTitleStyle: { fontWeight: '600' },
+          headerTitleStyle: { fontWeight: '600', fontSize: 14 },
+          headerTitleAlign: 'center',
+          headerShadowVisible: false,
+          headerLeft: () => <HeaderBackButton />,
           contentStyle: { backgroundColor: '#111827' },
         }}
       >
         <Stack.Screen name={stackScreens.home} options={{ headerShown: false }} />
+        <Stack.Screen name={stackScreens.profile} options={{ title: 'Profile' }} />
         <Stack.Screen name={stackScreens.settings} options={{ title: 'Settings' }} />
+        <Stack.Screen name={stackScreens.tune} options={{ title: 'Tune' }} />
         <Stack.Screen name={stackScreens.addBoardScan} options={{ title: 'Add Board' }} />
         <Stack.Screen name={stackScreens.addBoardDetails} options={{ title: 'Board Details' }} />
       </Stack>
-      <StatusBar style="light" />
+      <StatusBar style="light" translucent backgroundColor="transparent" />
     </GestureHandlerRootView>
   )
 }

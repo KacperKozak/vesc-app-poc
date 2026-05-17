@@ -1,26 +1,42 @@
+import { useRef } from 'react'
 import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
 
-import { FloatingBar } from '@/components/FloatingBar'
-import { TelemetryView } from '@/components/TelemetryView'
+import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
+import { CenterOverlays } from '@/screens/center/CenterOverlays'
+import { useCenterScreenController } from '@/screens/center/useCenterScreenController'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
 
 interface CenterScreenProps {
   activeBoard: Board | undefined
+  activeBoardId: string | null
+  boards: Board[]
   boardsLoaded: boolean
   bleStatus: string
+  recordDebugSession: boolean
   onStopScan: () => void
   onRetryConnect: () => void
+  onSelectBoard: (id: string) => void
+  onAddBoard: () => void
+  onToggleRecordDebug: () => void
 }
 
 export function CenterScreen({
   activeBoard,
+  activeBoardId,
+  boards,
   boardsLoaded,
   bleStatus,
+  recordDebugSession,
   onStopScan,
   onRetryConnect,
+  onSelectBoard,
+  onAddBoard,
+  onToggleRecordDebug,
 }: CenterScreenProps) {
+  const mapRef = useRef<CenterMapHandle>(null)
+  const controller = useCenterScreenController({ mapRef })
   const hasBle = !!activeBoard?.bleId
 
   if (!boardsLoaded) {
@@ -69,12 +85,67 @@ export function CenterScreen({
 
   return (
     <View style={styles.container}>
-      <TelemetryView />
-      <FloatingBar
-        bleStatus={bleStatus}
-        activeBoard={activeBoard}
-        onStopScan={onStopScan}
-        onRetryConnect={onRetryConnect}
+      <CenterMap
+        ref={mapRef}
+        liveLocations={controller.liveLocations}
+        rideGpsSamples={controller.sessionGpsSamples}
+        rideMarkers={controller.sessionMarkers}
+        historyActive={controller.historyActive}
+        mapStyleKey={controller.mapStyleKey}
+        rotationLocked={controller.rotationLocked}
+        perspectiveEnabled={controller.perspectiveEnabled}
+        onPerspectiveChange={controller.setPerspectiveEnabled}
+        onHeadingChange={controller.setHeading}
+        onMapFocus={controller.handleMapFocus}
+        onLongPressTarget={controller.setTargetLocation}
+        targetLocation={controller.targetLocation}
+        onClearTarget={controller.clearTargetLocation}
+        seekPosition={controller.seekGpsPosition}
+      />
+      <CenterOverlays
+        mode={controller.mode}
+        mapRef={mapRef}
+        board={{
+          boards,
+          activeBoardId,
+          activeBoard,
+          bleStatus,
+          recordDebugSession,
+          onStopScan,
+          onRetryConnect,
+          onSelectBoard,
+          onAddBoard,
+          onToggleRecordDebug,
+        }}
+        map={{
+          heading: controller.heading,
+          rotationLocked: controller.rotationLocked,
+          perspectiveEnabled: controller.perspectiveEnabled,
+          targetLocation: controller.targetLocation,
+          clearTargetLocation: controller.clearTargetLocation,
+          mapStyleKey: controller.mapStyleKey,
+          setMapStyleKey: controller.setMapStyleKey,
+          setRotationLocked: controller.setRotationLocked,
+          exitMapFocus: controller.exitMapFocus,
+        }}
+        history={{
+          enterHistoryMode: controller.enterHistoryMode,
+          selectedSession: controller.selectedSession,
+          sessionSamples: controller.sessionSamples,
+          previousRide: controller.previousRide,
+          nextRide: controller.nextRide,
+          loadingSession: controller.loadingSession,
+          historyLoading: controller.historyLoading,
+          historyError: controller.historyError,
+          sessions: controller.sessions,
+          historySheetVisible: controller.historySheetVisible,
+          setHistorySheetVisible: controller.setHistorySheetVisible,
+          selectSession: controller.selectSession,
+          selectRide: controller.selectRide,
+          exitHistory: controller.exitHistory,
+          removeSession: controller.removeSession,
+          onSeek: controller.onSeek,
+        }}
       />
     </View>
   )
