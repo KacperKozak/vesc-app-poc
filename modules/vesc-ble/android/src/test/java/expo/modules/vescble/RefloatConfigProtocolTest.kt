@@ -91,17 +91,43 @@ class RefloatConfigProtocolTest {
 
   @Test
   fun parsesCustomConfigResponse() {
-    val payload = byteArrayOf(COMM_GET_CUSTOM_CONFIG.toByte(), 0, 1, 2, 3, 4)
+    val payload = byteArrayOf(
+      COMM_GET_CUSTOM_CONFIG.toByte(),
+      0,
+      0x12,
+      0x34,
+      0x56,
+      0x78,
+      1,
+      2,
+      3,
+      4,
+    )
     val parsed = RefloatConfigProtocol.parseCustomConfigResponse(payload).success()
     assertEquals(0, parsed.confInd)
+    assertEquals(0x12345678L, parsed.packageSignature)
     assertArrayEquals(byteArrayOf(1, 2, 3, 4), parsed.config)
   }
 
   @Test
   fun parsesForwardedCustomConfigResponse() {
-    val payload = byteArrayOf(COMM_FORWARD_CAN.toByte(), 7, COMM_GET_CUSTOM_CONFIG.toByte(), 0, 1, 2, 3, 4)
+    val payload = byteArrayOf(
+      COMM_FORWARD_CAN.toByte(),
+      7,
+      COMM_GET_CUSTOM_CONFIG.toByte(),
+      0,
+      0x12,
+      0x34,
+      0x56,
+      0x78,
+      1,
+      2,
+      3,
+      4,
+    )
     val parsed = RefloatConfigProtocol.parseCustomConfigResponse(payload).success()
     assertEquals(0, parsed.confInd)
+    assertEquals(0x12345678L, parsed.packageSignature)
     assertArrayEquals(byteArrayOf(1, 2, 3, 4), parsed.config)
   }
 
@@ -152,7 +178,7 @@ class RefloatConfigProtocolTest {
   @Test
   fun rejectsConfigResponseWithWrongConfigIndex() {
     val failure = RefloatConfigProtocol
-      .parseCustomConfigResponse(byteArrayOf(COMM_GET_CUSTOM_CONFIG.toByte(), 1, 2, 3))
+      .parseCustomConfigResponse(byteArrayOf(COMM_GET_CUSTOM_CONFIG.toByte(), 1, 0, 0, 0, 0))
       .failure()
 
     assertEquals("Unexpected Refloat config index 1", failure.message)

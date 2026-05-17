@@ -99,15 +99,18 @@ internal object RefloatConfigSchemaParser {
   }
 
   fun normalizeXmlBytes(bytes: ByteArray): ByteArray {
-    val textStart = bytes.indexOfFirst { it.toInt().toChar() == '<' }
-    if (textStart >= 0) return bytes.copyOfRange(textStart, bytes.size)
-
     val zlibStart = findZlibStart(bytes)
     if (zlibStart >= 0) {
-      return InflaterInputStream(ByteArrayInputStream(bytes, zlibStart, bytes.size - zlibStart)).use {
-        it.readBytes()
+      try {
+        return InflaterInputStream(ByteArrayInputStream(bytes, zlibStart, bytes.size - zlibStart)).use {
+          it.readBytes()
+        }
+      } catch (_: Exception) {
       }
     }
+
+    val textStart = bytes.indexOfFirst { it.toInt().toChar() == '<' }
+    if (textStart >= 0) return bytes.copyOfRange(textStart, bytes.size)
 
     return bytes
   }

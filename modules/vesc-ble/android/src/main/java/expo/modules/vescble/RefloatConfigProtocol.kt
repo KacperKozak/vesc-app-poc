@@ -12,6 +12,7 @@ internal data class RefloatConfigXmlChunk(
 
 internal data class RefloatConfigBytes(
   val confInd: Int,
+  val packageSignature: Long,
   val config: ByteArray,
 )
 
@@ -120,15 +121,24 @@ internal object RefloatConfigProtocol {
       is RefloatConfigProtocolResult.Success -> result.value
       is RefloatConfigProtocolResult.Failure -> return result
     }
-    if (payload.size < offset + 2) {
+    if (payload.size < offset + 6) {
       return RefloatConfigProtocolResult.Failure(
         "Short Refloat config response: ${payload.size - offset} bytes",
       )
     }
+    val view = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN)
+    view.position(offset + 2)
     val confInd = payload[offset + 1].toInt() and 0xff
     if (confInd != expectedConfInd) {
       return RefloatConfigProtocolResult.Failure("Unexpected Refloat config index $confInd")
     }
-    return RefloatConfigProtocolResult.Success(RefloatConfigBytes(confInd, payload.copyOfRange(offset + 2, payload.size)))
+    val packageSignature = view.int.toLong() and 0xffffffffL
+    return RefloatConfigProtocolResult.Success(
+      RefloatConfigBytes(
+        confInd = confInd,
+        packageSignature = packageSignature,
+        config = payload.copyOfRange(offset + 6, payload.size),
+      ),
+    )
   }
 }

@@ -1,5 +1,7 @@
 package expo.modules.vescble
 
+import java.io.ByteArrayOutputStream
+import java.util.zip.DeflaterOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -61,6 +63,20 @@ class RefloatConfigSchemaTest {
     assertEquals(1000.0, schema.fields[0].scale)
     assertEquals("turntilt_erpm_boost", schema.fields[1].id)
     assertEquals(RefloatConfigValueType.UINT16, schema.fields[1].type)
+  }
+
+  @Test
+  fun normalizesCompressedXmlBeforeScanningForText() {
+    val xml = """<ConfigParams><Params></Params><SerOrder></SerOrder></ConfigParams>"""
+    val compressed = ByteArrayOutputStream().use { output ->
+      DeflaterOutputStream(output).use { it.write(xml.encodeToByteArray()) }
+      output.toByteArray()
+    }
+    val bytes = byteArrayOf(0, '<'.code.toByte(), 0, 0) + compressed
+
+    val normalized = RefloatConfigSchemaParser.normalizeXmlBytes(bytes)
+
+    assertEquals(xml, normalized.toString(Charsets.UTF_8))
   }
 
   @Test(expected = RefloatConfigSchemaException::class)

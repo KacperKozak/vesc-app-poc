@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from 'expo-router'
 import { ArrowsClockwiseIcon, InfoIcon, WarningCircleIcon } from 'phosphor-react-native'
@@ -20,6 +20,17 @@ type InfoModalState = {
   title: string
   message: string
 } | null
+
+interface BasicSliderItem {
+  id: string
+  label: string
+  value: number | null
+  min: number
+  max: number
+  step: number
+  source: string
+  info: string
+}
 
 const FIELD_INFO: Record<string, string> = {
   kp: 'Main proportional angle response. Higher values make the board respond more strongly to nose angle error.',
@@ -85,6 +96,97 @@ function errorMessage(error: unknown): string {
   return 'Unable to read Refloat config.'
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function fieldNumber(fields: Map<string, RefloatConfigField>, id: string): number | null {
+  const value = fields.get(id)?.value
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function formatSliderValue(item: BasicSliderItem): string {
+  if (item.value == null) return 'Missing'
+  return Number.isInteger(item.value) ? item.value.toFixed(0) : item.value.toFixed(1)
+}
+
+function basicSlidersFromSnapshot(snapshot: RefloatConfigSnapshot): BasicSliderItem[] {
+  const fields = new Map(
+    snapshot.groups.flatMap((group) => group.fields.map((field) => [field.id, field])),
+  )
+  const kp = fieldNumber(fields, 'kp')
+  const torqueTilt = fieldNumber(fields, 'torquetilt_strength')
+  const torqueTiltRegen = fieldNumber(fields, 'torquetilt_strength_regen')
+  const turnTilt = fieldNumber(fields, 'turntilt_strength')
+  const brakeTilt = fieldNumber(fields, 'braketilt_strength')
+  const atrUp = fieldNumber(fields, 'atr_strength_up')
+  const atrDown = fieldNumber(fields, 'atr_strength_down')
+  const atrStrength = atrUp != null || atrDown != null ? Math.max(atrUp ?? 0, atrDown ?? 0) : null
+
+  return [
+    {
+      id: 'aggressiveness',
+      label: 'Aggressiveness',
+      value: kp == null ? null : clamp(kp - 20, -5, 10),
+      min: -5,
+      max: 10,
+      step: 1,
+      source: 'kp',
+      info: 'Derived from Angle P as kp - 20, clamped to -5..10. In write mode this would coordinate PID and Mahony filter values together.',
+    },
+    {
+      id: 'noseStiffness',
+      label: 'Nose stiffness',
+      value: torqueTilt == null ? null : clamp(torqueTilt / 0.03, 0, 10),
+      min: 0,
+      max: 10,
+      step: 1,
+      source: 'torquetilt_strength',
+      info: 'Derived from acceleration torque tiltback strength divided by 0.03. This represents nose lift from positive output current.',
+    },
+    {
+      id: 'tailStiffness',
+      label: 'Tail stiffness',
+      value: torqueTiltRegen == null ? null : clamp(torqueTiltRegen / 0.03, 0, 10),
+      min: 0,
+      max: 10,
+      step: 1,
+      source: 'torquetilt_strength_regen',
+      info: 'Derived from regen torque tiltback strength divided by 0.03. This represents nose lowering from negative regen current.',
+    },
+    {
+      id: 'carveTilt',
+      label: 'Carve tilt',
+      value: turnTilt == null ? null : clamp(turnTilt, 0, 15),
+      min: 0,
+      max: 15,
+      step: 1,
+      source: 'turntilt_strength',
+      info: 'Derived directly from turn tiltback strength.',
+    },
+    {
+      id: 'brakeTilt',
+      label: 'Brake tilt',
+      value: brakeTilt == null ? null : clamp(brakeTilt, 0, 5),
+      min: 0,
+      max: 5,
+      step: 1,
+      source: 'braketilt_strength',
+      info: 'Derived directly from brake tiltback strength.',
+    },
+    {
+      id: 'atrIntensity',
+      label: 'ATR intensity',
+      value: atrStrength == null ? null : clamp((atrStrength / 2) * 15, 0, 15),
+      min: 0,
+      max: 15,
+      step: 1,
+      source: 'atr_strength_up/down',
+      info: 'Derived from the stronger uphill or downhill ATR strength, mapped from 0..2 to 0..15.',
+    },
+  ]
+}
+
 export default function TuneScreen() {
   const navigation = useNavigation()
   const [state, setState] = useState<LoadState>({
@@ -131,6 +233,10 @@ export default function TuneScreen() {
   }, [load, navigation, state.phase])
 
   const snapshot = state.snapshot
+  const basicSliders = useMemo(
+    () => (snapshot ? basicSlidersFromSnapshot(snapshot) : []),
+    [snapshot],
+  )
 
   const showBadgeInfo = (title: string, message: string) => {
     setInfoModal({ title, message })
@@ -229,6 +335,27 @@ export default function TuneScreen() {
             ) : null}
           </View>
 
+          <View style={styles.group}>
+            <View style={styles.groupHeader}>
+              <Text style={styles.groupTitle}>Basic</Text>
+              <Text style={styles.groupCount}>derived preview</Text>
+            </View>
+            <View style={styles.basicList}>
+              {basicSliders.map((item) => (
+                <BasicSlider
+                  key={item.id}
+                  item={item}
+                  onInfo={() =>
+                    showBadgeInfo(
+                      item.label,
+                      `${item.info}\n\nSource: ${item.source}\nRange: ${item.min} to ${item.max}, step ${item.step}`,
+                    )
+                  }
+                />
+              ))}
+            </View>
+          </View>
+
           {snapshot.groups.map((group) => (
             <View key={group.id} style={styles.group}>
               <View style={styles.groupHeader}>
@@ -291,6 +418,42 @@ function ConfigCell({ field, onInfo }: { field: RefloatConfigField; onInfo: () =
       <Text style={styles.cellLabel} numberOfLines={2}>
         {field.label}
       </Text>
+    </View>
+  )
+}
+
+function BasicSlider({ item, onInfo }: { item: BasicSliderItem; onInfo: () => void }) {
+  const progress = item.value == null ? 0 : ((item.value - item.min) / (item.max - item.min)) * 100
+  const roundedProgress = clamp(progress, 0, 100)
+
+  return (
+    <View style={[styles.basicSlider, item.value == null && styles.basicSliderMissing]}>
+      <View style={styles.basicSliderHeader}>
+        <View style={styles.basicSliderTitleWrap}>
+          <Text style={styles.basicSliderLabel}>{item.label}</Text>
+          <Text style={styles.basicSliderSource}>{item.source}</Text>
+        </View>
+        <View style={styles.basicSliderValueWrap}>
+          <Text
+            style={[styles.basicSliderValue, item.value == null && styles.basicSliderValueMissing]}
+          >
+            {formatSliderValue(item)}
+          </Text>
+          <Pressable style={styles.basicSliderInfoButton} onPress={onInfo}>
+            <InfoIcon size={13} color="#64748b" weight="bold" />
+          </Pressable>
+        </View>
+      </View>
+      <View style={styles.sliderTrack}>
+        <View style={[styles.sliderFill, { width: `${roundedProgress}%` }]} />
+        {item.value != null ? (
+          <View style={[styles.sliderThumb, { left: `${roundedProgress}%` }]} />
+        ) : null}
+      </View>
+      <View style={styles.sliderRange}>
+        <Text style={styles.sliderRangeText}>{item.min}</Text>
+        <Text style={styles.sliderRangeText}>{item.max}</Text>
+      </View>
     </View>
   )
 }
@@ -389,6 +552,93 @@ const styles = StyleSheet.create({
   },
   group: {
     gap: 6,
+  },
+  basicList: {
+    gap: 10,
+  },
+  basicSlider: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    backgroundColor: '#172033',
+    padding: 12,
+    gap: 9,
+  },
+  basicSliderMissing: {
+    opacity: 0.58,
+  },
+  basicSliderHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  basicSliderTitleWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  basicSliderLabel: {
+    color: '#f1f5f9',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  basicSliderSource: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  basicSliderValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  basicSliderValue: {
+    color: '#e0f2fe',
+    fontSize: 16,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  basicSliderValueMissing: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  basicSliderInfoButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sliderTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0f172a',
+    overflow: 'visible',
+  },
+  sliderFill: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#38bdf8',
+  },
+  sliderThumb: {
+    position: 'absolute',
+    top: -4,
+    width: 16,
+    height: 16,
+    marginLeft: -8,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: '#38bdf8',
+  },
+  sliderRange: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sliderRangeText: {
+    color: '#475569',
+    fontSize: 10,
+    fontWeight: '700',
   },
   groupHeader: {
     flexDirection: 'row',

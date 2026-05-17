@@ -319,7 +319,7 @@ The config bytes request carries:
 The config bytes response carries:
 
 ```text
-[93, confIndex, configBytes...]
+[93, confIndex, packageSignature:uint32, encodedConfigBytes...]
 ```
 
 For Refloat package config, `confIndex` is `0`.
