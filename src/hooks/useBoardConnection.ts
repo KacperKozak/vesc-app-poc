@@ -11,6 +11,8 @@ function isBoardBusy(status: string): boolean {
     status === 'connecting' ||
     status === 'discovering' ||
     status === 'subscribing' ||
+    status === 'connected' ||
+    status === 'stale' ||
     status === 'waiting_for_telemetry' ||
     status === 'reconnecting' ||
     status === 'disconnecting'
