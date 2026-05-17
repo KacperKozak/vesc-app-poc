@@ -520,8 +520,8 @@ class VescForegroundService : Service() {
         emitState()
         showNotification("Discovering board...")
         start.onSuccess()
-        mainHandler.postDelayed({ sendPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
-        mainHandler.postDelayed({ sendPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
+        mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
+        mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
         if (canId != null) startPolling()
         armBoardReadyTimeout(start.boardConfig)
     }
@@ -531,6 +531,11 @@ class VescForegroundService : Service() {
         for (payload in packetReassembler.feed(chunk)) {
             handlePayload(payload)
         }
+    }
+
+    private fun sendStartupPayload(payload: ByteArray) {
+        if (activeConfigRead != null) return
+        sendPayload(payload)
     }
 
     private fun handlePayload(payload: ByteArray) {
