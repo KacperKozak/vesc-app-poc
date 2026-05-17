@@ -352,16 +352,21 @@ not independent key/value pairs. Unknown fields must be preserved exactly. A
 write implementation should never create a config from only the visible tune
 fields.
 
-### Runtime Tune Commands
+### Refloat Runtime Commands
 
 Refloat also exposes package-specific tune commands over
 `COMM_CUSTOM_APP_DATA` (`36`) using the Refloat package id (`101`). These are
-separate from full custom config persistence.
+separate from full custom config persistence. The runtime channel includes tune
+commands, live control commands, accessory controls, and read commands.
 
 Relevant package command IDs:
 
 | Command | ID | Purpose |
 | --- | ---: | --- |
+| `FLYWHEEL` | `22` | Apply flywheel-related runtime action. |
+| `LIGHT_INFO` | `25` | Read light controller/runtime light info. |
+| `LIGHT_CTRL` | `26` | Apply live light control values. |
+| `LCM_INFO` | `27` | Read LCM-related info. |
 | `GET_INFO` | `33` | Read package/device info. |
 | `GET_RTDATA` | `34` | Read runtime data. |
 | `SET_TUNE` | `35` | Apply tune values at runtime. |
@@ -369,18 +374,119 @@ Relevant package command IDs:
 | `SAVE_TUNE` | `37` | Persist current tune state. |
 | `RESTORE_TUNE` | `38` | Restore saved tune state. |
 | `TUNE_OTHER` | `39` | Apply miscellaneous tune values. |
+| `MOVE` | `40` | Apply live remote movement / remote tilt input. |
+| `BOOSTER` | `41` | Apply booster-related runtime action. |
+| `LOCK` | `45` | Toggle package-level lock state. |
+| `TONE` | `210` | Tone/horn/playback runtime channel. |
 
 This implies two possible edit strategies:
 
 - Full config strategy: edit a local full config draft and persist through
   `COMM_SET_CUSTOM_CONFIG`.
-- Runtime strategy: send Refloat tune commands for immediate behavior changes,
-  then explicitly call `SAVE_TUNE` if the change should survive restart.
+- Runtime tune strategy: send Refloat tune commands for immediate behavior
+  changes, then explicitly call `SAVE_TUNE` if the change should survive
+  restart.
 
 Do not mix these paths casually. A runtime tune command may affect live behavior
 before a full config save, while a full custom config write may replace values
 that were changed through runtime tune commands. The UI should present clear
 draft/apply/save semantics if both paths are ever supported.
+
+### Runtime Channel Capability Summary
+
+The custom app data channel is not limited to tune sliders. It is a small
+Refloat-specific runtime API. Confirmed categories:
+
+| Category | Commands | Can Change On The Fly |
+| --- | --- | --- |
+| Runtime data reads | `GET_INFO`, `GET_RTDATA`, `GET_ALL_DATA`, `PRINT_INFO`, `LIGHT_INFO`, `LCM_INFO` | Nothing persisted; reads package version, board state, angles, input tilt, throttle, speed/duty, and light/controller metadata. |
+| Tune editing | `SET_TUNE`, `SET_DEFAULT_TUNE`, `TUNE_OTHER`, `BOOSTER` | Live tune state and helper/advanced tune values. These affect behavior immediately but should be considered temporary until saved. |
+| Tune persistence actions | `SAVE_TUNE`, `RESTORE_TUNE` | Save current runtime tune state or restore saved tune state. These are actions, not field writes. |
+| Movement / tilt input | `MOVE`, `LOCK`, `FLYWHEEL` | Live movement, Remote Tilt input, lock state, and flywheel-related action. Treat as immediate control input. |
+| Lighting | `LIGHT_CTRL` | Headlight and status brightness. The observed control payload uses `headlightBrightness` and `statusBrightness`; headlight is scaled to roughly half before sending and status brightness has a minimum of `5`. |
+| Sound / tones | `TONE` | Tone support/version, horn, play, and stop actions. Tone handler install is a separate script/LISP flow; playback control then uses the `TONE` runtime channel. |
+
+The practical split is:
+
+- Runtime data reads are safe polling commands.
+- Tune commands alter live balancing behavior and need explicit save semantics.
+- Movement/flywheel/chuck-style commands can create motor output and need an
+  arming/neutral/disconnect safety design.
+- Lighting and tones are accessory runtime controls, not board tune settings.
+
+### Remote Tilt and Move Controls
+
+The forward/backward board movement and dynamic tilt controls are live input
+features, not normal tune sliders. They combine configuration gates with a
+short-lived runtime command stream.
+
+There are two setup/config pieces:
+
+- `inputtilt_remote_type`: enables Remote Tilt input. Values are `None = 0`,
+  `UART = 1`, `PPM = 2`. The app-controlled path uses the UART-style mode
+  (`1`) when enabling Remote Tilt from the UI and writes `0` when disabling it.
+- Remote Tilt behavior is then constrained by normal config fields:
+  `inputtilt_angle_limit`, `inputtilt_speed`,
+  `inputtilt_invert_throttle`, and `inputtilt_deadband`.
+
+Important Remote Tilt field behavior:
+
+| Field | Behavior |
+| --- | --- |
+| `inputtilt_angle_limit` | Maximum dynamic tiltback angle. The board scales input percentage into this angle. Example: a 10 degree limit with 50% input gives a 5 degree tilt target. |
+| `inputtilt_speed` | Rate limit for moving toward the requested tilt angle, in degrees per second. |
+| `inputtilt_invert_throttle` | Direction mapping. Default `true` means forward input lowers the nose and backward input lifts the nose. |
+| `inputtilt_deadband` | Center deadband before input starts changing the setpoint. Example: 10% deadband ignores the first +/-10% around center and rescales from there. |
+
+When Remote Tilt is toggled from the UI, the flow is:
+
+1. Read current custom config with `COMM_GET_CUSTOM_CONFIG`.
+2. Clone the current config object.
+3. Replace only `inputtilt_remote_type` with `1` when enabled or `0` when
+   disabled.
+4. Encode the full config payload with the current schema.
+5. Write it back with `COMM_SET_CUSTOM_CONFIG`.
+
+The live slider input is then sent separately over runtime packets:
+
+```text
+[COMM_CUSTOM_APP_DATA, FLOAT, MOVE, ...liveInput]
+```
+
+The `MOVE` command clamps the slider value to `20..80` before sending it. That
+range appears to be a centered control range, with `50` acting as neutral and
+values below/above neutral producing movement or tilt in the selected direction.
+Treat the exact board-side units as runtime input units, not stored config
+units.
+
+The movement UI has explicit `Forward` and `Back` direction states. Pressing a
+direction marks movement active; releasing stops it. While active, the app keeps
+sending the current direction plus the current slider value. Slider release
+resets the UI value back to the neutral/default value.
+
+There is also a second live-input path using VESC chuck data:
+
+```text
+[COMM_SET_CHUCK_DATA, 0, 255 - value]
+```
+
+That path emulates a nunchuk/chuck throttle-style input instead of using the
+Refloat `MOVE` packet directly. It should be treated as an immediate motor input
+path, not a persisted tune setting.
+
+Moving the board forward/backward while disengaged is governed by the Remote
+Throttle config fields:
+
+| Field | Behavior |
+| --- | --- |
+| `remote_throttle_current_max` | Maximum current available for remote throttle when the board is disengaged. Actual current scales linearly with throttle percentage. Default is `0 A`; recommended values in the schema are `5..10 A`. |
+| `remote_throttle_grace_period` | Delay after disengagement before remote throttle is allowed. Default is `10 s`. |
+
+Safety implication: this feature can spin the motor from the app. A production
+implementation should require an explicit arming state, show a hazard warning,
+rate-limit live writes, send neutral/stop on release and disconnect, and avoid
+persisting `inputtilt_remote_type = 1` unless the user explicitly wants Remote
+Tilt enabled after leaving the screen.
 
 ### Version Compatibility
 
