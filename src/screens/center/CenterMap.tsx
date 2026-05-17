@@ -224,164 +224,187 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   }
 
   return (
-    <Mapbox.MapView
-      style={styles.map}
-      styleURL={useCustomJSON ? undefined : selectedMapStyle.styleURL}
-      styleJSON={isOneDark ? ONE_DARK_MAP_STYLE : isMapy ? BLANK_STYLE : undefined}
-      pitchEnabled
-      rotateEnabled={!rotationLocked}
-      compassEnabled={false}
-      scaleBarEnabled={false}
-      logoEnabled={false}
-      attributionEnabled={false}
-      onLongPress={(feature) => {
-        const [longitude, latitude] = feature.geometry.coordinates
-        onLongPressTarget({ latitude, longitude })
-      }}
-      onCameraChanged={(state) => {
-        if (state.gestures.isGestureActive) {
-          setFollowGps(false)
-          onMapFocus()
-        }
-        onHeadingChange(state.properties.heading)
-        onPerspectiveChange(state.properties.pitch > MAP_DEFAULTS.pitchThreshold)
-      }}
-    >
-      <Camera
-        ref={cameraRef}
-        defaultSettings={{ ...gpsCamera, pitch: MAP_DEFAULTS.defaultPitch }}
-        maxZoomLevel={MAP_DEFAULTS.maxZoom}
-        animationMode="easeTo"
-      />
-
-      {showBuildings3d && (
-        <FillExtrusionLayer
-          id="center-3d-buildings"
-          sourceLayerID="building"
-          minZoomLevel={14}
-          maxZoomLevel={22}
-          style={{
-            fillExtrusionColor: isOneDark ? '#3e4451' : '#e5e7eb',
-            fillExtrusionHeight: ['coalesce', ['get', 'height'], 12],
-            fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
-            fillExtrusionOpacity: isOneDark ? 0.65 : 0.42,
-            fillExtrusionVerticalGradient: true,
-          }}
-        />
-      )}
-
-      {isMapy ? (
-        <RasterSource
-          id="center-mapy-tiles"
-          tileUrlTemplates={[MAPY_TILE_URL_TEMPLATE]}
-          tileSize={256}
+    <View style={styles.mapContainer}>
+      <Mapbox.MapView
+        style={styles.map}
+        styleURL={useCustomJSON ? undefined : selectedMapStyle.styleURL}
+        styleJSON={isOneDark ? ONE_DARK_MAP_STYLE : isMapy ? BLANK_STYLE : undefined}
+        pitchEnabled
+        rotateEnabled={!rotationLocked}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        logoEnabled={false}
+        attributionEnabled={false}
+        onLongPress={(feature) => {
+          const [longitude, latitude] = feature.geometry.coordinates
+          onLongPressTarget({ latitude, longitude })
+        }}
+        onCameraChanged={(state) => {
+          if (state.gestures.isGestureActive) {
+            setFollowGps(false)
+            onMapFocus()
+          }
+          onHeadingChange(state.properties.heading)
+          onPerspectiveChange(state.properties.pitch > MAP_DEFAULTS.pitchThreshold)
+        }}
+      >
+        <Camera
+          ref={cameraRef}
+          defaultSettings={{ ...gpsCamera, pitch: MAP_DEFAULTS.defaultPitch }}
           maxZoomLevel={MAP_DEFAULTS.maxZoom}
-        >
-          <RasterLayer id="center-mapy-tiles-layer" sourceID="center-mapy-tiles" style={{}} />
-        </RasterSource>
-      ) : null}
+          animationMode="easeTo"
+        />
 
-      {!historyActive && liveTrailShape && (
-        <ShapeSource id="center-live-trail-source" shape={liveTrailShape} lineMetrics>
-          <LineLayer
-            id="center-live-trail-line"
+        {showBuildings3d && (
+          <FillExtrusionLayer
+            id="center-3d-buildings"
+            sourceLayerID="building"
+            minZoomLevel={14}
+            maxZoomLevel={22}
             style={{
-              lineColor: MAP_DEFAULTS.trailColor,
-              lineWidth: MAP_DEFAULTS.trailWidth,
-              lineCap: 'round',
-              lineJoin: 'round',
-              lineGradient: [
-                'interpolate',
-                ['linear'],
-                ['line-progress'],
-                0,
-                MAP_DEFAULTS.trailGradientStart,
-                1,
-                MAP_DEFAULTS.trailGradientEnd,
-              ],
+              fillExtrusionColor: isOneDark ? '#3e4451' : '#e5e7eb',
+              fillExtrusionHeight: ['coalesce', ['get', 'height'], 12],
+              fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
+              fillExtrusionOpacity: isOneDark ? 0.65 : 0.42,
+              fillExtrusionVerticalGradient: true,
             }}
-          />
-        </ShapeSource>
-      )}
-
-      {historyActive && rideRouteShape && (
-        <ShapeSource id="center-ride-route-source" shape={rideRouteShape}>
-          <LineLayer
-            id="center-ride-route-line"
-            style={{
-              lineColor: theme.target.color,
-              lineWidth: 4,
-              lineCap: 'round',
-              lineJoin: 'round',
-            }}
-          />
-        </ShapeSource>
-      )}
-
-      {!historyActive && gpsFix && (
-        <>
-          {accuracyShape && (
-            <ShapeSource id="center-gps-accuracy-source" shape={accuracyShape}>
-              <FillLayer
-                id="center-gps-accuracy-fill"
-                style={{ fillColor: MAP_DEFAULTS.accuracyFillColor }}
-              />
-            </ShapeSource>
-          )}
-          <MapPin
-            id="center-gps-position"
-            coordinate={[gpsFix.longitude, gpsFix.latitude]}
-            color={MAP_DEFAULTS.markerColor}
-          />
-        </>
-      )}
-
-      {historyActive && rideRoute[0] && (
-        <MapPin id="center-ride-start" coordinate={rideRoute[0]} color="#22c55e" />
-      )}
-      {historyActive && rideRoute.at(-1) && (
-        <MapPin id="center-ride-end" coordinate={rideRoute.at(-1)!} color={theme.error.color} />
-      )}
-      {historyActive &&
-        seekPosition &&
-        seekPosition.latitude != null &&
-        seekPosition.longitude != null && (
-          <MapPin
-            id="center-seek-position"
-            coordinate={[seekPosition.longitude, seekPosition.latitude]}
-            color={MAP_DEFAULTS.markerColor}
           />
         )}
-      {historyActive &&
-        rideMarkers.map((marker) => {
-          const idx = findNearestSampleIndexByTime(rideGpsSamples, marker.occurredAtMs)
-          const gps = idx >= 0 ? rideGpsSamples[idx] : null
-          if (!gps) return null
-          return (
-            <MapPin
-              key={marker.id}
-              id={`center-ride-marker-${marker.id}`}
-              coordinate={[gps.longitude, gps.latitude]}
-              color={marker.type === 'error' ? theme.error.color : '#f59e0b'}
-            />
-          )
-        })}
 
-      {targetLocation && !historyActive && (
-        <MapPin
-          id="center-target-position"
-          coordinate={[targetLocation.longitude, targetLocation.latitude]}
-          color={theme.target.color}
-          onSelected={onClearTarget}
-        />
-      )}
-    </Mapbox.MapView>
+        {isMapy ? (
+          <RasterSource
+            id="center-mapy-tiles"
+            tileUrlTemplates={[MAPY_TILE_URL_TEMPLATE]}
+            tileSize={256}
+            maxZoomLevel={MAP_DEFAULTS.maxZoom}
+          >
+            <RasterLayer id="center-mapy-tiles-layer" sourceID="center-mapy-tiles" style={{}} />
+          </RasterSource>
+        ) : null}
+
+        {!historyActive && liveTrailShape && (
+          <ShapeSource id="center-live-trail-source" shape={liveTrailShape} lineMetrics>
+            <LineLayer
+              id="center-live-trail-line"
+              style={{
+                lineColor: MAP_DEFAULTS.trailColor,
+                lineWidth: MAP_DEFAULTS.trailWidth,
+                lineCap: 'round',
+                lineJoin: 'round',
+                lineGradient: [
+                  'interpolate',
+                  ['linear'],
+                  ['line-progress'],
+                  0,
+                  MAP_DEFAULTS.trailGradientStart,
+                  1,
+                  MAP_DEFAULTS.trailGradientEnd,
+                ],
+              }}
+            />
+          </ShapeSource>
+        )}
+
+        {historyActive && rideRouteShape && (
+          <ShapeSource id="center-ride-route-source" shape={rideRouteShape}>
+            <LineLayer
+              id="center-ride-route-line"
+              style={{
+                lineColor: theme.target.color,
+                lineWidth: 4,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </ShapeSource>
+        )}
+
+        {!historyActive && gpsFix && (
+          <>
+            {accuracyShape && (
+              <ShapeSource id="center-gps-accuracy-source" shape={accuracyShape}>
+                <FillLayer
+                  id="center-gps-accuracy-fill"
+                  style={{ fillColor: MAP_DEFAULTS.accuracyFillColor }}
+                />
+              </ShapeSource>
+            )}
+            <MapPin
+              id="center-gps-position"
+              coordinate={[gpsFix.longitude, gpsFix.latitude]}
+              color={MAP_DEFAULTS.markerColor}
+            />
+          </>
+        )}
+
+        {historyActive && rideRoute[0] && (
+          <MapPin id="center-ride-start" coordinate={rideRoute[0]} color="#22c55e" />
+        )}
+        {historyActive && rideRoute.at(-1) && (
+          <MapPin id="center-ride-end" coordinate={rideRoute.at(-1)!} color={theme.error.color} />
+        )}
+        {historyActive &&
+          seekPosition &&
+          seekPosition.latitude != null &&
+          seekPosition.longitude != null && (
+            <MapPin
+              id="center-seek-position"
+              coordinate={[seekPosition.longitude, seekPosition.latitude]}
+              color={MAP_DEFAULTS.markerColor}
+            />
+          )}
+        {historyActive &&
+          rideMarkers.map((marker) => {
+            const idx = findNearestSampleIndexByTime(rideGpsSamples, marker.occurredAtMs)
+            const gps = idx >= 0 ? rideGpsSamples[idx] : null
+            if (!gps) return null
+            return (
+              <MapPin
+                key={marker.id}
+                id={`center-ride-marker-${marker.id}`}
+                coordinate={[gps.longitude, gps.latitude]}
+                color={marker.type === 'error' ? theme.error.color : '#f59e0b'}
+              />
+            )
+          })}
+
+        {targetLocation && !historyActive && (
+          <MapPin
+            id="center-target-position"
+            coordinate={[targetLocation.longitude, targetLocation.latitude]}
+            color={theme.target.color}
+            onSelected={onClearTarget}
+          />
+        )}
+      </Mapbox.MapView>
+      <View style={styles.edgeGuardLeft} pointerEvents="box-only" />
+      <View style={styles.edgeGuardRight} pointerEvents="box-only" />
+    </View>
   )
 })
 
+const EDGE_GUARD_WIDTH = 20
+
 const styles = StyleSheet.create({
+  mapContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
   map: {
     ...StyleSheet.absoluteFillObject,
+  },
+  edgeGuardLeft: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: EDGE_GUARD_WIDTH,
+  },
+  edgeGuardRight: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: EDGE_GUARD_WIDTH,
   },
   emptyContainer: {
     ...StyleSheet.absoluteFillObject,
