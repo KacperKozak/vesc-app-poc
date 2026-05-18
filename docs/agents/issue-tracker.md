@@ -17,6 +17,16 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 Create a GitHub issue in `KacperKozak/vesc-app-poc`.
 
+## PRD issues
+
+When publishing a PRD, create a GitHub issue whose title starts with `[PRD] `.
+
+Example:
+
+```text
+[PRD] Ride recording export
+```
+
 ## When a skill says "fetch the relevant ticket"
 
 Run `gh issue view <number> --comments`.
