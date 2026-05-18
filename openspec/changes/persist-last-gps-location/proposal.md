@@ -8,6 +8,7 @@ When the app launches, the map centers on a hardcoded fallback coordinate (Wroc�
 - On map initialization, use the persisted coordinate as the fallback center instead of the hardcoded `[17.0385, 51.1079]`.
 - Update the persisted coordinate periodically as new GPS fixes arrive (throttled to avoid excessive writes).
 - Expose the persisted coordinate through the existing `settingsStore` so the map component can read it synchronously on mount.
+- Fade in the map after the camera has a valid position (persisted or live GPS), preventing the null-island flash at `[0, 0]`.
 
 ## Capabilities
 
@@ -25,4 +26,5 @@ _(none — no existing spec-level behavior changes)_
 - **Settings store** (`settingsStore.ts`): Expose new fields, update defaults.
 - **Map component** (`CenterMap.tsx`): Read persisted coordinate for fallback instead of hardcoded constant.
 - **GPS ingestion** (`bleStore.ts` or `liveTelemetryRuntime.ts`): Throttled write of last coordinate to settings on each fix.
+- **Map component** (`CenterMap.tsx`): Fade-in transition — map renders invisible until settings are loaded and camera has a valid initial position.
 - **No breaking changes**. Graceful fallback to hardcoded coordinate if no persisted value exists.
