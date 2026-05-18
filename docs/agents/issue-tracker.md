@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and PRDs for this repo live as GitHub issues. This is a private repo, so use the authenticated `gh` CLI from inside the local clone for all issue operations. Do not fetch GitHub issue pages over plain HTTP.
 
 ## Conventions
 
@@ -29,4 +29,11 @@ Example:
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Run `gh issue view <number> --comments`. Do not use unauthenticated HTTP requests or browser scraping for GitHub issue content.
+
+## When implementing an issue
+
+1. Fetch the issue with `gh issue view <number> --comments`.
+2. Use local files in the checked-out repo for code and docs.
+3. Use `gh issue comment <number> --body "..."` for implementation notes when needed.
+4. Never rely on public GitHub HTTP URLs for issue or repository contents; this repo is private.
