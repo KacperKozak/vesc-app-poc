@@ -274,6 +274,39 @@ interface TelemetryDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertSettings(settings: AppSettingsEntity)
+
+  @Query("SELECT * FROM tune_profiles WHERE board_id = :boardId ORDER BY created_at ASC")
+  suspend fun getTuneProfilesByBoard(boardId: String): List<TuneProfileEntity>
+
+  @Query("SELECT * FROM tune_profiles WHERE id = :id LIMIT 1")
+  suspend fun getTuneProfile(id: String): TuneProfileEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertTuneProfile(profile: TuneProfileEntity)
+
+  @Insert(onConflict = OnConflictStrategy.IGNORE)
+  suspend fun insertTuneProfile(profile: TuneProfileEntity): Long
+
+  @Query("SELECT COUNT(*) FROM tune_profiles WHERE board_id = :boardId")
+  suspend fun countTuneProfilesForBoard(boardId: String): Int
+
+  @Insert
+  suspend fun insertTuneHistoryEntry(entry: TuneHistoryEntryEntity): Long
+
+  @Query("SELECT * FROM tune_history_entries WHERE profile_id = :profileId ORDER BY created_at DESC")
+  suspend fun getTuneHistoryEntries(profileId: String): List<TuneHistoryEntryEntity>
+
+  @Transaction
+  suspend fun insertTuneProfileIfBoardHasNone(
+    profile: TuneProfileEntity,
+    historyEntry: TuneHistoryEntryEntity,
+  ): TuneProfileEntity? {
+    if (countTuneProfilesForBoard(profile.boardId) > 0) return null
+    val inserted = insertTuneProfile(profile)
+    if (inserted == -1L) return null
+    insertTuneHistoryEntry(historyEntry)
+    return profile
+  }
 }
 
 private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity): TelemetryMinuteBucketEntity {

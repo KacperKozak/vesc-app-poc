@@ -1,8 +1,11 @@
 package expo.modules.vescble.telemetry
 
 import android.content.Context
+import expo.modules.vescble.RefloatConfigSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.util.UUID
 
 class AppDataRepository private constructor(context: Context) {
   private val dao = TelemetryDatabase.get(context).telemetryDao()
@@ -77,6 +80,35 @@ class AppDataRepository private constructor(context: Context) {
 
   suspend fun setSelectedBoardId(id: String?): Unit = updateSetting("selectedBoardId", id)
 
+  suspend fun getTuneProfiles(boardId: String): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
+    dao.getTuneProfilesByBoard(boardId).map { it.toMap() }
+  }
+
+  suspend fun getTuneProfile(id: String): Map<String, Any?>? = withContext(Dispatchers.IO) {
+    dao.getTuneProfile(id)?.toMap()
+  }
+
+  internal suspend fun createMainTuneProfileIfMissing(snapshot: RefloatConfigSnapshot): Map<String, Any?>? =
+    withContext(Dispatchers.IO) {
+      val boardId = snapshot.boardId?.takeIf { it.isNotBlank() } ?: return@withContext null
+      val fieldsJson = snapshot.fieldsJson()
+      val now = System.currentTimeMillis()
+      val profile = TuneProfileEntity(
+        id = UUID.randomUUID().toString(),
+        boardId = boardId,
+        name = "Main",
+        fieldsJson = fieldsJson,
+        createdAt = now,
+        updatedAt = now,
+      )
+      val history = TuneHistoryEntryEntity(
+        profileId = profile.id,
+        fieldsJson = fieldsJson,
+        createdAt = now,
+      )
+      dao.insertTuneProfileIfBoardHasNone(profile, history)?.toMap()
+    }
+
   suspend fun getAutoConnectBoard(): Map<String, Any?>? = withContext(Dispatchers.IO) {
     val settings = dao.getSettings() ?: AppSettingsEntity()
     settings.selectedBoardId
@@ -127,6 +159,46 @@ fun AlertRuleEntity.toMap(): Map<String, Any?> = mapOf(
   "soundType" to soundType,
   "createdAt" to createdAt,
 )
+
+fun TuneProfileEntity.toMap(): Map<String, Any?> = mapOf(
+  "id" to id,
+  "boardId" to boardId,
+  "name" to name,
+  "fields" to fieldsJson.toJsonMap(),
+  "createdAt" to createdAt,
+  "updatedAt" to updatedAt,
+)
+
+fun TuneHistoryEntryEntity.toMap(): Map<String, Any?> = mapOf(
+  "id" to id,
+  "profileId" to profileId,
+  "fields" to fieldsJson.toJsonMap(),
+  "createdAt" to createdAt,
+)
+
+private fun RefloatConfigSnapshot.fieldsJson(): String {
+  val json = JSONObject()
+  groups.forEach { group ->
+    group.fields.forEach { field ->
+      json.put(field.id, field.value)
+    }
+  }
+  return json.toString()
+}
+
+private fun String.toJsonMap(): Map<String, Any?> {
+  val json = JSONObject(this)
+  val result = mutableMapOf<String, Any?>()
+  val keys = json.keys()
+  while (keys.hasNext()) {
+    val key = keys.next()
+    result[key] = jsonValue(json.get(key))
+  }
+  return result
+}
+
+private fun jsonValue(value: Any?): Any? =
+  if (value == JSONObject.NULL) null else value
 
 private fun Map<String, Any?>.toBoardEntity(): BoardEntity = BoardEntity(
   id = getString("id"),

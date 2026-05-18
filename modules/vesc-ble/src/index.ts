@@ -273,6 +273,17 @@ export interface RefloatConfigSnapshot {
   fwVersion: string | null
 }
 
+export type TuneProfileFieldValue = number | boolean | string | null
+
+export interface TuneProfile {
+  id: string
+  boardId: string
+  name: string
+  fields: Record<string, TuneProfileFieldValue>
+  createdAt: number
+  updatedAt: number
+}
+
 export interface ProfileStats {
   distanceM: number | null
   rideCount: number
@@ -350,6 +361,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   }): Promise<HistoryRange>
   getTelemetrySummary(): Promise<TelemetrySummary>
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
+  getTuneProfiles(boardId: string): Promise<TuneProfile[]>
+  getTuneProfile(profileId: string): Promise<TuneProfile | null>
   getTotalProfileStats(): Promise<ProfileStats>
   getMonthlyProfileStats(options: ProfileStatsMonth): Promise<ProfileStats>
   getProfileStatMonths(): Promise<ProfileStatsMonth[]>
@@ -463,6 +476,14 @@ export async function getTelemetrySummary(): Promise<TelemetrySummary> {
 
 export async function getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot> {
   return native.getRefloatConfigSnapshot()
+}
+
+export async function getTuneProfiles(boardId: string): Promise<TuneProfile[]> {
+  return native.getTuneProfiles(boardId)
+}
+
+export async function getTuneProfile(profileId: string): Promise<TuneProfile | null> {
+  return native.getTuneProfile(profileId)
 }
 
 export async function getTotalProfileStats(): Promise<ProfileStats> {

@@ -67,6 +67,13 @@ adb shell run-as <package> ls -la
 adb shell run-as <package> find . -maxdepth 3 -type f
 ```
 
+Fast package discovery for Expo apps when config/package drift is possible:
+
+```sh
+adb shell pm list packages | rg -i "app-slug|old-package|new-package|keyword"
+adb shell run-as <candidate.package> ls databases
+```
+
 SQLite DB with WAL:
 
 ```sh
@@ -77,10 +84,30 @@ adb exec-out run-as <package> cat databases/<db>.db-shm > tmp/device-db/<db>.db-
 sqlite3 tmp/device-db/<db>.db "PRAGMA table_list;"
 ```
 
+Always copy `-wal` and `-shm` before querying Room DBs; recent rows may live in WAL. Prefer sequential SQLite reads over parallel reads to avoid local `database is locked` noise.
+
 Query table:
 
 ```sh
 sqlite3 tmp/device-db/<db>.db "PRAGMA table_info(<table>); SELECT * FROM <table>;"
+```
+
+Room DB quick integrity check:
+
+```sh
+sqlite3 tmp/device-db/<db>.db "PRAGMA busy_timeout=5000; PRAGMA user_version; PRAGMA table_list; SELECT id, identity_hash FROM room_master_table;"
+```
+
+JSON payload checks:
+
+```sh
+sqlite3 tmp/device-db/<db>.db "PRAGMA busy_timeout=5000; SELECT COUNT(*) FROM <table>; SELECT COUNT(*) FROM json_each((SELECT <json_col> FROM <table> LIMIT 1));"
+```
+
+Timestamp conversion:
+
+```sh
+date -r $((<millis> / 1000)) '+%Y-%m-%d %H:%M:%S %Z'
 ```
 
 Shared prefs:

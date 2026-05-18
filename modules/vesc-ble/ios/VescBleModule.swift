@@ -167,6 +167,14 @@ public class VescBleModule: Module {
       )
     }
 
+    AsyncFunction("getTuneProfiles") { (_: String, promise: Promise) in
+      promise.resolve([] as [Any])
+    }
+
+    AsyncFunction("getTuneProfile") { (_: String, promise: Promise) in
+      promise.resolve(nil)
+    }
+
     AsyncFunction("getTotalProfileStats") { (promise: Promise) in
       promise.resolve(Self.emptyProfileStats())
     }

@@ -11,12 +11,15 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   getRefloatConfigSnapshot,
   type RefloatConfigField,
+  type RefloatConfigGroup,
   type RefloatConfigSnapshot,
+  type TuneProfileFieldValue,
 } from 'vesc-ble'
 
 import { InfoModal } from '@/components/InfoModal'
 import { Placeholder } from '@/components/Placeholder'
 import { useBleStore } from '@/store/bleStore'
+import { useTuneProfileStore } from '@/store/tuneProfileStore'
 
 type LoadState =
   | { phase: 'loading'; snapshot: RefloatConfigSnapshot | null; error: string | null }
@@ -194,10 +197,34 @@ function basicSlidersFromSnapshot(snapshot: RefloatConfigSnapshot): BasicSliderI
   ]
 }
 
+function isDisplayableFieldValue(
+  value: TuneProfileFieldValue | undefined,
+): value is number | boolean | string {
+  return typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
+}
+
+function groupsWithProfileValues(
+  groups: RefloatConfigGroup[],
+  fields: Record<string, TuneProfileFieldValue> | null,
+): RefloatConfigGroup[] {
+  if (!fields) return groups
+  return groups.map((group) => ({
+    ...group,
+    fields: group.fields.map((field) => {
+      const value = fields[field.id]
+      return isDisplayableFieldValue(value) ? { ...field, value } : field
+    }),
+  }))
+}
+
 export default function TuneScreen() {
   const navigation = useNavigation()
   const bleStatus = useBleStore((s) => s.status)
   const boardConnected = bleStatus === 'connected'
+  const activeProfile = useTuneProfileStore((s) => s.activeProfile)
+  const profileError = useTuneProfileStore((s) => s.error)
+  const loadProfiles = useTuneProfileStore((s) => s.loadProfiles)
+  const clearProfiles = useTuneProfileStore((s) => s.clear)
 
   const [state, setState] = useState<LoadState>({
     phase: 'loading',
@@ -210,6 +237,11 @@ export default function TuneScreen() {
     setState((current) => ({ phase: 'loading', snapshot: current.snapshot, error: null }))
     try {
       const snapshot = await getRefloatConfigSnapshot()
+      if (snapshot.boardId) {
+        await loadProfiles(snapshot.boardId).catch(() => [])
+      } else {
+        clearProfiles()
+      }
       setState({ phase: 'ready', snapshot, error: null })
     } catch (error) {
       setState((current) => ({
@@ -218,14 +250,19 @@ export default function TuneScreen() {
         error: errorMessage(error),
       }))
     }
-  }, [])
+  }, [clearProfiles, loadProfiles])
 
   useEffect(() => {
-    if (boardConnected) load()
-  }, [boardConnected, load])
+    if (boardConnected) {
+      load()
+    } else {
+      clearProfiles()
+    }
+  }, [boardConnected, clearProfiles, load])
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      title: activeProfile ? `Tune - ${activeProfile.name}` : 'Tune',
       headerRight: () =>
         boardConnected ? (
           <Pressable
@@ -241,12 +278,20 @@ export default function TuneScreen() {
           </Pressable>
         ) : null,
     })
-  }, [boardConnected, load, navigation, state.phase])
+  }, [activeProfile, boardConnected, load, navigation, state.phase])
 
   const snapshot = state.snapshot
+  const displayGroups = useMemo(
+    () => (snapshot ? groupsWithProfileValues(snapshot.groups, activeProfile?.fields ?? null) : []),
+    [activeProfile, snapshot],
+  )
+  const displaySnapshot = useMemo(
+    () => (snapshot ? { ...snapshot, groups: displayGroups } : null),
+    [displayGroups, snapshot],
+  )
   const basicSliders = useMemo(
-    () => (snapshot ? basicSlidersFromSnapshot(snapshot) : []),
-    [snapshot],
+    () => (displaySnapshot ? basicSlidersFromSnapshot(displaySnapshot) : []),
+    [displaySnapshot],
   )
 
   const showBadgeInfo = (title: string, message: string) => {
@@ -308,7 +353,25 @@ export default function TuneScreen() {
             </View>
           ) : null}
 
+          {profileError ? (
+            <View style={styles.errorBanner}>
+              <WarningCircleIcon size={16} color="#fca5a5" />
+              <Text style={styles.errorBannerText}>{profileError}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.metaRow}>
+            {activeProfile ? (
+              <InfoBadge
+                label={activeProfile.name}
+                onPress={() =>
+                  showBadgeInfo(
+                    'Tune Profile',
+                    `${activeProfile.name} profile loaded from local storage. Values shown on this screen come from the profile and fall back to the live snapshot for fields the profile does not contain.`,
+                  )
+                }
+              />
+            ) : null}
             {snapshot.fwVersion ? (
               <InfoBadge
                 label={snapshot.fwVersion}
@@ -375,11 +438,15 @@ export default function TuneScreen() {
             </View>
           </View>
 
-          {snapshot.groups.map((group) => (
+          {displayGroups.map((group) => (
             <View key={group.id} style={styles.group}>
               <View style={styles.groupHeader}>
                 <Text style={styles.groupTitle}>{group.title}</Text>
-                <Text style={styles.groupCount}>{group.fields.length} read-only values</Text>
+                <Text style={styles.groupCount}>
+                  {activeProfile
+                    ? `${group.fields.length} profile values`
+                    : `${group.fields.length} read-only values`}
+                </Text>
               </View>
               <View style={styles.grid}>
                 {group.fields.map((field) => (

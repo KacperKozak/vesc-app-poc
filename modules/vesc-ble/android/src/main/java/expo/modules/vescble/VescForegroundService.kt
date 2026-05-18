@@ -690,7 +690,7 @@ class VescForegroundService : Service() {
                 capturedAt = System.currentTimeMillis(),
                 fwVersion = fwVersionString,
             )
-            completeConfigRead(snapshot.toMap())
+            completeConfigRead(snapshot)
         } catch (e: RefloatConfigSchemaException) {
             dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
             failConfigRead(
@@ -802,14 +802,23 @@ class VescForegroundService : Service() {
         configTimeoutRunnable = null
     }
 
-    private fun completeConfigRead(snapshot: Map<String, Any?>) {
+    private fun completeConfigRead(snapshot: RefloatConfigSnapshot) {
         val active = activeConfigRead ?: return
         activeConfigRead = null
         clearConfigTimeout()
         if (active.wasPolling && boardConfig != null && canId != null) {
             startPolling()
         }
-        active.pending.onSuccess(snapshot)
+        appDataScope.launch {
+            try {
+                AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
+            } catch (e: Exception) {
+                Log.w(VESC_SESSION_TAG, "Failed to auto-create main tune profile", e)
+            }
+            mainHandler.post {
+                active.pending.onSuccess(snapshot.toMap())
+            }
+        }
     }
 
     private fun failConfigRead(code: RefloatConfigErrorCode, message: String) {

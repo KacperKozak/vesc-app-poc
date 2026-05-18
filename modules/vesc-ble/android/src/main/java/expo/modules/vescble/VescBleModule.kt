@@ -139,6 +139,12 @@ class VescBleModule : Module() {
         onError = { code, message -> promise.reject(code, message, null) },
       )
     }
+    AsyncFunction("getTuneProfiles") Coroutine { boardId: String ->
+      AppDataRepository.get(context.applicationContext).getTuneProfiles(boardId)
+    }
+    AsyncFunction("getTuneProfile") Coroutine { profileId: String ->
+      AppDataRepository.get(context.applicationContext).getTuneProfile(profileId)
+    }
     AsyncFunction("getTotalProfileStats") {
       runBlocking { ProfileStatsRepository.get(context.applicationContext).getTotalProfileStats() }
     }
