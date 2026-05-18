@@ -20,6 +20,7 @@ import {
   CaretDownIcon,
   CheckIcon,
   ClockCounterClockwiseIcon,
+  CopyIcon,
   InfoIcon,
   PencilSimpleIcon,
   PlusIcon,
@@ -41,7 +42,7 @@ import {
 
 import { InfoModal } from '@/components/InfoModal'
 import { Placeholder } from '@/components/Placeholder'
-import { useBoardStore } from '@/store/boardStore'
+import { useBoardStore, type Board } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
 import { useTuneProfileStore } from '@/store/tuneProfileStore'
 
@@ -617,6 +618,7 @@ export default function TuneScreen() {
   const navigation = useNavigation()
   const bleStatus = useBleStore((s) => s.status)
   const boardConnected = bleStatus === 'connected'
+  const allBoards = useBoardStore((s) => s.boards)
   const selectedBoardId = useBoardStore((s) => s.activeBoardId)
   const boardsLoaded = useBoardStore((s) => s.hasLoaded)
   const loadBoards = useBoardStore((s) => s.load)
@@ -633,6 +635,7 @@ export default function TuneScreen() {
   const storeCreateProfile = useTuneProfileStore((s) => s.createProfile)
   const storeRenameProfile = useTuneProfileStore((s) => s.renameProfile)
   const storeDeleteProfile = useTuneProfileStore((s) => s.deleteProfile)
+  const storeCopyProfile = useTuneProfileStore((s) => s.copyProfileToBoard)
   const loadHistory = useTuneProfileStore((s) => s.loadHistory)
   const rollbackToHistory = useTuneProfileStore((s) => s.rollbackToHistory)
   const setDraftField = useTuneProfileStore((s) => s.setDraftField)
@@ -656,6 +659,8 @@ export default function TuneScreen() {
   const [renameModalProfile, setRenameModalProfile] = useState<TuneProfile | null>(null)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [createCloneFromId, setCreateCloneFromId] = useState<string | undefined>()
+  const [copySourceProfile, setCopySourceProfile] = useState<TuneProfile | null>(null)
+  const [copyTargetBoard, setCopyTargetBoard] = useState<Board | null>(null)
   const [historyEntries, setHistoryEntries] = useState<TuneHistoryEntry[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
 
@@ -784,6 +789,18 @@ export default function TuneScreen() {
     [displaySnapshot],
   )
 
+  const schemaMismatchFields = useMemo(() => {
+    if (!activeProfile || !snapshot) return null
+    const boardFieldIds = new Set(snapshot.groups.flatMap((g) => g.fields.map((f) => f.id)))
+    const profileFieldIds = Object.keys(activeProfile.fields)
+    const profileOnly = profileFieldIds.filter((id) => !boardFieldIds.has(id))
+    const boardOnly = [...boardFieldIds].filter(
+      (id) => !Object.prototype.hasOwnProperty.call(activeProfile.fields, id),
+    )
+    if (profileOnly.length === 0 && boardOnly.length === 0) return null
+    return { profileOnly, boardOnly }
+  }, [activeProfile, snapshot])
+
   const showBadgeInfo = (title: string, message: string) => {
     setInfoModal({ title, message })
   }
@@ -863,6 +880,27 @@ export default function TuneScreen() {
       },
     ])
   }
+
+  const handleCopyProfile = (profile: TuneProfile) => {
+    setCopySourceProfile(profile)
+    setProfileMenuOpen(false)
+  }
+
+  const handleCopyToBoard = (board: Board) => {
+    setCopyTargetBoard(board)
+  }
+
+  const handleCopyConfirm = (name: string) => {
+    if (!copySourceProfile || !copyTargetBoard) return
+    void storeCopyProfile(copySourceProfile.id, copyTargetBoard.id, name)
+    setCopySourceProfile(null)
+    setCopyTargetBoard(null)
+  }
+
+  const otherBoards = useMemo(
+    () => allBoards.filter((b) => b.id !== selectedBoardId),
+    [allBoards, selectedBoardId],
+  )
 
   const handleBasicSliderReset = (sliderId: string) => {
     const formula = BASIC_SLIDER_FORMULA_BY_ID.get(sliderId)
@@ -963,6 +1001,43 @@ export default function TuneScreen() {
                 <Text style={styles.boardDiffButtonText}>Accept all</Text>
               </Pressable>
             </View>
+          ) : null}
+
+          {schemaMismatchFields ? (
+            <Pressable
+              style={styles.schemaMismatchBar}
+              onPress={() =>
+                showBadgeInfo(
+                  'Schema Mismatch',
+                  `Profile and board have different field sets.${
+                    schemaMismatchFields.profileOnly.length > 0
+                      ? `\n\nIn profile but not board: ${schemaMismatchFields.profileOnly.join(', ')}`
+                      : ''
+                  }${
+                    schemaMismatchFields.boardOnly.length > 0
+                      ? `\n\nIn board but not profile: ${schemaMismatchFields.boardOnly.join(', ')}`
+                      : ''
+                  }`,
+                )
+              }
+            >
+              <WarningIcon size={16} color="#fbbf24" weight="fill" />
+              <View style={styles.schemaMismatchTextWrap}>
+                <Text style={styles.schemaMismatchTitle}>Schema mismatch</Text>
+                <Text style={styles.schemaMismatchText}>
+                  {schemaMismatchFields.profileOnly.length > 0
+                    ? `${schemaMismatchFields.profileOnly.length} field${schemaMismatchFields.profileOnly.length === 1 ? '' : 's'} in profile not on board`
+                    : ''}
+                  {schemaMismatchFields.profileOnly.length > 0 &&
+                  schemaMismatchFields.boardOnly.length > 0
+                    ? ' · '
+                    : ''}
+                  {schemaMismatchFields.boardOnly.length > 0
+                    ? `${schemaMismatchFields.boardOnly.length} new field${schemaMismatchFields.boardOnly.length === 1 ? '' : 's'} on board`
+                    : ''}
+                </Text>
+              </View>
+            </Pressable>
           ) : null}
 
           {profiles.length > 0 ? (
@@ -1142,6 +1217,7 @@ export default function TuneScreen() {
         profiles={profiles}
         activeProfileId={activeProfile?.id ?? null}
         canDelete={profiles.length > 1}
+        hasOtherBoards={otherBoards.length > 0}
         onSelect={(id) => {
           setActiveProfile(id)
           setProfileMenuOpen(false)
@@ -1149,6 +1225,7 @@ export default function TuneScreen() {
         onCreate={() => handleCreateProfile(activeProfile?.id)}
         onRename={handleRenameProfile}
         onDelete={handleDeleteProfile}
+        onCopy={handleCopyProfile}
         onDismiss={() => setProfileMenuOpen(false)}
       />
       <TextPromptModal
@@ -1170,6 +1247,24 @@ export default function TuneScreen() {
           setRenameModalProfile(null)
         }}
         onDismiss={() => setRenameModalProfile(null)}
+      />
+      <BoardPickerModal
+        visible={copySourceProfile != null && copyTargetBoard == null}
+        boards={otherBoards}
+        onSelect={handleCopyToBoard}
+        onDismiss={() => setCopySourceProfile(null)}
+      />
+      <TextPromptModal
+        visible={copyTargetBoard != null}
+        title={`Copy to ${copyTargetBoard?.name ?? 'board'}`}
+        placeholder="Profile name"
+        initialValue={copySourceProfile ? `${copySourceProfile.name} (copy)` : ''}
+        confirmLabel="Copy"
+        onConfirm={handleCopyConfirm}
+        onDismiss={() => {
+          setCopyTargetBoard(null)
+          setCopySourceProfile(null)
+        }}
       />
       <HistoryModal
         visible={historyOpen}
@@ -1507,20 +1602,24 @@ function ProfileMenuModal({
   profiles,
   activeProfileId,
   canDelete,
+  hasOtherBoards,
   onSelect,
   onCreate,
   onRename,
   onDelete,
+  onCopy,
   onDismiss,
 }: {
   visible: boolean
   profiles: TuneProfile[]
   activeProfileId: string | null
   canDelete: boolean
+  hasOtherBoards: boolean
   onSelect: (id: string) => void
   onCreate: () => void
   onRename: (profile: TuneProfile) => void
   onDelete: (profile: TuneProfile) => void
+  onCopy: (profile: TuneProfile) => void
   onDismiss: () => void
 }) {
   return (
@@ -1558,6 +1657,11 @@ function ProfileMenuModal({
                   <Pressable style={styles.profileMenuIconBtn} onPress={() => onRename(profile)}>
                     <PencilSimpleIcon size={14} color="#94a3b8" weight="bold" />
                   </Pressable>
+                  {hasOtherBoards ? (
+                    <Pressable style={styles.profileMenuIconBtn} onPress={() => onCopy(profile)}>
+                      <CopyIcon size={14} color="#94a3b8" weight="bold" />
+                    </Pressable>
+                  ) : null}
                   {canDelete ? (
                     <Pressable style={styles.profileMenuIconBtn} onPress={() => onDelete(profile)}>
                       <TrashIcon size={14} color="#f87171" weight="bold" />
@@ -1650,6 +1754,43 @@ function RenameProfileModal({
       onConfirm={onRename}
       onDismiss={onDismiss}
     />
+  )
+}
+
+function BoardPickerModal({
+  visible,
+  boards,
+  onSelect,
+  onDismiss,
+}: {
+  visible: boolean
+  boards: Board[]
+  onSelect: (board: Board) => void
+  onDismiss: () => void
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
+      <Pressable style={styles.sheetBackdrop} onPress={onDismiss}>
+        <Pressable style={styles.profileMenu} onPress={(e) => e.stopPropagation()}>
+          <Text style={styles.profileMenuTitle}>Copy to board</Text>
+          {boards.length === 0 ? (
+            <Text style={styles.historyEmpty}>No other boards available.</Text>
+          ) : (
+            <ScrollView style={styles.profileMenuList}>
+              {boards.map((board) => (
+                <Pressable
+                  key={board.id}
+                  style={styles.profileMenuItem}
+                  onPress={() => onSelect(board)}
+                >
+                  <Text style={styles.profileMenuItemText}>{board.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
   )
 }
 
@@ -2229,6 +2370,30 @@ const styles = StyleSheet.create({
     color: '#020617',
     fontSize: 13,
     fontWeight: '900',
+  },
+  schemaMismatchBar: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#854d0e',
+    backgroundColor: '#422006',
+    padding: 12,
+  },
+  schemaMismatchTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  schemaMismatchTitle: {
+    color: '#fef3c7',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  schemaMismatchText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
   },
   profileSwitcherRow: {
     flexDirection: 'row',
