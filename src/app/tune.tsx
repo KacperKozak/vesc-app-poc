@@ -279,6 +279,10 @@ function formatValue(value: number | boolean | string): string {
     : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
 }
 
+function formatProfileValue(value: TuneProfileFieldValue | undefined): string {
+  return isDisplayableFieldValue(value) ? formatValue(value) : 'Missing'
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return 'Unable to read Refloat config.'
@@ -482,10 +486,15 @@ export default function TuneScreen() {
   const hasDirtyFields = useTuneProfileStore((s) => s.hasDirtyFields)
   const savingProfile = useTuneProfileStore((s) => s.saving)
   const profileError = useTuneProfileStore((s) => s.error)
+  const boardDiff = useTuneProfileStore((s) => s.boardDiff)
+  const hasBoardDiff = useTuneProfileStore((s) => s.hasBoardDiff)
   const loadProfiles = useTuneProfileStore((s) => s.loadProfiles)
   const setDraftField = useTuneProfileStore((s) => s.setDraftField)
+  const setBoardSnapshot = useTuneProfileStore((s) => s.setBoardSnapshot)
   const getDirtyFields = useTuneProfileStore((s) => s.getDirtyFields)
   const revertField = useTuneProfileStore((s) => s.revertField)
+  const acceptBoardField = useTuneProfileStore((s) => s.acceptBoardField)
+  const acceptAllBoardValues = useTuneProfileStore((s) => s.acceptAllBoardValues)
   const discardAllEdits = useTuneProfileStore((s) => s.discardAllEdits)
   const saveActiveProfile = useTuneProfileStore((s) => s.saveActiveProfile)
   const clearProfiles = useTuneProfileStore((s) => s.clear)
@@ -507,6 +516,7 @@ export default function TuneScreen() {
       } else {
         clearProfiles()
       }
+      setBoardSnapshot(snapshot)
       setState({ phase: 'ready', snapshot, error: null })
     } catch (error) {
       setState((current) => ({
@@ -515,7 +525,7 @@ export default function TuneScreen() {
         error: errorMessage(error),
       }))
     }
-  }, [clearProfiles, loadProfiles])
+  }, [clearProfiles, loadProfiles, setBoardSnapshot])
 
   const loadOffline = useCallback(
     async (boardId: string) => {
@@ -527,6 +537,7 @@ export default function TuneScreen() {
           throw new Error('No saved Tune Profile for this Board.')
         }
         const snapshot = snapshotFromTuneProfile(boardId, profile)
+        setBoardSnapshot(null)
         setState({ phase: 'ready', snapshot, error: null })
       } catch (error) {
         setState((current) => ({
@@ -536,7 +547,7 @@ export default function TuneScreen() {
         }))
       }
     },
-    [loadProfiles],
+    [loadProfiles, setBoardSnapshot],
   )
 
   useEffect(() => {
@@ -552,9 +563,18 @@ export default function TuneScreen() {
       void loadOffline(selectedBoardId)
     } else if (boardsLoaded) {
       clearProfiles()
+      setBoardSnapshot(null)
       setState({ phase: 'loading', snapshot: null, error: null })
     }
-  }, [boardConnected, boardsLoaded, clearProfiles, loadOffline, loadOnline, selectedBoardId])
+  }, [
+    boardConnected,
+    boardsLoaded,
+    clearProfiles,
+    loadOffline,
+    loadOnline,
+    selectedBoardId,
+    setBoardSnapshot,
+  ])
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -640,6 +660,7 @@ export default function TuneScreen() {
   }
 
   const dirtyFields = getDirtyFields()
+  const boardDiffByField = new Map(boardDiff.map((item) => [item.fieldId, item]))
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -695,6 +716,21 @@ export default function TuneScreen() {
             <View style={styles.errorBanner}>
               <WarningCircleIcon size={16} color="#fca5a5" />
               <Text style={styles.errorBannerText}>{profileError}</Text>
+            </View>
+          ) : null}
+
+          {hasBoardDiff ? (
+            <View style={styles.boardDiffBar}>
+              <View style={styles.boardDiffTextWrap}>
+                <Text style={styles.boardDiffTitle}>Board config differs from your profile</Text>
+                <Text style={styles.boardDiffText}>
+                  {boardDiff.length} field{boardDiff.length === 1 ? '' : 's'} changed
+                </Text>
+              </View>
+              <Pressable style={styles.boardDiffButton} onPress={acceptAllBoardValues}>
+                <CheckIcon size={14} color="#022c22" weight="bold" />
+                <Text style={styles.boardDiffButtonText}>Accept all</Text>
+              </Pressable>
             </View>
           ) : null}
 
@@ -809,7 +845,13 @@ export default function TuneScreen() {
                 <Text style={styles.groupTitle}>{group.title}</Text>
                 <Text style={styles.groupCount}>
                   {activeProfile
-                    ? `${group.fields.length} profile values`
+                    ? `${group.fields.length} profile values${
+                        group.fields.some((field) => boardDiffByField.has(field.id))
+                          ? ` - ${
+                              group.fields.filter((field) => boardDiffByField.has(field.id)).length
+                            } changed`
+                          : ''
+                      }`
                     : `${group.fields.length} read-only values`}
                 </Text>
               </View>
@@ -819,10 +861,14 @@ export default function TuneScreen() {
                     key={field.id}
                     field={field}
                     savedValue={activeProfile?.fields[field.id]}
+                    boardValue={boardDiffByField.get(field.id)?.boardValue}
+                    profileValue={boardDiffByField.get(field.id)?.profileValue}
                     dirty={Object.prototype.hasOwnProperty.call(dirtyFields, field.id)}
+                    boardChanged={boardDiffByField.has(field.id)}
                     onPress={() => openFieldEditor(field)}
                     onInfo={() => showFieldInfo(field)}
                     onRevert={() => revertField(field.id)}
+                    onAcceptBoard={() => acceptBoardField(field.id)}
                   />
                 ))}
               </View>
@@ -872,20 +918,31 @@ function InfoBadge({
 function ConfigCell({
   field,
   savedValue,
+  boardValue,
+  profileValue,
   dirty,
+  boardChanged,
   onPress,
   onInfo,
   onRevert,
+  onAcceptBoard,
 }: {
   field: RefloatConfigField
   savedValue: TuneProfileFieldValue | undefined
+  boardValue: TuneProfileFieldValue | undefined
+  profileValue: TuneProfileFieldValue | undefined
   dirty: boolean
+  boardChanged: boolean
   onPress: () => void
   onInfo: () => void
   onRevert: () => void
+  onAcceptBoard: () => void
 }) {
   return (
-    <Pressable style={[styles.cell, dirty && styles.cellDirty]} onPress={onPress}>
+    <Pressable
+      style={[styles.cell, dirty && styles.cellDirty, boardChanged && styles.cellBoardChanged]}
+      onPress={onPress}
+    >
       <Pressable style={styles.cellInfoButton} onPress={onInfo}>
         <InfoIcon size={13} color="#64748b" weight="bold" />
       </Pressable>
@@ -894,12 +951,27 @@ function ConfigCell({
           <ArrowCounterClockwiseIcon size={13} color="#bae6fd" weight="bold" />
         </Pressable>
       ) : null}
+      {boardChanged && isDisplayableFieldValue(boardValue) ? (
+        <Pressable style={styles.cellAcceptButton} onPress={onAcceptBoard}>
+          <CheckIcon size={13} color="#bbf7d0" weight="bold" />
+        </Pressable>
+      ) : null}
       <Text style={styles.cellValue} numberOfLines={1} adjustsFontSizeToFit selectable>
         {formatValue(field.value)}
       </Text>
       {dirty && isDisplayableFieldValue(savedValue) ? (
         <Text style={styles.cellOldValue} numberOfLines={1}>
           was {formatValue(savedValue)}
+        </Text>
+      ) : null}
+      {boardChanged ? (
+        <Text style={styles.cellProfileValue} numberOfLines={1}>
+          profile {formatProfileValue(profileValue)}
+        </Text>
+      ) : null}
+      {boardChanged && isDisplayableFieldValue(boardValue) ? (
+        <Text style={styles.cellBoardValue} numberOfLines={1}>
+          board {formatValue(boardValue)}
         </Text>
       ) : null}
       {field.unit ? (
@@ -1145,6 +1217,43 @@ const styles = StyleSheet.create({
     color: '#fecaca',
     flex: 1,
   },
+  boardDiffBar: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#22c55e',
+    backgroundColor: '#082f26',
+    padding: 12,
+    gap: 10,
+  },
+  boardDiffTextWrap: {
+    gap: 2,
+  },
+  boardDiffTitle: {
+    color: '#dcfce7',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  boardDiffText: {
+    color: '#86efac',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  boardDiffButton: {
+    alignSelf: 'flex-start',
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#4ade80',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  boardDiffButtonText: {
+    color: '#022c22',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   dirtyBar: {
     borderRadius: 8,
     borderWidth: 1,
@@ -1341,12 +1450,16 @@ const styles = StyleSheet.create({
   },
   cell: {
     width: '50%',
-    minHeight: 78,
+    minHeight: 92,
     paddingVertical: 10,
     paddingHorizontal: 6,
   },
   cellDirty: {
     backgroundColor: '#0c2537',
+    borderRadius: 8,
+  },
+  cellBoardChanged: {
+    backgroundColor: '#082f26',
     borderRadius: 8,
   },
   cellInfoButton: {
@@ -1372,6 +1485,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#0f3650',
   },
+  cellAcceptButton: {
+    position: 'absolute',
+    top: 65,
+    right: 6,
+    zIndex: 1,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#14532d',
+  },
   cellValue: {
     color: '#f1f5f9',
     fontSize: 18,
@@ -1383,6 +1508,20 @@ const styles = StyleSheet.create({
     color: '#7dd3fc',
     fontSize: 10,
     fontWeight: '800',
+    marginTop: 1,
+    paddingRight: 26,
+  },
+  cellProfileValue: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 1,
+    paddingRight: 26,
+  },
+  cellBoardValue: {
+    color: '#86efac',
+    fontSize: 10,
+    fontWeight: '900',
     marginTop: 1,
     paddingRight: 26,
   },
