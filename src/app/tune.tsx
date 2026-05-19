@@ -338,74 +338,17 @@ function basicSlidersFromSnapshot(snapshot: RefloatConfigSnapshot): BasicSliderI
     }
   }
 
-  return BASIC_SLIDER_FORMULAS.map((formula) => {
-    const item = BASIC_SLIDER_ITEMS[formula.id]
-    return {
-      id: formula.id,
-      label: item.label,
-      value: formula.deriveSliderValue(fieldMap),
-      min: item.min,
-      max: item.max,
-      step: item.step,
-      source: item.source,
-      info: item.info,
-      modifiedManually: !formula.checkMatch(fieldMap),
-    }
-  })
-}
-
-const BASIC_SLIDER_ITEMS: Record<
-  string,
-  { label: string; min: number; max: number; step: number; source: string; info: string }
-> = {
-  aggressiveness: {
-    label: 'Aggressiveness',
-    min: -5,
-    max: 10,
-    step: 1,
-    source: 'kp',
-    info: 'Coordinates PID and Mahony filter values. Derived from kp - 20.',
-  },
-  noseStiffness: {
-    label: 'Nose stiffness',
-    min: 0,
-    max: 10,
-    step: 1,
-    source: 'torquetilt_strength',
-    info: 'Acceleration torque tiltback. Nose lift from positive output current.',
-  },
-  tailStiffness: {
-    label: 'Tail stiffness',
-    min: 0,
-    max: 10,
-    step: 1,
-    source: 'torquetilt_strength_regen',
-    info: 'Regen torque tiltback. Nose lowering from negative regen current.',
-  },
-  carveTilt: {
-    label: 'Carve tilt',
-    min: 0,
-    max: 15,
-    step: 1,
-    source: 'turntilt_strength',
-    info: 'Turn tiltback strength. Direct 1:1 mapping.',
-  },
-  brakeTilt: {
-    label: 'Brake tilt',
-    min: 0,
-    max: 5,
-    step: 1,
-    source: 'braketilt_strength',
-    info: 'Brake tiltback strength. Direct 1:1 mapping.',
-  },
-  atrIntensity: {
-    label: 'ATR intensity',
-    min: 0,
-    max: 15,
-    step: 1,
-    source: 'atr_strength_up/down',
-    info: 'ATR uphill and downhill strength, mapped from 0..2 to 0..15.',
-  },
+  return BASIC_SLIDERS.map((slider) => ({
+    id: slider.id,
+    label: slider.label,
+    value: slider.deriveSliderValue(fieldMap),
+    min: slider.min,
+    max: slider.max,
+    step: slider.step,
+    source: slider.source,
+    info: slider.info,
+    modifiedManually: !slider.checkMatch(fieldMap),
+  }))
 }
 
 function interpolate(
@@ -429,17 +372,29 @@ function nearEqual(a: number, b: number): boolean {
   return Math.abs(a - b) <= EPSILON
 }
 
-interface BasicSliderFormula {
+interface BasicSliderDefinition {
   id: string
+  label: string
+  min: number
+  max: number
+  step: number
+  source: string
+  info: string
   linkedFields: string[]
   deriveSliderValue: (fields: Map<string, number | null>) => number | null
   computeFieldValues: (sliderValue: number) => Record<string, number>
   checkMatch: (fields: Map<string, number | null>) => boolean
 }
 
-const BASIC_SLIDER_FORMULAS: BasicSliderFormula[] = [
+const BASIC_SLIDERS: BasicSliderDefinition[] = [
   {
     id: 'aggressiveness',
+    label: 'Aggressiveness',
+    min: -5,
+    max: 10,
+    step: 1,
+    source: 'kp',
+    info: 'Coordinates PID and Mahony filter values. Derived from kp - 20.',
     linkedFields: ['kp', 'kp2', 'ki', 'mahony_kp', 'mahony_kp_roll'],
     deriveSliderValue: (fields) => {
       const kp = fields.get('kp')
@@ -470,54 +425,76 @@ const BASIC_SLIDER_FORMULAS: BasicSliderFormula[] = [
   },
   {
     id: 'noseStiffness',
+    label: 'Nose stiffness',
+    min: 0,
+    max: 10,
+    step: 1,
+    source: 'torquetilt_strength',
+    info: 'Acceleration torque tiltback. Nose lift from positive output current.',
     linkedFields: ['torquetilt_strength'],
     deriveSliderValue: (fields) => {
       const v = fields.get('torquetilt_strength')
       return v == null ? null : clamp(v / 0.03, 0, 10)
     },
-    computeFieldValues: (x) => ({
-      torquetilt_strength: roundTo(x * 0.03, 2),
-    }),
+    computeFieldValues: (x) => ({ torquetilt_strength: roundTo(x * 0.03, 2) }),
     checkMatch: () => true,
   },
   {
     id: 'tailStiffness',
+    label: 'Tail stiffness',
+    min: 0,
+    max: 10,
+    step: 1,
+    source: 'torquetilt_strength_regen',
+    info: 'Regen torque tiltback. Nose lowering from negative regen current.',
     linkedFields: ['torquetilt_strength_regen'],
     deriveSliderValue: (fields) => {
       const v = fields.get('torquetilt_strength_regen')
       return v == null ? null : clamp(v / 0.03, 0, 10)
     },
-    computeFieldValues: (x) => ({
-      torquetilt_strength_regen: roundTo(x * 0.03, 2),
-    }),
+    computeFieldValues: (x) => ({ torquetilt_strength_regen: roundTo(x * 0.03, 2) }),
     checkMatch: () => true,
   },
   {
     id: 'carveTilt',
+    label: 'Carve tilt',
+    min: 0,
+    max: 15,
+    step: 1,
+    source: 'turntilt_strength',
+    info: 'Turn tiltback strength. Direct 1:1 mapping.',
     linkedFields: ['turntilt_strength'],
     deriveSliderValue: (fields) => {
       const v = fields.get('turntilt_strength')
       return v == null ? null : clamp(v, 0, 15)
     },
-    computeFieldValues: (x) => ({
-      turntilt_strength: x,
-    }),
+    computeFieldValues: (x) => ({ turntilt_strength: x }),
     checkMatch: () => true,
   },
   {
     id: 'brakeTilt',
+    label: 'Brake tilt',
+    min: 0,
+    max: 5,
+    step: 1,
+    source: 'braketilt_strength',
+    info: 'Brake tiltback strength. Direct 1:1 mapping.',
     linkedFields: ['braketilt_strength'],
     deriveSliderValue: (fields) => {
       const v = fields.get('braketilt_strength')
       return v == null ? null : clamp(v, 0, 5)
     },
-    computeFieldValues: (x) => ({
-      braketilt_strength: x,
-    }),
+    computeFieldValues: (x) => ({ braketilt_strength: x }),
     checkMatch: () => true,
   },
   {
     id: 'atrIntensity',
+    label: 'ATR intensity',
+    min: 0,
+    max: 15,
+    step: 1,
+    source: 'atr_strength_up/down',
+    info: 'ATR uphill and downhill strength, mapped from 0..2 to 0..15.',
     linkedFields: ['atr_strength_up', 'atr_strength_down'],
     deriveSliderValue: (fields) => {
       const up = fields.get('atr_strength_up')
@@ -538,7 +515,7 @@ const BASIC_SLIDER_FORMULAS: BasicSliderFormula[] = [
   },
 ]
 
-const BASIC_SLIDER_FORMULA_BY_ID = new Map(BASIC_SLIDER_FORMULAS.map((f) => [f.id, f]))
+const BASIC_SLIDER_BY_ID = new Map(BASIC_SLIDERS.map((s) => [s.id, s]))
 
 function isDisplayableFieldValue(
   value: TuneProfileFieldValue | undefined,
@@ -903,7 +880,7 @@ export default function TuneScreen() {
   )
 
   const handleBasicSliderReset = (sliderId: string) => {
-    const formula = BASIC_SLIDER_FORMULA_BY_ID.get(sliderId)
+    const formula = BASIC_SLIDER_BY_ID.get(sliderId)
     if (!formula || !activeProfile) return
     const currentValue = formula.deriveSliderValue(
       new Map(
@@ -920,7 +897,7 @@ export default function TuneScreen() {
   }
 
   const handleBasicSliderChange = (sliderId: string, newValue: number) => {
-    const formula = BASIC_SLIDER_FORMULA_BY_ID.get(sliderId)
+    const formula = BASIC_SLIDER_BY_ID.get(sliderId)
     if (!formula || !activeProfile) return
     const fieldValues = formula.computeFieldValues(newValue)
     for (const [fieldId, value] of Object.entries(fieldValues)) {
