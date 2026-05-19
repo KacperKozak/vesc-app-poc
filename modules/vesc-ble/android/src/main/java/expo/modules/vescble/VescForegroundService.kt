@@ -931,6 +931,28 @@ class VescForegroundService : Service() {
             @Suppress("UNCHECKED_CAST")
             val fields = (profile["fields"] as? Map<String, Any>) ?: emptyMap()
             mainHandler.post {
+                if (activeConfigRead != null || activeConfigWrite != null) {
+                    pending.onError(
+                        RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
+                        "Config operation already in flight",
+                    )
+                    return@post
+                }
+                if (boardConfig == null || boardStatus != BoardPhase.Connected) {
+                    pending.onError(
+                        RefloatConfigErrorCode.BOARD_NOT_CONNECTED.name,
+                        "Board must be connected before pushing config",
+                    )
+                    return@post
+                }
+                val currentId = canId
+                if (currentId == null) {
+                    pending.onError(
+                        RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
+                        "Cannot push config before CAN id discovery",
+                    )
+                    return@post
+                }
                 val wasPolling = pollRunnable != null
                 stopPolling()
                 activeConfigWrite = ActiveConfigWrite(
@@ -938,7 +960,7 @@ class VescForegroundService : Service() {
                     wasPolling = wasPolling,
                     profileFields = fields,
                 )
-                sendNextWriteXmlChunk(id)
+                sendNextWriteXmlChunk(currentId)
             }
         }
     }
@@ -1042,26 +1064,21 @@ class VescForegroundService : Service() {
                     return
                 }
                 try {
-                    val expectedSnapshot = RefloatConfigDecoder.decode(schema, patchedConfig, boardConfig?.appBoardId, id, System.currentTimeMillis(), fwVersionString)
-                    val actualSnapshot = RefloatConfigDecoder.decode(schema, parsed.config, boardConfig?.appBoardId, id, System.currentTimeMillis(), fwVersionString)
-                    val mismatches = mutableListOf<String>()
-                    val expectedFields = expectedSnapshot.groups.flatMap { it.fields }.associateBy { it.id }
-                    val actualFields = actualSnapshot.groups.flatMap { it.fields }.associateBy { it.id }
-                    for ((fieldId, expected) in expectedFields) {
-                        val actual = actualFields[fieldId]
-                        if (actual == null || actual.value != expected.value) {
-                            mismatches.add("$fieldId: expected=${expected.value} actual=${actual?.value}")
+                    when (val verification = RefloatConfigWriteVerifier.verifyExactBytes(patchedConfig, parsed.config)) {
+                        is RefloatConfigWriteVerification.Success -> Unit
+                        is RefloatConfigWriteVerification.Failure -> {
+                            Log.w(VESC_SESSION_TAG, verification.message)
+                            failConfigWrite(
+                                RefloatConfigErrorCode.CONFIG_VERIFY_FAILED,
+                                verification.message,
+                            )
+                            return
                         }
                     }
-                    if (mismatches.isNotEmpty()) {
-                        Log.w(VESC_SESSION_TAG, "Config verify mismatches: ${mismatches.joinToString(", ")}")
-                        failConfigWrite(
-                            RefloatConfigErrorCode.CONFIG_VERIFY_FAILED,
-                            "Verification failed for ${mismatches.size} field(s)",
-                        )
-                        return
-                    }
+                    val actualSnapshot = RefloatConfigDecoder.decode(schema, parsed.config, boardConfig?.appBoardId, id, System.currentTimeMillis(), fwVersionString)
                     completeConfigWrite(actualSnapshot)
+                } catch (e: RefloatConfigDecodeException) {
+                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
                 } catch (e: Exception) {
                     failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
                 }
