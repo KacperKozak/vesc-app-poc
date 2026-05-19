@@ -617,10 +617,7 @@ export async function updateSetting(
   key: string,
   value: number | boolean | string | null,
 ): Promise<void> {
-  return native.updateSetting(
-    key,
-    value !== null && value !== undefined ? JSON.stringify(value) : null,
-  )
+  return native.updateSetting(key, value)
 }
 
 // ---------------------------------------------------------------------------

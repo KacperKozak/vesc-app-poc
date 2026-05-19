@@ -3,7 +3,6 @@ package expo.modules.vescble
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
-import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.roundToInt

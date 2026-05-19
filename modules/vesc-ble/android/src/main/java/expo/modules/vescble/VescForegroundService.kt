@@ -1014,7 +1014,6 @@ class VescForegroundService : Service() {
             ConfigWritePhase.READING_CONFIG -> {
                 try {
                     val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
-                    @Suppress("UNCHECKED_CAST")
                     val patched = RefloatConfigEncoder.encode(schema, parsed.config, active.profileFields)
                     activeConfigWrite = active.copy(
                         phase = ConfigWritePhase.SENDING_WRITE,
