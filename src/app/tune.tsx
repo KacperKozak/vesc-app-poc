@@ -1771,6 +1771,47 @@ function BoardPickerModal({
   )
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function formatHistoryDate(ms: number): string {
+  const d = new Date(ms)
+  const h = d.getHours().toString().padStart(2, '0')
+  const m = d.getMinutes().toString().padStart(2, '0')
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} ${h}:${m}`
+}
+
+interface HistoryFieldDiff {
+  fieldId: string
+  label: string
+  oldValue: string
+  newValue: string
+}
+
+function diffHistoryEntries(
+  newer: TuneHistoryEntry,
+  older: TuneHistoryEntry | undefined,
+): HistoryFieldDiff[] {
+  if (!older) return []
+  const diffs: HistoryFieldDiff[] = []
+  const allKeys = new Set([...Object.keys(newer.fields), ...Object.keys(older.fields)])
+  for (const key of allKeys) {
+    const nv = newer.fields[key]
+    const ov = older.fields[key]
+    if (nv === ov) continue
+    if (typeof nv === 'number' && typeof ov === 'number' && Object.is(nv, ov)) continue
+    const label = APP_TUNE_FIELD_BY_ID.get(key)?.label ?? key
+    diffs.push({
+      fieldId: key,
+      label,
+      oldValue:
+        ov != null && ov !== '' ? String(typeof ov === 'number' ? formatValue(ov) : ov) : '–',
+      newValue:
+        nv != null && nv !== '' ? String(typeof nv === 'number' ? formatValue(nv) : nv) : '–',
+    })
+  }
+  return diffs
+}
+
 function HistoryModal({
   visible,
   entries,
@@ -1799,18 +1840,30 @@ function HistoryModal({
               data={entries}
               keyExtractor={(item) => String(item.id)}
               style={styles.historyList}
-              renderItem={({ item }) => {
-                const fieldCount = Object.keys(item.fields).length
-                const date = new Date(item.createdAt)
+              renderItem={({ item, index }) => {
+                const older = entries[index + 1]
+                const diffs = diffHistoryEntries(item, older)
                 return (
                   <View style={styles.historyEntry}>
                     <View style={styles.historyEntryInfo}>
                       <Text style={styles.historyEntryDate}>
-                        {date.toLocaleDateString()} {date.toLocaleTimeString()}
+                        {formatHistoryDate(item.createdAt)}
                       </Text>
-                      <Text style={styles.historyEntryDetail}>
-                        {fieldCount} field{fieldCount === 1 ? '' : 's'}
-                      </Text>
+                      {diffs.length > 0 ? (
+                        <View style={styles.historyDiffs}>
+                          {diffs.map((d) => (
+                            <Text key={d.fieldId} style={styles.historyDiffLine} numberOfLines={1}>
+                              {d.label} <Text style={styles.historyDiffOld}>{d.oldValue}</Text>
+                              {' → '}
+                              <Text style={styles.historyDiffNew}>{d.newValue}</Text>
+                            </Text>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.historyEntryDetail}>
+                          {older ? 'No changes' : 'Initial save'}
+                        </Text>
+                      )}
                     </View>
                     <Pressable
                       style={styles.historyRestoreButton}
@@ -2554,6 +2607,23 @@ const styles = StyleSheet.create({
   historyEntryDetail: {
     color: '#64748b',
     fontSize: 11,
+    fontWeight: '700',
+  },
+  historyDiffs: {
+    gap: 1,
+    marginTop: 2,
+  },
+  historyDiffLine: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  historyDiffOld: {
+    color: '#f87171',
+    fontWeight: '700',
+  },
+  historyDiffNew: {
+    color: '#4ade80',
     fontWeight: '700',
   },
   historyRestoreButton: {
