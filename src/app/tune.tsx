@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   PanResponder,
@@ -40,6 +39,7 @@ import {
   type TuneProfileFieldValue,
 } from 'vesc-ble'
 
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { InfoModal } from '@/components/InfoModal'
 import { Placeholder } from '@/components/Placeholder'
 import { useBoardStore, type Board } from '@/store/boardStore'
@@ -640,6 +640,8 @@ export default function TuneScreen() {
   const [copyTargetBoard, setCopyTargetBoard] = useState<Board | null>(null)
   const [historyEntries, setHistoryEntries] = useState<TuneHistoryEntry[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [deleteConfirmProfile, setDeleteConfirmProfile] = useState<TuneProfile | null>(null)
+  const [rollbackConfirmEntryId, setRollbackConfirmEntryId] = useState<number | null>(null)
 
   const loadOnline = useCallback(async () => {
     setState((current) => ({ phase: 'loading', snapshot: current.snapshot, error: null }))
@@ -835,27 +837,12 @@ export default function TuneScreen() {
   }
 
   const handleDeleteProfile = (profile: TuneProfile) => {
-    Alert.alert('Delete Profile', `Delete "${profile.name}"? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => void storeDeleteProfile(profile.id),
-      },
-    ])
+    setDeleteConfirmProfile(profile)
     setProfileMenuOpen(false)
   }
 
   const handleRollback = (entryId: number) => {
-    Alert.alert('Restore', 'Replace current profile fields with this snapshot?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Restore',
-        onPress: () => {
-          void rollbackToHistory(entryId).then(() => setHistoryOpen(false))
-        },
-      },
-    ])
+    setRollbackConfirmEntryId(entryId)
   }
 
   const handleCopyProfile = (profile: TuneProfile) => {
@@ -1246,8 +1233,34 @@ export default function TuneScreen() {
       <HistoryModal
         visible={historyOpen}
         entries={historyEntries}
+        currentFields={activeProfile?.fields}
         onRestore={handleRollback}
         onDismiss={() => setHistoryOpen(false)}
+      />
+      <ConfirmModal
+        visible={deleteConfirmProfile != null}
+        title="Delete Profile"
+        message={`Delete "${deleteConfirmProfile?.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (deleteConfirmProfile) void storeDeleteProfile(deleteConfirmProfile.id)
+          setDeleteConfirmProfile(null)
+        }}
+        onCancel={() => setDeleteConfirmProfile(null)}
+      />
+      <ConfirmModal
+        visible={rollbackConfirmEntryId != null}
+        title="Restore"
+        message="Replace current profile fields with this snapshot?"
+        confirmLabel="Restore"
+        onConfirm={() => {
+          if (rollbackConfirmEntryId != null) {
+            void rollbackToHistory(rollbackConfirmEntryId).then(() => setHistoryOpen(false))
+          }
+          setRollbackConfirmEntryId(null)
+        }}
+        onCancel={() => setRollbackConfirmEntryId(null)}
       />
     </SafeAreaView>
   )
@@ -1788,10 +1801,9 @@ interface HistoryFieldDiff {
 }
 
 function diffHistoryEntries(
-  newer: TuneHistoryEntry,
-  older: TuneHistoryEntry | undefined,
+  newer: { fields: Record<string, TuneProfileFieldValue> },
+  older: { fields: Record<string, TuneProfileFieldValue> },
 ): HistoryFieldDiff[] {
-  if (!older) return []
   const diffs: HistoryFieldDiff[] = []
   const allKeys = new Set([...Object.keys(newer.fields), ...Object.keys(older.fields)])
   for (const key of allKeys) {
@@ -1815,11 +1827,13 @@ function diffHistoryEntries(
 function HistoryModal({
   visible,
   entries,
+  currentFields,
   onRestore,
   onDismiss,
 }: {
   visible: boolean
   entries: TuneHistoryEntry[]
+  currentFields: Record<string, TuneProfileFieldValue> | undefined
   onRestore: (entryId: number) => void
   onDismiss: () => void
 }) {
@@ -1841,8 +1855,10 @@ function HistoryModal({
               keyExtractor={(item) => String(item.id)}
               style={styles.historyList}
               renderItem={({ item, index }) => {
-                const older = entries[index + 1]
-                const diffs = diffHistoryEntries(item, older)
+                const newer =
+                  index === 0 && currentFields ? { fields: currentFields } : entries[index - 1]
+                const diffs = newer ? diffHistoryEntries(newer, item) : []
+                const isOldest = index === entries.length - 1
                 return (
                   <View style={styles.historyEntry}>
                     <View style={styles.historyEntryInfo}>
@@ -1861,7 +1877,7 @@ function HistoryModal({
                         </View>
                       ) : (
                         <Text style={styles.historyEntryDetail}>
-                          {older ? 'No changes' : 'Initial save'}
+                          {isOldest ? 'Initial save' : 'No changes'}
                         </Text>
                       )}
                     </View>
