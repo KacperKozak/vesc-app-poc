@@ -15,6 +15,7 @@ import {
   BluetoothSlashIcon,
   CheckIcon,
   ClockCounterClockwiseIcon,
+  FadersIcon,
   InfoIcon,
   WarningCircleIcon,
   XIcon,
@@ -57,6 +58,7 @@ import { getSyncBarState } from '@/tune/syncBarState'
 type LoadState =
   | { phase: 'loading'; snapshot: RefloatConfigSnapshot | null; error: string | null }
   | { phase: 'ready'; snapshot: RefloatConfigSnapshot; error: null }
+  | { phase: 'empty'; snapshot: null; error: null }
   | { phase: 'error'; snapshot: RefloatConfigSnapshot | null; error: string }
 
 type InfoModalState = { title: string; message: string } | null
@@ -212,7 +214,9 @@ export default function TuneScreen() {
         const profileList = await loadProfiles(boardId)
         const profile = profileList[0]
         if (!profile) {
-          throw new Error('No saved Tune Profile for this Board.')
+          setBoardSnapshot(null)
+          setState({ phase: 'empty', snapshot: null, error: null })
+          return
         }
         const snapshot = snapshotFromTuneProfile(boardId, profile)
         setBoardSnapshot(null)
@@ -506,6 +510,14 @@ export default function TuneScreen() {
             {boardConnected ? 'Reading board config...' : 'Loading saved tune profile...'}
           </Text>
         </View>
+      ) : null}
+
+      {state.phase === 'empty' ? (
+        <Placeholder
+          icon={FadersIcon}
+          title="No saved tunes"
+          description="Connect to your board to read its current configuration and create your first Tune Profile"
+        />
       ) : null}
 
       {state.phase === 'error' && !snapshot ? (
