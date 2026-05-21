@@ -68,6 +68,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
   const rangeScale = computeRangeScale(totalWidth)
   const lastEmittedValue = useRef(value)
   const lastStepIndex = useRef(Math.round((value - min) / step))
+  const lastEdgeHapticStepIndex = useRef<number | null>(null)
   const recentInternalValues = useRef(new Set<number>())
 
   const valueToOffset = useCallback(
@@ -94,6 +95,29 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
     }
   }, [])
 
+  const edgeTick = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
+    } else if (Platform.OS === 'android') {
+      void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Long_Press)
+    }
+  }, [])
+
+  const emitEdgeHaptic = useCallback(
+    (stepIndex: number) => {
+      if (stepIndex !== 0 && stepIndex !== totalSteps) {
+        lastEdgeHapticStepIndex.current = null
+        return
+      }
+
+      if (lastEdgeHapticStepIndex.current === stepIndex) return
+
+      lastEdgeHapticStepIndex.current = stepIndex
+      edgeTick()
+    },
+    [edgeTick, totalSteps],
+  )
+
   const rememberInternalValue = useCallback((nextValue: number) => {
     recentInternalValues.current.add(nextValue)
     if (recentInternalValues.current.size <= 80) return
@@ -110,6 +134,9 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
       const snapped = snapValue(min + stepIndex * step, min, max, step)
       const previousStepIndex = lastStepIndex.current
       lastStepIndex.current = stepIndex
+      if (stepIndex !== 0 && stepIndex !== totalSteps) {
+        lastEdgeHapticStepIndex.current = null
+      }
       if (snapped !== lastEmittedValue.current) {
         lastEmittedValue.current = snapped
         rememberInternalValue(snapped)
@@ -179,6 +206,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
       const edgeStepIndex = Math.max(0, Math.min(totalSteps, Math.round(-nextOffset / stepPx)))
       translateX.value = withSpring(-edgeStepIndex * stepPx, SNAP_SPRING)
       scheduleOnRN(emitStepIndex, edgeStepIndex)
+      scheduleOnRN(emitEdgeHaptic, edgeStepIndex)
       return
     }
 
@@ -233,6 +261,9 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
           )
           const stepIndex = Math.max(0, Math.min(totalSteps, Math.round(-clamped / stepPx)))
           scheduleOnRN(emitStepIndex, stepIndex)
+          if (raw > 0 || raw < -totalWidth) {
+            scheduleOnRN(emitEdgeHaptic, stepIndex)
+          }
         })
         .onEnd((e) => {
           isDragging.value = false
@@ -268,6 +299,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
     [
       dragStartX,
       emitStepIndex,
+      emitEdgeHaptic,
       isDragging,
       latestGestureTranslationX,
       momentumVelocity,
