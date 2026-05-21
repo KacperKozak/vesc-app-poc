@@ -6,6 +6,7 @@ import {
   appendTelemetrySample,
   clearLiveMetricBuffer,
   createLiveMetricBuffer,
+  getLatestApproximateGps,
   getLatestTelemetry,
   summarizeLiveStatus,
   type LiveStatusSummary,
@@ -26,6 +27,7 @@ export interface LiveTelemetryValues {
 
 export interface LiveTelemetrySnapshot {
   liveLocationHistory: LocationEvent[]
+  latestApproximateLocation: LocationEvent | null
   liveStatus: LiveStatusSummary
 }
 
@@ -122,6 +124,7 @@ export function createLiveTelemetryRuntime({
   let version = 0
   let snapshot: LiveTelemetrySnapshot = {
     liveLocationHistory: [],
+    latestApproximateLocation: null,
     liveStatus: summarizeLiveStatus(buffer),
   }
 
@@ -129,6 +132,7 @@ export function createLiveTelemetryRuntime({
     version += 1
     snapshot = {
       liveLocationHistory: [...buffer.locations],
+      latestApproximateLocation: getLatestApproximateGps(buffer),
       liveStatus: summarizeLiveStatus(buffer),
     }
     return snapshot
@@ -176,6 +180,10 @@ export function createLiveTelemetryRuntime({
 
       for (const telemetry of state.board.recentTelemetry) {
         appendTelemetryAndLocation(telemetry)
+      }
+      const approximateFix = state.gps.latestApproximateFix ?? state.gps.latestFix
+      if (approximateFix) {
+        appendLocationSample(buffer, approximateFix, windowMs())
       }
       for (const location of state.gps.recentLocations) {
         appendLocationSample(buffer, location, windowMs())

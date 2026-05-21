@@ -11,6 +11,7 @@ internal data class VescLiveStateSnapshot(
     val recentTelemetry: List<Map<String, Any?>>,
     val gpsActive: Boolean,
     val latestLocation: LocationSnapshot?,
+    val latestPreciseLocation: LocationSnapshot?,
     val recentLocations: List<Map<String, Any?>>,
     val gpsError: String?,
     val recordingEnabled: Boolean,
@@ -33,7 +34,9 @@ internal fun buildLiveState(snapshot: VescLiveStateSnapshot): Map<String, Any?> 
         ),
         "gps" to mapOf(
             "phase" to if (snapshot.gpsActive) "active" else "idle",
-            "latestFix" to snapshot.latestLocation?.toMap(),
+            "latestFix" to snapshot.latestPreciseLocation?.toMap(),
+            "latestApproximateFix" to snapshot.latestLocation?.toMap(),
+            "latestPreciseFix" to snapshot.latestPreciseLocation?.toMap(),
             "recentLocations" to snapshot.recentLocations,
             "error" to snapshot.gpsError,
         ),

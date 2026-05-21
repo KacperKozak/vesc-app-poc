@@ -13,15 +13,17 @@ export interface LiveStatusSummary {
 export interface LiveMetricBuffer {
   telemetry: TelemetryEvent[]
   locations: LocationEvent[]
+  latestApproximateLocation: LocationEvent | null
 }
 
 export function createLiveMetricBuffer(): LiveMetricBuffer {
-  return { telemetry: [], locations: [] }
+  return { telemetry: [], locations: [], latestApproximateLocation: null }
 }
 
 export function clearLiveMetricBuffer(buffer: LiveMetricBuffer): void {
   buffer.telemetry.length = 0
   buffer.locations.length = 0
+  buffer.latestApproximateLocation = null
 }
 
 function pruneByTime<T>(
@@ -67,6 +69,14 @@ export function appendLocationSample(
   location: LocationEvent,
   windowMs: number,
 ): void {
+  if (
+    buffer.latestApproximateLocation == null ||
+    location.timestamp > buffer.latestApproximateLocation.timestamp
+  ) {
+    buffer.latestApproximateLocation = location
+  }
+  if (!location.precise) return
+
   insertByTime(buffer.locations, location, (sample) => sample.timestamp)
   const latestGps = getLatestGps(buffer)
   if (latestGps) {
@@ -76,7 +86,7 @@ export function appendLocationSample(
 
 export function summarizeLiveStatus(buffer: LiveMetricBuffer): LiveStatusSummary {
   const latestTelemetry = getLatestTelemetry(buffer)
-  const latestGps = getLatestGps(buffer)
+  const latestGps = buffer.latestApproximateLocation ?? getLatestGps(buffer)
   return {
     boardSampleCount: buffer.telemetry.length,
     boardLastPacketAt: latestTelemetry?.lastPacketAt ?? null,
@@ -94,4 +104,8 @@ export function getLatestTelemetry(buffer: LiveMetricBuffer): TelemetryEvent | n
 
 export function getLatestGps(buffer: LiveMetricBuffer): LocationEvent | null {
   return buffer.locations.at(-1) ?? null
+}
+
+export function getLatestApproximateGps(buffer: LiveMetricBuffer): LocationEvent | null {
+  return buffer.latestApproximateLocation
 }

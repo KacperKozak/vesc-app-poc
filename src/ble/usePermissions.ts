@@ -4,7 +4,7 @@ import { Permission, PermissionsAndroid, Platform } from 'react-native'
 export type PermissionStatus = 'unknown' | 'granted' | 'denied'
 
 /**
- * Request BLE runtime permissions on Android 12+ (API 31+).
+ * Request BLE and notification runtime permissions on Android 12+ (API 31+).
  * On iOS the app relies on static Info.plist usage descriptions, so no
  * runtime permission request is needed here.
  */
@@ -27,6 +27,10 @@ export function usePermissions(): {
         // ACCESS_FINE_LOCATION is required for BLE scanning on API < 31
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ]
+
+      if (Platform.Version >= 33) {
+        permissions.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS)
+      }
 
       const results = await PermissionsAndroid.requestMultiple(permissions)
 

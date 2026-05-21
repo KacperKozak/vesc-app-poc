@@ -92,6 +92,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
   const historyPanelBottom = Math.max(insets.bottom, 16) + 8
   const [panelHeight, setPanelHeight] = useState(0)
   const [removeConfirmVisible, setRemoveConfirmVisible] = useState(false)
+  const historyBusy = history.loadingSession || history.historyLoading
 
   const handleRemovePress = useCallback(() => {
     setRemoveConfirmVisible(true)
@@ -196,7 +197,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
       {mode === 'history' && history.selectedSession && (
         <>
           <MapVignette mode={mode} panelHeight={panelHeight} />
-          {history.loadingSession && (
+          {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
               <View style={styles.mapLoadingDim} />
               <ActivityIndicator size="large" color="#38bdf8" />
@@ -221,7 +222,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             onHeightChange={setPanelHeight}
           />
           <HistoryControls
-            loading={history.loadingSession || history.historyLoading}
+            loading={historyBusy}
             canRemove={true}
             onBack={history.exitHistory}
             onRemove={handleRemovePress}
@@ -229,13 +230,21 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
         </>
       )}
 
-      {mode === 'history' && !history.selectedSession && !history.loadingSession && (
-        <HistoryControls
-          loading={false}
-          canRemove={false}
-          onBack={history.exitHistory}
-          onRemove={() => undefined}
-        />
+      {mode === 'history' && !history.selectedSession && (
+        <>
+          {historyBusy && (
+            <View pointerEvents="none" style={styles.mapLoading}>
+              <View style={styles.mapLoadingDim} />
+              <ActivityIndicator size="large" color="#38bdf8" />
+            </View>
+          )}
+          <HistoryControls
+            loading={historyBusy}
+            canRemove={false}
+            onBack={history.exitHistory}
+            onRemove={() => undefined}
+          />
+        </>
       )}
 
       <HistorySessionSheet

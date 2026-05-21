@@ -148,11 +148,34 @@ describe('live telemetry runtime', () => {
     const snapshot = runtime.consumePendingSnapshot()
 
     expect(snapshot?.liveLocationHistory).toEqual([location({ timestamp: 12_000, accuracyM: 5 })])
+    expect(snapshot?.latestApproximateLocation).toEqual(
+      location({ timestamp: 12_000, accuracyM: 5 }),
+    )
     expect(snapshot?.liveStatus).toMatchObject({
       gpsSampleCount: 1,
       gpsLastFixAt: 12_000,
       gpsPrecise: true,
       gpsAccuracyM: 5,
+    })
+  })
+
+  test('keeps approximate locations out of live trail history', () => {
+    const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
+
+    runtime.ingestLocation(
+      location({ timestamp: 12_000, precise: false, saved: false, accuracyM: 100 }),
+    )
+    const snapshot = runtime.consumePendingSnapshot()
+
+    expect(snapshot?.liveLocationHistory).toEqual([])
+    expect(snapshot?.latestApproximateLocation).toEqual(
+      location({ timestamp: 12_000, precise: false, saved: false, accuracyM: 100 }),
+    )
+    expect(snapshot?.liveStatus).toMatchObject({
+      gpsSampleCount: 0,
+      gpsLastFixAt: 12_000,
+      gpsPrecise: false,
+      gpsAccuracyM: 100,
     })
   })
 
@@ -187,6 +210,7 @@ describe('live telemetry runtime', () => {
     expect(runtime.values.dutyPercent.value).toBe(null)
     expect(runtime.values.avgLatencyMs.value).toBe(null)
     expect(snapshot.liveLocationHistory).toEqual([])
+    expect(snapshot.latestApproximateLocation).toBe(null)
     expect(runtime.getTelemetry()).toEqual([])
     expect(snapshot.liveStatus).toEqual({
       boardSampleCount: 0,

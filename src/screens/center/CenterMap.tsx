@@ -25,6 +25,7 @@ import { MAPBOX_ACCESS_TOKEN, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { BLANK_STYLE, MAP_DEFAULTS, MAP_STYLES, type MapStyleKey } from '@/constants/mapStyles'
 import { theme } from '@/constants/theme'
+import { getLiveGpsPresentation } from '@/helpers/liveGpsPresentation'
 import {
   getBounds,
   makeCircleFeature,
@@ -39,6 +40,7 @@ Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
+  previewHistoryLoading: () => void
   resetRotation: () => void
   togglePerspective: () => void
   setPadding: (bottom: number) => void
@@ -46,6 +48,7 @@ export interface CenterMapHandle {
 
 interface CenterMapProps {
   liveLocations: LocationEvent[]
+  latestApproximateLocation: LocationEvent | null
   rideGpsSamples: HistoryGpsSample[]
   rideMarkers: HistoryMarker[]
   historyActive: boolean
@@ -64,6 +67,7 @@ interface CenterMapProps {
 export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function CenterMap(
   {
     liveLocations,
+    latestApproximateLocation,
     rideGpsSamples,
     rideMarkers,
     historyActive,
@@ -87,6 +91,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const [followGps, setFollowGps] = useState(true)
   const [cameraReady, setCameraReady] = useState(false)
   const gpsFix = liveLocations.at(-1) ?? null
+  const [initialApproximateFix, setInitialApproximateFix] = useState<LocationEvent | null>(null)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const lastGpsLatitude = useSettingsStore((s) => s.lastGpsLatitude)
   const lastGpsLongitude = useSettingsStore((s) => s.lastGpsLongitude)
@@ -102,9 +107,23 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const isOneDark = selectedMapStyle.key === 'onedark'
   const useCustomJSON = isMapy || isOneDark
   const showBuildings3d = selectedMapStyle.key === 'outdoors' || selectedMapStyle.key === 'onedark'
+  const gpsPresentation = useMemo(
+    () =>
+      getLiveGpsPresentation({
+        preciseFix: gpsFix,
+        latestApproximateFix: latestApproximateLocation,
+        initialApproximateFix,
+      }),
+    [gpsFix, initialApproximateFix, latestApproximateLocation],
+  )
+  const { cameraFix, accuracyFix, accuracyRadiusM } = gpsPresentation
+
+  useEffect(() => {
+    setInitialApproximateFix(gpsPresentation.nextInitialApproximateFix)
+  }, [gpsPresentation.nextInitialApproximateFix])
 
   const gpsCamera = useMemo(() => {
-    if (!gpsFix) {
+    if (!cameraFix) {
       return {
         centerCoordinate: persistedFallback ?? MAP_DEFAULTS.fallbackCoordinate,
         zoomLevel:
@@ -114,14 +133,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       }
     }
     const baseDelta =
-      gpsFix.accuracyM != null
-        ? Math.max(MAP_DEFAULTS.zoomDeltaMinAccuracy, gpsFix.accuracyM / 111_000)
+      cameraFix.accuracyM != null
+        ? Math.max(MAP_DEFAULTS.zoomDeltaMinAccuracy, cameraFix.accuracyM / 111_000)
         : MAP_DEFAULTS.zoomDeltaFallback
     return {
-      centerCoordinate: [gpsFix.longitude, gpsFix.latitude] as [number, number],
+      centerCoordinate: [cameraFix.longitude, cameraFix.latitude] as [number, number],
       zoomLevel: zoomLevelForDelta(baseDelta * MAP_DEFAULTS.zoomDeltaMultiplier),
     }
-  }, [gpsFix, persistedFallback])
+  }, [cameraFix, persistedFallback])
 
   useEffect(() => {
     if (mapRevealedRef.current) return
@@ -142,10 +161,10 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
 
   const accuracyShape = useMemo(
     () =>
-      gpsFix?.accuracyM != null
-        ? makeCircleFeature(gpsFix.longitude, gpsFix.latitude, gpsFix.accuracyM)
+      accuracyFix && accuracyRadiusM != null
+        ? makeCircleFeature(accuracyFix.longitude, accuracyFix.latitude, accuracyRadiusM)
         : null,
-    [gpsFix],
+    [accuracyFix, accuracyRadiusM],
   )
 
   const liveTrailShape = useMemo(
@@ -173,8 +192,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const recenterLive = useCallback(
     (options?: { resetPadding?: boolean }) => {
       setFollowGps(true)
-      if (!gpsFix) return
-      lastCenteredAtRef.current = gpsFix.timestamp
+      if (!cameraFix) return
+      lastCenteredAtRef.current = cameraFix.timestamp
       cameraRef.current?.setCamera({
         ...gpsCamera,
         ...(options?.resetPadding
@@ -184,7 +203,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         animationMode: 'easeTo',
       })
     },
-    [gpsCamera, gpsFix],
+    [cameraFix, gpsCamera],
   )
 
   const fitRide = useCallback(() => {
@@ -193,10 +212,21 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [90, 40, 120, 40], 700)
   }, [rideRoute])
 
+  const previewHistoryLoading = useCallback(() => {
+    setFollowGps(false)
+    cameraRef.current?.setCamera({
+      ...gpsCamera,
+      zoomLevel: Math.max(MAP_DEFAULTS.fallbackZoom, gpsCamera.zoomLevel - 1.2),
+      animationDuration: MAP_DEFAULTS.animationDuration,
+      animationMode: 'easeTo',
+    })
+  }, [gpsCamera])
+
   useImperativeHandle(
     ref,
     () => ({
       recenterLive,
+      previewHistoryLoading,
       resetRotation() {
         cameraRef.current?.setCamera({
           heading: 0,
@@ -222,19 +252,19 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         })
       },
     }),
-    [onHeadingChange, onPerspectiveChange, perspectiveEnabled, recenterLive],
+    [onHeadingChange, onPerspectiveChange, perspectiveEnabled, previewHistoryLoading, recenterLive],
   )
 
   useEffect(() => {
-    if (!gpsFix || !followGps || historyActive) return
-    if (lastCenteredAtRef.current === gpsFix.timestamp) return
-    lastCenteredAtRef.current = gpsFix.timestamp
+    if (!cameraFix || !followGps || historyActive) return
+    if (lastCenteredAtRef.current === cameraFix.timestamp) return
+    lastCenteredAtRef.current = cameraFix.timestamp
     cameraRef.current?.setCamera({
       ...gpsCamera,
       animationDuration: MAP_DEFAULTS.followAnimationDuration,
       animationMode: 'easeTo',
     })
-  }, [followGps, gpsCamera, gpsFix, historyActive])
+  }, [cameraFix, followGps, gpsCamera, historyActive])
 
   useEffect(() => {
     if (!historyActive) return
@@ -372,7 +402,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           </ShapeSource>
         )}
 
-        {!historyActive && gpsFix && (
+        {!historyActive && accuracyFix && (
           <>
             {accuracyShape && (
               <ShapeSource id="center-gps-accuracy-source" shape={accuracyShape}>
@@ -382,11 +412,13 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
                 />
               </ShapeSource>
             )}
-            <MapPin
-              id="center-gps-position"
-              coordinate={[gpsFix.longitude, gpsFix.latitude]}
-              color={MAP_DEFAULTS.markerColor}
-            />
+            {gpsFix && (
+              <MapPin
+                id="center-gps-position"
+                coordinate={[gpsFix.longitude, gpsFix.latitude]}
+                color={MAP_DEFAULTS.markerColor}
+              />
+            )}
           </>
         )}
 

@@ -8,6 +8,7 @@ import {
   createLiveMetricBuffer,
   getLatestGps,
   getLatestTelemetry,
+  getLatestApproximateGps,
   summarizeLiveStatus,
 } from './liveMetricHistory'
 
@@ -84,6 +85,29 @@ describe('live metric history', () => {
     expect(summarizeLiveStatus(buffer)).toMatchObject({ gpsSampleCount: 1, gpsAccuracyM: 3 })
   })
 
+  test('keeps approximate locations out of precise trail history', () => {
+    const buffer = createLiveMetricBuffer()
+    appendLocationSample(
+      buffer,
+      location({ timestamp: 1_000, precise: false, saved: false, accuracyM: 80 }),
+      10_000,
+    )
+
+    expect(buffer.locations).toEqual([])
+    expect(getLatestGps(buffer)).toBe(null)
+    expect(getLatestApproximateGps(buffer)).toMatchObject({
+      timestamp: 1_000,
+      precise: false,
+      accuracyM: 80,
+    })
+    expect(summarizeLiveStatus(buffer)).toMatchObject({
+      gpsSampleCount: 0,
+      gpsLastFixAt: 1_000,
+      gpsPrecise: false,
+      gpsAccuracyM: 80,
+    })
+  })
+
   test('keeps telemetry sorted and prunes late samples against newest timestamp', () => {
     const buffer = createLiveMetricBuffer()
     appendTelemetrySample(buffer, telemetry({ lastPacketAt: 11_000, speed: 11 }), 10_000)
@@ -119,7 +143,7 @@ describe('live metric history', () => {
 
     clearLiveMetricBuffer(buffer)
 
-    expect(buffer).toEqual({ telemetry: [], locations: [] })
+    expect(buffer).toEqual({ telemetry: [], locations: [], latestApproximateLocation: null })
     expect(summarizeLiveStatus(buffer)).toEqual({
       boardSampleCount: 0,
       boardLastPacketAt: null,
@@ -144,7 +168,7 @@ describe('live metric history', () => {
       boardSampleCount: 1,
       boardLastPacketAt: 2_000,
       boardAvgLatencyMs: 25,
-      gpsSampleCount: 1,
+      gpsSampleCount: 0,
       gpsLastFixAt: 3_000,
       gpsPrecise: false,
       gpsAccuracyM: 12,

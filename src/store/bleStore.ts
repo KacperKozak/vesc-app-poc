@@ -46,6 +46,7 @@ interface BleState {
   connectedId: string | null
   error: string | undefined
   liveLocationHistory: LocationEvent[]
+  latestApproximateLocation: LocationEvent | null
   liveStatus: LiveStatusSummary
   metricVersion: number
   telemetryRecordingEnabled: boolean
@@ -129,7 +130,10 @@ function cleanupBleStoreModule(): void {
 
 function applyLiveState(state: LiveStateEvent, set: BleSet): void {
   const hasRecentSnapshot =
-    state.board.recentTelemetry.length > 0 || state.gps.recentLocations.length > 0
+    state.board.recentTelemetry.length > 0 ||
+    state.gps.recentLocations.length > 0 ||
+    state.gps.latestApproximateFix != null ||
+    state.gps.latestFix != null
   if (hasRecentSnapshot) {
     clearLiveHistoryPublishTimer()
   }
@@ -154,6 +158,7 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
     ...(hasRecentSnapshot
       ? {
           liveLocationHistory: live.liveLocationHistory,
+          latestApproximateLocation: live.latestApproximateLocation,
           liveStatus: live.liveStatus,
           metricVersion: liveTelemetryRuntime.getVersion(),
         }
@@ -167,6 +172,7 @@ function resetLivePresentation(set: BleSet): void {
   set({
     lastTelemetryAt: null,
     liveLocationHistory: live.liveLocationHistory,
+    latestApproximateLocation: live.latestApproximateLocation,
     liveStatus: live.liveStatus,
     metricVersion: liveTelemetryRuntime.getVersion(),
   })
@@ -180,6 +186,7 @@ function scheduleLiveHistoryPublish(set: BleSet): void {
     if (!live) return
     set({
       liveLocationHistory: live.liveLocationHistory,
+      latestApproximateLocation: live.latestApproximateLocation,
       liveStatus: live.liveStatus,
       metricVersion: liveTelemetryRuntime.getVersion(),
     })
@@ -220,6 +227,7 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   connectedId: null,
   error: undefined,
   liveLocationHistory: [],
+  latestApproximateLocation: null,
   liveStatus: EMPTY_LIVE_STATUS,
   metricVersion: 0,
   telemetryRecordingEnabled: false,
