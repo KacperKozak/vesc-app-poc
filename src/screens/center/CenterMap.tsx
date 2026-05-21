@@ -40,6 +40,7 @@ Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
+  previewHistoryLoading: () => void
   resetRotation: () => void
   togglePerspective: () => void
   setPadding: (bottom: number) => void
@@ -211,10 +212,21 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [90, 40, 120, 40], 700)
   }, [rideRoute])
 
+  const previewHistoryLoading = useCallback(() => {
+    setFollowGps(false)
+    cameraRef.current?.setCamera({
+      ...gpsCamera,
+      zoomLevel: Math.max(MAP_DEFAULTS.fallbackZoom, gpsCamera.zoomLevel - 1.2),
+      animationDuration: MAP_DEFAULTS.animationDuration,
+      animationMode: 'easeTo',
+    })
+  }, [gpsCamera])
+
   useImperativeHandle(
     ref,
     () => ({
       recenterLive,
+      previewHistoryLoading,
       resetRotation() {
         cameraRef.current?.setCamera({
           heading: 0,
@@ -240,7 +252,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         })
       },
     }),
-    [onHeadingChange, onPerspectiveChange, perspectiveEnabled, recenterLive],
+    [onHeadingChange, onPerspectiveChange, perspectiveEnabled, previewHistoryLoading, recenterLive],
   )
 
   useEffect(() => {

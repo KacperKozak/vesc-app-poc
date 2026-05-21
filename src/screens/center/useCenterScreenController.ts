@@ -109,7 +109,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     return idx >= 0 ? sessionGpsSamples[idx] : null
   }, [seekTimeMs, sessionGpsSamples])
 
-  const historyActive = mode === 'history' && !!selectedSession
+  const historyActive = mode === 'history'
   const previousRide = getPreviousRideSession(sessions, selectedSession)
   const nextRide = getNextRideSession(sessions, selectedSession)
   const canPreviousRide = !!previousRide || historyHasMore
@@ -141,14 +141,16 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
   )
 
   const enterHistoryMode = useCallback(async () => {
+    enterHistory()
+    mapRef.current?.previewHistoryLoading()
     await loadInitial()
     await loadOlderHistoryPages()
+    if (useCenterScreenStore.getState().mode !== 'history') return
     const latest = getLatestSession(useHistoryStore.getState().sessions)
     if (latest) {
       await selectSession(latest)
     }
-    enterHistory()
-  }, [enterHistory, loadInitial, loadOlderHistoryPages, selectSession])
+  }, [enterHistory, loadInitial, loadOlderHistoryPages, mapRef, selectSession])
 
   const selectPreviousRide = useCallback(async () => {
     let previous = getPreviousRideSession(
