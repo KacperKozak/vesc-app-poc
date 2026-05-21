@@ -26,6 +26,26 @@ import { LightningIcon, WarningCircleIcon } from 'phosphor-react-native'
 - The `type Icon` export for typing icon props is **not** suffixed; import it as `type Icon` as-is.
 - `size` is typically `10`-`16` for inline or label icons, larger for standalone UI elements.
 
+## Buttons
+
+Use **`Button`** (`@/components/Button`) for all tappable button actions. Do not build ad-hoc `Pressable` + `Text` combinations for buttons.
+
+```tsx
+import { Button } from '@/components/Button'
+import { TrashIcon } from 'phosphor-react-native'
+
+<Button label="Save" onPress={handleSave} />
+<Button label="Cancel" variant="secondary" onPress={handleCancel} />
+<Button label="Delete" variant="destructive" icon={TrashIcon} onPress={handleDelete} />
+<Button label="Saving…" loading={isSaving} onPress={handleSave} />
+```
+
+- `variant`: `'primary'` (default, blue fill) | `'secondary'` (ghost/outline) | `'destructive'` (red fill)
+- `size`: `'md'` (default, h40) | `'sm'` (h32)
+- `icon`: phosphor `Icon` type — rendered left of the label
+- `loading` disables the button and shows an `ActivityIndicator`
+- `style` accepts layout-level `ViewStyle` (e.g. `flex: 1`, margins) — do not use it for visual overrides
+
 ## Confirmation dialogs
 
 Use **`ConfirmModal`** (`@/components/ConfirmModal`) instead of `Alert.alert` for all confirmation prompts. `Alert.alert` renders a plain OS dialog that looks out of place in the dark-themed UI.

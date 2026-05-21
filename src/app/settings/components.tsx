@@ -1,10 +1,11 @@
-import { GhostIcon } from 'phosphor-react-native'
+import { GhostIcon, TrashIcon } from 'phosphor-react-native'
 import { useCallback, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Banner } from '@/components/Banner'
+import { Button } from '@/components/Button'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { DeviceRow } from '@/components/DeviceRow'
 import { InfoModal } from '@/components/InfoModal'
@@ -31,6 +32,73 @@ function generateSparklineData(count: number, base: number, variance: number): S
 }
 
 // ─── Individual showcases ──────────────────────────────────────────────
+
+function ButtonShowcase() {
+  const [loading, setLoading] = useState(false)
+  const [disabled, setDisabled] = useState(false)
+
+  return (
+    <ShowcaseCard
+      name="Button"
+      controls={
+        <>
+          <ToggleRow label="loading" value={loading} onToggle={setLoading} />
+          <ToggleRow label="disabled" value={disabled} onToggle={setDisabled} />
+        </>
+      }
+    >
+      <View style={{ gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button
+            style={{ flex: 1 }}
+            label="Primary"
+            variant="primary"
+            onPress={() => {}}
+            loading={loading}
+            disabled={disabled}
+          />
+          <Button
+            style={{ flex: 1 }}
+            label="Secondary"
+            variant="secondary"
+            onPress={() => {}}
+            loading={loading}
+            disabled={disabled}
+          />
+          <Button
+            style={{ flex: 1 }}
+            label="Delete"
+            variant="destructive"
+            onPress={() => {}}
+            loading={loading}
+            disabled={disabled}
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button
+            style={{ flex: 1 }}
+            label="With icon"
+            variant="primary"
+            icon={TrashIcon}
+            size="sm"
+            onPress={() => {}}
+            loading={loading}
+            disabled={disabled}
+          />
+          <Button
+            style={{ flex: 1 }}
+            label="Secondary sm"
+            variant="secondary"
+            size="sm"
+            onPress={() => {}}
+            loading={loading}
+            disabled={disabled}
+          />
+        </View>
+      </View>
+    </ShowcaseCard>
+  )
+}
 
 function PlaceholderShowcase() {
   const [showTitle, setShowTitle] = useState(true)
@@ -316,6 +384,7 @@ export default function ComponentsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
+        <ButtonShowcase />
         <PlaceholderShowcase />
         <SelectShowcase />
         <SparklineShowcase />
