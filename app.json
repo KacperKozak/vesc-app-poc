@@ -5,11 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "vibewheel",
+    "scheme": "vescpoc",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.vibewheel",
+      "bundleIdentifier": "com.anonymous.vescpoc",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -22,7 +22,7 @@
         "monochromeImage": "./assets/images/androidIconMonochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.vibewheel"
+      "package": "com.anonymous.vescpoc"
     },
     "web": {
       "output": "static",
