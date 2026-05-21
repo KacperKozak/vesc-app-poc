@@ -105,6 +105,7 @@ public class VescBleModule: Module {
         ["name": "Notify", "uri": "preset:notify", "category": "single"],
         ["name": "Tick", "uri": "preset:tick", "category": "geiger"],
         ["name": "Hard Tick", "uri": "preset:tick_hard", "category": "geiger"],
+        ["name": "Gamma", "uri": "preset:gamma", "category": "geiger"],
       ]
     }
 
