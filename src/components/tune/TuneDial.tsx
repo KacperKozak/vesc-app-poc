@@ -78,8 +78,10 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
   const dragStartX = useSharedValue(0)
 
   const tick = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      void Haptics.selectionAsync()
+    if (Platform.OS === 'ios') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    } else if (Platform.OS === 'android') {
+      void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Text_Handle_Move)
     }
   }, [])
 
