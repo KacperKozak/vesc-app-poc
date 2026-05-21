@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { HistorySession } from '@/store/historyStore'
 
-import { getLatestSession, getNextRideSession, getPreviousRideSession } from './centerState'
+import {
+  findSessionIndex,
+  getLatestSession,
+  getNextRideSession,
+  getPreviousRideSession,
+} from './centerState'
 
 const sessions = [session('newest', 3000), session('middle', 2000), session('oldest', 1000)]
 
@@ -41,5 +46,17 @@ describe('centerState', () => {
     expect(getNextRideSession(sessions, sessions[2])?.id).toBe('middle')
     expect(getNextRideSession(sessions, sessions[1])?.id).toBe('newest')
     expect(getNextRideSession(sessions, sessions[0])).toBeNull()
+  })
+
+  test('nav resolves session after pagination expands its range', () => {
+    const expanded = session('expanded-middle', 1800)
+    expanded.endAtMs = 2600
+    const pagedSessions = [sessions[0], expanded, sessions[2]]
+    const staleSelected = session('stale-middle', 2000)
+    staleSelected.endAtMs = 2060
+
+    expect(findSessionIndex(pagedSessions, staleSelected)).toBe(1)
+    expect(getPreviousRideSession(pagedSessions, staleSelected)?.id).toBe('oldest')
+    expect(getNextRideSession(pagedSessions, staleSelected)?.id).toBe('newest')
   })
 })

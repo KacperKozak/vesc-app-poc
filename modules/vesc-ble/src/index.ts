@@ -283,6 +283,13 @@ export interface TuneProfile {
   updatedAt: number
 }
 
+export interface TuneHistoryEntry {
+  id: number
+  profileId: string
+  fields: Record<string, TuneProfileFieldValue>
+  createdAt: number
+}
+
 export interface ProfileStats {
   distanceM: number | null
   rideCount: number
@@ -306,6 +313,15 @@ export interface AppSettings {
   selectedBoardId: string | null
   lastGpsLatitude: number | null
   lastGpsLongitude: number | null
+}
+
+export interface DiagnosticStatus {
+  enabled: boolean
+  host: string
+  distinctId: string | null
+  captureCount: number
+  lastEventName: string | null
+  lastCaptureAt: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +359,9 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   selectBoard(boardId: string): Promise<void>
   stopBoard(): Promise<void>
   setDebugRecordingEnabled(enabled: boolean): void
+  reportUiError(message: string, source?: string | null, stack?: string | null): void
+  reportDiagnosticTest(): DiagnosticStatus
+  getDiagnosticStatus(): DiagnosticStatus
   getLiveState(): LiveStateEvent
   setSelectedBoard(boardId: string | null): void
   getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryHistoryBlock[]>
@@ -362,10 +381,25 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
   getTuneProfiles(boardId: string): Promise<TuneProfile[]>
   getTuneProfile(profileId: string): Promise<TuneProfile | null>
+  createProfile(
+    boardId: string,
+    name: string,
+    fields: Record<string, TuneProfileFieldValue>,
+  ): Promise<TuneProfile>
+  renameProfile(profileId: string, name: string): Promise<TuneProfile>
+  deleteProfile(profileId: string): Promise<void>
+  getProfileHistory(profileId: string): Promise<TuneHistoryEntry[]>
+  rollbackProfile(profileId: string, historyEntryId: number): Promise<TuneProfile>
+  copyProfileToBoard(
+    profileId: string,
+    targetBoardId: string,
+    newName: string,
+  ): Promise<TuneProfile>
   saveProfile(
     profileId: string,
     fields: Record<string, TuneProfileFieldValue>,
   ): Promise<TuneProfile>
+  pushProfileToBoard(profileId: string): Promise<RefloatConfigSnapshot>
   getTotalProfileStats(): Promise<ProfileStats>
   getMonthlyProfileStats(options: ProfileStatsMonth): Promise<ProfileStats>
   getProfileStatMonths(): Promise<ProfileStatsMonth[]>
@@ -439,6 +473,25 @@ export function setDebugRecordingEnabled(enabled: boolean): void {
   native.setDebugRecordingEnabled(enabled)
 }
 
+/** Report a JS view-layer failure. Native failures are reported at their own operation boundary. */
+export function reportUiError(
+  message: string,
+  source?: string | null,
+  stack?: string | null,
+): void {
+  native.reportUiError(message, source ?? null, stack ?? null)
+}
+
+/** Send a manual native diagnostic event from development tooling. */
+export function reportDiagnosticTest(): DiagnosticStatus {
+  return native.reportDiagnosticTest()
+}
+
+/** Read native diagnostic reporter state for development tooling. */
+export function getDiagnosticStatus(): DiagnosticStatus {
+  return native.getDiagnosticStatus()
+}
+
 /** Read native-owned live state. UI should mirror this, not invent connection state. */
 export function getLiveState(): LiveStateEvent {
   return native.getLiveState()
@@ -489,11 +542,50 @@ export async function getTuneProfile(profileId: string): Promise<TuneProfile | n
   return native.getTuneProfile(profileId)
 }
 
+export async function createProfile(
+  boardId: string,
+  name: string,
+  fields: Record<string, TuneProfileFieldValue>,
+): Promise<TuneProfile> {
+  return native.createProfile(boardId, name, fields)
+}
+
+export async function renameProfile(profileId: string, name: string): Promise<TuneProfile> {
+  return native.renameProfile(profileId, name)
+}
+
+export async function deleteProfile(profileId: string): Promise<void> {
+  return native.deleteProfile(profileId)
+}
+
+export async function getProfileHistory(profileId: string): Promise<TuneHistoryEntry[]> {
+  return native.getProfileHistory(profileId)
+}
+
+export async function rollbackProfile(
+  profileId: string,
+  historyEntryId: number,
+): Promise<TuneProfile> {
+  return native.rollbackProfile(profileId, historyEntryId)
+}
+
+export async function copyProfileToBoard(
+  profileId: string,
+  targetBoardId: string,
+  newName: string,
+): Promise<TuneProfile> {
+  return native.copyProfileToBoard(profileId, targetBoardId, newName)
+}
+
 export async function saveProfile(
   profileId: string,
   fields: Record<string, TuneProfileFieldValue>,
 ): Promise<TuneProfile> {
   return native.saveProfile(profileId, fields)
+}
+
+export async function pushProfileToBoard(profileId: string): Promise<RefloatConfigSnapshot> {
+  return native.pushProfileToBoard(profileId)
 }
 
 export async function getTotalProfileStats(): Promise<ProfileStats> {
@@ -556,10 +648,7 @@ export async function updateSetting(
   key: string,
   value: number | boolean | string | null,
 ): Promise<void> {
-  return native.updateSetting(
-    key,
-    value !== null && value !== undefined ? JSON.stringify(value) : null,
-  )
+  return native.updateSetting(key, value)
 }
 
 // ---------------------------------------------------------------------------

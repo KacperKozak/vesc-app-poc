@@ -111,6 +111,26 @@ class VescForegroundService : Service() {
             service.consumePendingConfigRead()
         }
 
+        private var pendingConfigWrite: PendingConfigWrite? = null
+
+        fun pushProfileToBoard(
+            context: Context,
+            profileId: String,
+            onSuccess: (Map<String, Any?>) -> Unit,
+            onError: (String, String) -> Unit,
+        ) {
+            val service = instance
+            if (service == null) {
+                onError(
+                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED.name,
+                    "Board must be connected before pushing config",
+                )
+                return
+            }
+            pendingConfigWrite = PendingConfigWrite(profileId, onSuccess, onError)
+            service.consumePendingConfigWrite()
+        }
+
         fun startGpsMonitoring(context: Context) {
             pendingGpsStart = true
             val intent = Intent(context, VescForegroundService::class.java).apply {
@@ -213,9 +233,38 @@ class VescForegroundService : Service() {
     private data class ActiveConfigRead(
         val pending: PendingConfigRead,
         val wasPolling: Boolean,
+        val operationId: String = newOperationId(),
         val xmlBytes: ByteArray = ByteArray(0),
         val expectedXmlLength: Int? = null,
         val nextXmlOffset: Int = 0,
+        val rawConfig: ByteArray? = null,
+    )
+
+    private data class PendingConfigWrite(
+        val profileId: String,
+        val onSuccess: (Map<String, Any?>) -> Unit,
+        val onError: (String, String) -> Unit,
+    )
+
+    private enum class ConfigWritePhase {
+        READING_SCHEMA,
+        READING_CONFIG,
+        SENDING_WRITE,
+        VERIFYING,
+    }
+
+    private data class ActiveConfigWrite(
+        val pending: PendingConfigWrite,
+        val wasPolling: Boolean,
+        val profileFields: Map<String, Any>,
+        val operationId: String = newOperationId(),
+        val phase: ConfigWritePhase = ConfigWritePhase.READING_SCHEMA,
+        val xmlBytes: ByteArray = ByteArray(0),
+        val expectedXmlLength: Int? = null,
+        val nextXmlOffset: Int = 0,
+        val originalConfig: ByteArray? = null,
+        val patchedConfig: ByteArray? = null,
+        val schema: RefloatConfigSchema? = null,
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -271,13 +320,19 @@ class VescForegroundService : Service() {
     private var autoReconnectRunnable: Runnable? = null
     private var reconnectScanCallback: ScanCallback? = null
     private var activeConfigRead: ActiveConfigRead? = null
+    private var activeConfigWrite: ActiveConfigWrite? = null
     private var configTimeoutRunnable: Runnable? = null
     private var autoReconnectAttempt = 0
+    private var telemetryParseFailedReported = false
+    private var telemetryParseFailedCount = 0
+    private var lastSentCommand: Int? = null
+    private var lastReceivedCommandByte: Int? = null
     private var generation = 0L
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private val configChunkLength = 384
     private val configSchemaTimeoutMs = 10_000L
     private val configReadTimeoutMs = 8_000L
+    private val configWriteTimeoutMs = 10_000L
     private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val bluetoothAdapter: BluetoothAdapter
@@ -288,6 +343,7 @@ class VescForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        DiagnosticReporter.initialize(this)
         notificationController.createChannel()
     }
 
@@ -309,6 +365,7 @@ class VescForegroundService : Service() {
         }
         stopLocationUpdates()
         instance = null
+        DiagnosticReporter.get(this).flush()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -341,10 +398,10 @@ class VescForegroundService : Service() {
     private fun consumePendingConfigRead() {
         val pending = pendingConfigRead ?: return
         pendingConfigRead = null
-        if (activeConfigRead != null) {
+        if (activeConfigRead != null || activeConfigWrite != null) {
             pending.onError(
                 RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
-                "Refloat config read already in flight",
+                "Config operation already in flight",
             )
             return
         }
@@ -422,6 +479,8 @@ class VescForegroundService : Service() {
         recentTelemetry.clear()
         packetReassembler.reset()
         gattClient.resetDiagnostics()
+        telemetryParseFailedReported = false
+        telemetryParseFailedCount = 0
         connectAttempt = 0
         autoReconnectAttempt = 0
         lastTelemetryAt = 0L
@@ -494,6 +553,12 @@ class VescForegroundService : Service() {
                     resumePolling = false,
                 )
             }
+            if (!intentional && activeConfigWrite != null) {
+                failConfigWrite(
+                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
+                    "Board disconnected during config write",
+                )
+            }
             if (intentional) {
                 return
             } else if (wasConnecting != null) {
@@ -501,13 +566,37 @@ class VescForegroundService : Service() {
                     Log.w(VESC_SESSION_TAG, "status=133 during connect, retrying once")
                     mainHandler.postDelayed({ startBleSession(wasConnecting) }, 250)
                 } else if (wasConnecting.boardConfig.autoReconnect) {
+                    captureDiagnostic(
+                        "ble_connect_failed",
+                        diagnosticProperties(wasConnecting.boardConfig, "connect") + mapOf(
+                            "message" to "Device disconnected during connect",
+                            "error_code" to status,
+                            "gatt_status" to status,
+                        ),
+                    )
                     scheduleAutoReconnect(wasConnecting.boardConfig, status, "connect failed")
                 } else {
                     failStart(wasConnecting, "DISCONNECTED", "Device disconnected during connect (status=$status)")
                 }
             } else if (boardConfig?.autoReconnect == true) {
+                captureDiagnostic(
+                    "ble_disconnected_unexpectedly",
+                    diagnosticProperties(boardConfig, "connect") + mapOf(
+                        "message" to "Board disconnected unexpectedly",
+                        "error_code" to status,
+                        "gatt_status" to status,
+                    ),
+                )
                 scheduleAutoReconnect(boardConfig!!, status, "board disconnected")
             } else {
+                captureDiagnostic(
+                    "ble_disconnected_unexpectedly",
+                    diagnosticProperties(boardConfig, "connect") + mapOf(
+                        "message" to "Board disconnected unexpectedly",
+                        "error_code" to status,
+                        "gatt_status" to status,
+                    ),
+                )
                 setError("Board disconnected")
                 finishRecording("error")
             }
@@ -555,12 +644,13 @@ class VescForegroundService : Service() {
     }
 
     private fun sendStartupPayload(payload: ByteArray) {
-        if (activeConfigRead != null) return
+        if (activeConfigRead != null || activeConfigWrite != null) return
         sendPayloadWithRetry(payload)
     }
 
     private fun handlePayload(payload: ByteArray) {
         if (payload.isEmpty()) return
+        lastReceivedCommandByte = payload[0].toInt() and 0xff
         when (payload[0].toInt() and 0xff) {
             COMM_FW_VERSION -> handleFwVersionPayload(payload)
             COMM_PING_CAN -> {
@@ -577,12 +667,14 @@ class VescForegroundService : Service() {
             }
             COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
             COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
+            COMM_SET_CUSTOM_CONFIG -> handleSetConfigResponse(payload)
             COMM_FORWARD_CAN -> {
                 if (payload.size >= 3) {
                     when (payload[2].toInt() and 0xff) {
                         COMM_FW_VERSION -> handleFwVersionPayload(payload.copyOfRange(2, payload.size))
                         COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
                         COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
+                        COMM_SET_CUSTOM_CONFIG -> handleSetConfigResponse(payload)
                     }
                 }
             }
@@ -593,7 +685,10 @@ class VescForegroundService : Service() {
                     avgLatency = updateLatency(now),
                     packetAt = now,
                     location = latestLocation,
-                ) ?: return
+                ) ?: run {
+                    captureTelemetryParseFailed(payload)
+                    return
+                }
                 markBoardReady()
                 telemetry = parsed
                 lastTelemetryAt = parsed.lastPacketAt
@@ -612,6 +707,10 @@ class VescForegroundService : Service() {
     }
 
     private fun handleConfigXmlPayload(payload: ByteArray) {
+        if (activeConfigWrite != null) {
+            handleWriteXmlPayload(payload)
+            return
+        }
         val active = activeConfigRead ?: return
         val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
             is RefloatConfigProtocolResult.Success -> result.value
@@ -648,6 +747,10 @@ class VescForegroundService : Service() {
     }
 
     private fun handleConfigBytesPayload(payload: ByteArray) {
+        if (activeConfigWrite != null) {
+            handleWriteConfigBytesPayload(payload)
+            return
+        }
         val active = activeConfigRead ?: return
         val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
             is RefloatConfigProtocolResult.Success -> result.value
@@ -659,6 +762,7 @@ class VescForegroundService : Service() {
                 return
             }
         }
+        activeConfigRead = active.copy(rawConfig = parsed.config)
         clearConfigTimeout()
         val can = canId ?: run {
             failConfigRead(
@@ -819,6 +923,292 @@ class VescForegroundService : Service() {
         if (resumePolling && active.wasPolling && boardConfig != null && canId != null) {
             startPolling()
         }
+        captureDiagnostic(
+            if (code == RefloatConfigErrorCode.CONFIG_DECODE_FAILED || code == RefloatConfigErrorCode.UNSUPPORTED_SCHEMA) {
+                "config_decode_failed"
+            } else {
+                "config_read_failed"
+            },
+            diagnosticProperties(boardConfig, "config_read") + mapOf(
+                "operation_id" to active.operationId,
+                "message" to message,
+                "error_code" to code.name,
+                "firmware" to fwVersionString,
+            ) + DiagnosticReporter.configBlobProperties(active.rawConfig),
+        )
+        active.pending.onError(code.name, message)
+    }
+
+    // --- Config write flow (push profile to board) ---
+
+    private fun consumePendingConfigWrite() {
+        val pending = pendingConfigWrite ?: return
+        pendingConfigWrite = null
+        if (activeConfigRead != null || activeConfigWrite != null) {
+            pending.onError(
+                RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
+                "Config operation already in flight",
+            )
+            return
+        }
+        if (boardConfig == null || boardStatus != BoardPhase.Connected) {
+            pending.onError(
+                RefloatConfigErrorCode.BOARD_NOT_CONNECTED.name,
+                "Board must be connected before pushing config",
+            )
+            return
+        }
+        val id = canId
+        if (id == null) {
+            pending.onError(
+                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
+                "Cannot push config before CAN id discovery",
+            )
+            return
+        }
+        appDataScope.launch {
+            val profile = try {
+                AppDataRepository.get(applicationContext).getTuneProfile(pending.profileId)
+            } catch (e: Exception) {
+                null
+            }
+            if (profile == null) {
+                mainHandler.post {
+                    pending.onError(
+                        RefloatConfigErrorCode.PROFILE_NOT_FOUND.name,
+                        "Tune profile not found: ${pending.profileId}",
+                    )
+                }
+                return@launch
+            }
+            @Suppress("UNCHECKED_CAST")
+            val fields = (profile["fields"] as? Map<String, Any>) ?: emptyMap()
+            mainHandler.post {
+                if (activeConfigRead != null || activeConfigWrite != null) {
+                    pending.onError(
+                        RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
+                        "Config operation already in flight",
+                    )
+                    return@post
+                }
+                if (boardConfig == null || boardStatus != BoardPhase.Connected) {
+                    pending.onError(
+                        RefloatConfigErrorCode.BOARD_NOT_CONNECTED.name,
+                        "Board must be connected before pushing config",
+                    )
+                    return@post
+                }
+                val profileBoardId = profile["boardId"] as? String
+                val connectedBoardId = boardConfig?.appBoardId
+                if (profileBoardId.isNullOrBlank() || connectedBoardId.isNullOrBlank() || profileBoardId != connectedBoardId) {
+                    pending.onError(
+                        RefloatConfigErrorCode.PROFILE_BOARD_MISMATCH.name,
+                        "Tune profile does not belong to the connected board",
+                    )
+                    return@post
+                }
+                val currentId = canId
+                if (currentId == null) {
+                    pending.onError(
+                        RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
+                        "Cannot push config before CAN id discovery",
+                    )
+                    return@post
+                }
+                val wasPolling = pollRunnable != null
+                stopPolling()
+                activeConfigWrite = ActiveConfigWrite(
+                    pending = pending,
+                    wasPolling = wasPolling,
+                    profileFields = fields,
+                )
+                sendNextWriteXmlChunk(currentId)
+            }
+        }
+    }
+
+    private fun sendNextWriteXmlChunk(id: Int) {
+        val active = activeConfigWrite ?: return
+        val offset = active.nextXmlOffset
+        val expected = active.expectedXmlLength
+        val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
+            .coerceAtLeast(0)
+        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT, configSchemaTimeoutMs)
+        val sent = sendPayload(
+            RefloatConfigProtocol.buildGetCustomConfigXml(
+                canId = id, confInd = 0, length = length, offset = offset,
+            ),
+        )
+        if (!sent) {
+            failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+        }
+    }
+
+    private fun handleWriteXmlPayload(payload: ByteArray) {
+        val active = activeConfigWrite ?: return
+        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
+            is RefloatConfigProtocolResult.Success -> result.value
+            is RefloatConfigProtocolResult.Failure -> {
+                failConfigWrite(RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE, result.message)
+                return
+            }
+        }
+        clearConfigTimeout()
+        val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
+        active.xmlBytes.copyInto(merged)
+        parsed.chunk.copyInto(merged, active.xmlBytes.size)
+        val nextOffset = parsed.offset + parsed.chunk.size
+        activeConfigWrite = active.copy(
+            xmlBytes = merged,
+            expectedXmlLength = parsed.totalLength,
+            nextXmlOffset = nextOffset,
+        )
+        val id = canId ?: run {
+            failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
+            return
+        }
+        if (nextOffset >= parsed.totalLength) {
+            activeConfigWrite = activeConfigWrite?.copy(phase = ConfigWritePhase.READING_CONFIG)
+            armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
+            val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
+            if (!sent) {
+                failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+            }
+        } else {
+            sendNextWriteXmlChunk(id)
+        }
+    }
+
+    private fun handleWriteConfigBytesPayload(payload: ByteArray) {
+        val active = activeConfigWrite ?: return
+        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
+            is RefloatConfigProtocolResult.Success -> result.value
+            is RefloatConfigProtocolResult.Failure -> {
+                failConfigWrite(RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE, result.message)
+                return
+            }
+        }
+        clearConfigTimeout()
+        val id = canId ?: run {
+            failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
+            return
+        }
+
+        when (active.phase) {
+            ConfigWritePhase.READING_CONFIG -> {
+                try {
+                    val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
+                    val patched = RefloatConfigEncoder.encode(schema, parsed.config, active.profileFields)
+                    activeConfigWrite = active.copy(
+                        phase = ConfigWritePhase.SENDING_WRITE,
+                        originalConfig = parsed.config,
+                        patchedConfig = patched,
+                        schema = schema,
+                    )
+                    armConfigTimeout(RefloatConfigErrorCode.CONFIG_WRITE_TIMEOUT, configWriteTimeoutMs)
+                    val sent = sendPayload(RefloatConfigProtocol.buildSetCustomConfig(id, 0, patched))
+                    if (!sent) {
+                        failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+                    }
+                } catch (e: RefloatConfigSchemaException) {
+                    failConfigWrite(RefloatConfigErrorCode.UNSUPPORTED_SCHEMA, e.message ?: "Unsupported schema")
+                } catch (e: RefloatConfigEncodeException) {
+                    failConfigWrite(RefloatConfigErrorCode.CONFIG_ENCODE_FAILED, e.message ?: "Encode failed")
+                } catch (e: Exception) {
+                    failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, e.message ?: "Write failed")
+                }
+            }
+            ConfigWritePhase.VERIFYING -> {
+                val schema = active.schema
+                val patchedConfig = active.patchedConfig
+                if (schema == null || patchedConfig == null) {
+                    failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, "Missing state for verification")
+                    return
+                }
+                try {
+                    when (val verification = RefloatConfigWriteVerifier.verifyExactBytes(patchedConfig, parsed.config)) {
+                        is RefloatConfigWriteVerification.Success -> Unit
+                        is RefloatConfigWriteVerification.Failure -> {
+                            Log.w(VESC_SESSION_TAG, verification.message)
+                            failConfigWrite(
+                                RefloatConfigErrorCode.CONFIG_VERIFY_FAILED,
+                                verification.message,
+                            )
+                            return
+                        }
+                    }
+                    val actualSnapshot = RefloatConfigDecoder.decode(schema, parsed.config, boardConfig?.appBoardId, id, System.currentTimeMillis(), fwVersionString)
+                    completeConfigWrite(actualSnapshot)
+                } catch (e: RefloatConfigDecodeException) {
+                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
+                } catch (e: Exception) {
+                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
+                }
+            }
+            else -> {
+                failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, "Unexpected config bytes in phase ${active.phase}")
+            }
+        }
+    }
+
+    private fun handleSetConfigResponse(payload: ByteArray) {
+        val active = activeConfigWrite ?: return
+        when (val result = RefloatConfigProtocol.parseSetCustomConfigResponse(payload)) {
+            is RefloatConfigProtocolResult.Success -> {
+                clearConfigTimeout()
+                val id = canId ?: run {
+                    failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost after write")
+                    return
+                }
+                activeConfigWrite = active.copy(phase = ConfigWritePhase.VERIFYING)
+                armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
+                val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
+                if (!sent) {
+                    failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+                }
+            }
+            is RefloatConfigProtocolResult.Failure -> {
+                failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, result.message)
+            }
+        }
+    }
+
+    private fun completeConfigWrite(verifiedSnapshot: RefloatConfigSnapshot) {
+        val active = activeConfigWrite ?: return
+        activeConfigWrite = null
+        clearConfigTimeout()
+        if (active.wasPolling && boardConfig != null && canId != null) {
+            startPolling()
+        }
+        appDataScope.launch {
+            try {
+                AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(verifiedSnapshot)
+            } catch (e: Exception) {
+                Log.w(VESC_SESSION_TAG, "Failed to update profile after push", e)
+            }
+            mainHandler.post {
+                active.pending.onSuccess(verifiedSnapshot.toMap())
+            }
+        }
+    }
+
+    private fun failConfigWrite(code: RefloatConfigErrorCode, message: String) {
+        val active = activeConfigWrite ?: return
+        activeConfigWrite = null
+        clearConfigTimeout()
+        if (active.wasPolling && boardConfig != null && canId != null) {
+            startPolling()
+        }
+        captureDiagnostic(
+            "profile_push_failed",
+            diagnosticProperties(boardConfig, "profile_push") + mapOf(
+                "operation_id" to active.operationId,
+                "message" to message,
+                "error_code" to code.name,
+                "phase" to active.phase.name,
+                "firmware" to fwVersionString,
+            ) + DiagnosticReporter.configBlobProperties(active.originalConfig ?: active.patchedConfig),
+        )
         active.pending.onError(code.name, message)
     }
 
@@ -911,6 +1301,7 @@ class VescForegroundService : Service() {
     }
 
     private fun sendPayload(payload: ByteArray): Boolean {
+        lastSentCommand = payload.getOrNull(0)?.toInt()?.and(0xff)
         return gattClient.sendPayload(payload)
     }
 
@@ -930,11 +1321,18 @@ class VescForegroundService : Service() {
     }
 
     private fun stopCurrentBoardSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
+        flushTelemetryDiagnostics("stop")
         if (activeConfigRead != null) {
             failConfigRead(
                 RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
                 "Board session stopped during Refloat config read",
                 resumePolling = false,
+            )
+        }
+        if (activeConfigWrite != null) {
+            failConfigWrite(
+                RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
+                "Board session stopped during config write",
             )
         }
         val stoppedConfig = boardConfig
@@ -976,6 +1374,13 @@ class VescForegroundService : Service() {
     }
 
     private fun failStart(start: PendingStart, code: String, message: String) {
+        captureDiagnostic(
+            "ble_connect_failed",
+            diagnosticProperties(start.boardConfig, "connect") + mapOf(
+                "message" to message,
+                "error_code" to code,
+            ),
+        )
         if (start.boardConfig.autoReconnect) {
             scheduleAutoReconnect(start.boardConfig, null, message)
             start.onError(code, message)
@@ -1002,6 +1407,20 @@ class VescForegroundService : Service() {
 
     private fun scheduleAutoReconnect(session: SessionConfig, gattStatus: Int?, reason: String) {
         if (!session.autoReconnect || isStoppingService) return
+        flushTelemetryDiagnostics("reconnect")
+        if (reason.contains("telemetry", ignoreCase = true)) {
+            captureDiagnostic(
+                if (reason.contains("stale", ignoreCase = true)) "telemetry_stale" else "telemetry_unavailable",
+                diagnosticProperties(session, "telemetry") + mapOf(
+                    "message" to reason,
+                    "reason" to reason,
+                    "gatt_status" to gattStatus,
+                    "auto_reconnect_enabled" to session.autoReconnect,
+                    "last_telemetry_timestamp" to lastTelemetryAt.takeIf { it > 0L },
+                    "telemetry_parse_failed_count" to telemetryParseFailedCount,
+                ),
+            )
+        }
         pendingConnect = null
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
@@ -1346,4 +1765,54 @@ class VescForegroundService : Service() {
         val session = boardConfig ?: return
         telemetryStore?.recordTelemetry(values.toCapture(session, canId))
     }
+
+    private fun captureTelemetryParseFailed(payload: ByteArray) {
+        telemetryParseFailedCount += 1
+        if (telemetryParseFailedReported) return
+        telemetryParseFailedReported = true
+        captureDiagnostic(
+            "telemetry_parse_failed",
+            diagnosticProperties(boardConfig, "telemetry") + DiagnosticReporter.telemetryPayloadProperties(payload) + mapOf(
+                "message" to "Invalid Refloat telemetry payload",
+                "telemetry_parse_failed_count" to telemetryParseFailedCount,
+            ),
+        )
+    }
+
+    private fun flushTelemetryDiagnostics(reason: String) {
+        if (telemetryParseFailedCount <= 0) return
+        captureDiagnostic(
+            "telemetry_parse_failed",
+            diagnosticProperties(boardConfig, "telemetry") + mapOf(
+                "message" to "Telemetry parse failures aggregated",
+                "reason" to reason,
+                "telemetry_parse_failed_count" to telemetryParseFailedCount,
+            ),
+        )
+        telemetryParseFailedReported = false
+        telemetryParseFailedCount = 0
+    }
+
+    private fun captureDiagnostic(eventName: String, properties: Map<String, Any?>) {
+        DiagnosticReporter.get(this).capture(eventName, properties)
+    }
+
+    private fun diagnosticProperties(session: SessionConfig?, operation: String): Map<String, Any?> =
+        mapOf(
+            "board_id" to session?.appBoardId,
+            "ble_id" to session?.deviceId,
+            "board_nickname" to session?.deviceName,
+            "operation" to operation,
+            "phase" to boardStatus.wireValue,
+            "previous_board_phase" to boardStatus.wireValue,
+            "current_board_phase" to boardStatus.wireValue,
+            "connection_seq" to generation,
+            "connect_attempt" to connectAttempt,
+            "auto_reconnect_attempt" to autoReconnectAttempt,
+            "auto_reconnect_enabled" to session?.autoReconnect,
+            "can_id" to canId,
+            "last_sent_command" to lastSentCommand,
+            "last_received_command_byte" to lastReceivedCommandByte,
+            "last_telemetry_timestamp" to lastTelemetryAt.takeIf { it > 0L },
+        )
 }

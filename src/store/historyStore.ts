@@ -150,9 +150,21 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
       const next = await getTelemetryHistory({ limit: PAGE_SIZE, cursorBeforeMs })
       const ids = new Set(blocks.map((b) => b.id))
       const merged = [...blocks, ...next.filter((b) => !ids.has(b.id))]
+      const sessions = groupHistorySessions(merged)
+      const selectedSession = get().selectedSession
+      const nextSelectedSession = selectedSession
+        ? sessions.find(
+            (session) =>
+              session.id === selectedSession.id ||
+              (session.deviceId === selectedSession.deviceId &&
+                session.startAtMs <= selectedSession.endAtMs &&
+                session.endAtMs >= selectedSession.startAtMs),
+          )
+        : null
       set({
         blocks: merged,
-        sessions: groupHistorySessions(merged),
+        sessions,
+        selectedSession: nextSelectedSession ?? selectedSession,
         hasMore: next.length === PAGE_SIZE,
       })
     } catch (err) {

@@ -19,6 +19,9 @@ interface UseCenterScreenControllerArgs {
   mapRef: RefObject<CenterMapHandle | null>
 }
 
+const TARGET_INITIAL_HISTORY_SESSIONS = 12
+const MAX_HISTORY_PREFETCH_PAGES = 8
+
 export function useCenterScreenController({ mapRef }: UseCenterScreenControllerArgs) {
   const backPressedOnce = useRef(false)
   const [heading, setHeading] = useState(0)
@@ -64,8 +67,10 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     sessionMarkers,
     loadingSession,
     loading: historyLoading,
+    hasMore: historyHasMore,
     error: historyError,
     loadInitial,
+    loadMore,
     selectSession,
     removeSelectedSession,
   } = useHistoryStore(
@@ -77,8 +82,10 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       sessionMarkers: s.sessionMarkers,
       loadingSession: s.loadingSession,
       loading: s.loading,
+      hasMore: s.hasMore,
       error: s.error,
       loadInitial: s.loadInitial,
+      loadMore: s.loadMore,
       selectSession: s.selectSession,
       removeSelectedSession: s.removeSelectedSession,
     })),
@@ -104,6 +111,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
   const historyActive = mode === 'history' && !!selectedSession
   const previousRide = getPreviousRideSession(sessions, selectedSession)
   const nextRide = getNextRideSession(sessions, selectedSession)
+  const canPreviousRide = !!previousRide || historyHasMore
 
   const exitMapFocus = useCallback(() => {
     enterTelemetry()
@@ -116,14 +124,59 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     requestAnimationFrame(() => mapRef.current?.recenterLive({ resetPadding: true }))
   }, [enterTelemetry, mapRef, selectSession])
 
+  const loadOlderHistoryPages = useCallback(
+    async (targetSessionCount = TARGET_INITIAL_HISTORY_SESSIONS) => {
+      let pagesLoaded = 0
+      while (
+        useHistoryStore.getState().hasMore &&
+        useHistoryStore.getState().sessions.length < targetSessionCount &&
+        pagesLoaded < MAX_HISTORY_PREFETCH_PAGES
+      ) {
+        await useHistoryStore.getState().loadMore()
+        pagesLoaded += 1
+      }
+    },
+    [],
+  )
+
   const enterHistoryMode = useCallback(async () => {
     await loadInitial()
+    await loadOlderHistoryPages()
     const latest = getLatestSession(useHistoryStore.getState().sessions)
     if (latest) {
       await selectSession(latest)
     }
     enterHistory()
-  }, [enterHistory, loadInitial, selectSession])
+  }, [enterHistory, loadInitial, loadOlderHistoryPages, selectSession])
+
+  const selectPreviousRide = useCallback(async () => {
+    let previous = getPreviousRideSession(
+      useHistoryStore.getState().sessions,
+      useHistoryStore.getState().selectedSession,
+    )
+    let pagesLoaded = 0
+    while (
+      !previous &&
+      useHistoryStore.getState().hasMore &&
+      pagesLoaded < MAX_HISTORY_PREFETCH_PAGES
+    ) {
+      await useHistoryStore.getState().loadMore()
+      previous = getPreviousRideSession(
+        useHistoryStore.getState().sessions,
+        useHistoryStore.getState().selectedSession,
+      )
+      pagesLoaded += 1
+    }
+    if (previous) await selectSession(previous)
+  }, [selectSession])
+
+  const selectNextRide = useCallback(async () => {
+    const next = getNextRideSession(
+      useHistoryStore.getState().sessions,
+      useHistoryStore.getState().selectedSession,
+    )
+    if (next) await selectSession(next)
+  }, [selectSession])
 
   const removeSession = useCallback(() => {
     void removeSelectedSession()
@@ -190,12 +243,17 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     sessionMarkers,
     previousRide,
     nextRide,
+    canPreviousRide,
     loadingSession,
     historyLoading,
+    historyHasMore,
     historyError,
     historySheetVisible,
     setHistorySheetVisible,
     selectSession,
+    loadMoreHistory: loadMore,
+    selectPreviousRide,
+    selectNextRide,
     enterHistoryMode,
     exitHistory,
     removeSession,
