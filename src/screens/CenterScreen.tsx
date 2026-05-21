@@ -88,6 +88,7 @@ export function CenterScreen({
       <CenterMap
         ref={mapRef}
         liveLocations={controller.liveLocations}
+        latestApproximateLocation={controller.latestApproximateLocation}
         rideGpsSamples={controller.sessionGpsSamples}
         rideMarkers={controller.sessionMarkers}
         historyActive={controller.historyActive}

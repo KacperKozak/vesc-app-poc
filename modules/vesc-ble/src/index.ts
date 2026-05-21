@@ -123,6 +123,8 @@ export interface LiveStateEvent {
   gps: {
     phase: GpsPhase
     latestFix: LocationEvent | null
+    latestApproximateFix?: LocationEvent | null
+    latestPreciseFix?: LocationEvent | null
     recentLocations: LocationEvent[]
     error: string | null
   }

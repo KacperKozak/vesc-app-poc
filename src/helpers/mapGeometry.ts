@@ -39,6 +39,22 @@ export function makeTrailLineString(
   }
 }
 
+export function distanceMeters(
+  from: { longitude: number; latitude: number },
+  to: { longitude: number; latitude: number },
+): number {
+  const earthRadiusM = 6_378_137
+  const fromLatRad = (from.latitude * Math.PI) / 180
+  const toLatRad = (to.latitude * Math.PI) / 180
+  const deltaLat = toLatRad - fromLatRad
+  const deltaLon = ((to.longitude - from.longitude) * Math.PI) / 180
+  const halfChord =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(fromLatRad) * Math.cos(toLatRad) * Math.sin(deltaLon / 2) ** 2
+
+  return 2 * earthRadiusM * Math.atan2(Math.sqrt(halfChord), Math.sqrt(1 - halfChord))
+}
+
 export function getBounds(coordinates: [number, number][]): {
   ne: [number, number]
   sw: [number, number]

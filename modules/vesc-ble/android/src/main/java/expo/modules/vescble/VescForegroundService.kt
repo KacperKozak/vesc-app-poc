@@ -11,7 +11,6 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.location.Location
-import android.location.LocationManager
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -38,7 +37,6 @@ private const val ACTION_EXIT_FROM_NOTIFICATION = "expo.modules.vescble.ACTION_E
 private const val ACTION_START_GPS_MONITORING = "expo.modules.vescble.ACTION_START_GPS_MONITORING"
 private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP_GPS_MONITORING"
 
-private const val MAX_RECORDING_ACCURACY_M = 20.0
 private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
 private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
 private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
@@ -202,6 +200,8 @@ class VescForegroundService : Service() {
                 "gps" to mapOf(
                     "phase" to "idle",
                     "latestFix" to null,
+                    "latestApproximateFix" to null,
+                    "latestPreciseFix" to null,
                     "recentLocations" to emptyList<Map<String, Any?>>(),
                     "error" to null,
                 ),
@@ -315,6 +315,7 @@ class VescForegroundService : Service() {
     private var telemetryStore: TelemetryRepository? = null
     private var gpsError: String? = null
     private var latestLocation: LocationSnapshot? = null
+    private var latestPreciseLocation: LocationSnapshot? = null
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
     private var autoReconnectRunnable: Runnable? = null
@@ -1578,6 +1579,25 @@ class VescForegroundService : Service() {
         val accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null
         val altitudeM = if (location.hasAltitude()) location.altitude else null
         val precise = isRecordableGpsLocation(location, accuracyM)
+        val snapshot = LocationSnapshot(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            speedMps = speedMps,
+            bearingDeg = bearingDeg,
+            accuracyM = accuracyM,
+            altitudeM = altitudeM,
+            timestamp = location.time,
+            precise = precise,
+            saved = false,
+        )
+        latestLocation = snapshot
+        if (!precise) {
+            emitEvent("onLocation", snapshot.toMap())
+            if (boardConfig == null) {
+                showNotification(formatGpsNotificationText(snapshot))
+            }
+            return
+        }
         val capture = TelemetryLocationCapture(
             latitude = location.latitude,
             longitude = location.longitude,
@@ -1588,32 +1608,19 @@ class VescForegroundService : Service() {
             timestamp = location.time,
             precise = precise,
         )
-        val saved = if (precise) {
-            telemetryStore?.recordLocation(
-                capture,
-                deviceId = boardConfig?.deviceId,
-                deviceName = boardConfig?.deviceName,
-            ) ?: false
-        } else {
-            false
-        }
-        val snapshot = LocationSnapshot(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            speedMps = speedMps,
-            bearingDeg = bearingDeg,
-            accuracyM = accuracyM,
-            altitudeM = altitudeM,
-            timestamp = location.time,
-            precise = precise,
-            saved = saved,
-        )
-        latestLocation = snapshot
-        persistLastGpsLocation(snapshot)
-        appendRecentLocation(snapshot)
-        emitEvent("onLocation", snapshot.toMap())
-        if (boardConfig == null) showNotification(formatGpsNotificationText(snapshot))
-        if (snapshot.precise) recorder?.recordLocation(snapshot)
+        val saved = telemetryStore?.recordLocation(
+            capture,
+            deviceId = boardConfig?.deviceId,
+            deviceName = boardConfig?.deviceName,
+        ) ?: false
+        val savedSnapshot = snapshot.copy(saved = saved)
+        latestLocation = savedSnapshot
+        latestPreciseLocation = savedSnapshot
+        persistLastGpsLocation(savedSnapshot)
+        appendRecentLocation(savedSnapshot)
+        emitEvent("onLocation", savedSnapshot.toMap())
+        if (boardConfig == null) showNotification(formatGpsNotificationText(savedSnapshot))
+        recorder?.recordLocation(savedSnapshot)
     }
 
     private fun persistLastGpsLocation(location: LocationSnapshot) {
@@ -1629,9 +1636,7 @@ class VescForegroundService : Service() {
     }
 
     private fun isRecordableGpsLocation(location: Location, accuracyM: Double?): Boolean =
-        location.provider == LocationManager.GPS_PROVIDER &&
-            accuracyM != null &&
-            accuracyM <= MAX_RECORDING_ACCURACY_M
+        isPreciseGpsFix(location.provider, accuracyM)
 
     private fun liveStateMap(includeRecent: Boolean = false): Map<String, Any?> {
         val settings = kotlinx.coroutines.runBlocking {
@@ -1657,6 +1662,7 @@ class VescForegroundService : Service() {
                 recentTelemetry = recentTelemetryValue,
                 gpsActive = gpsMonitor.active,
                 latestLocation = latestLocation,
+                latestPreciseLocation = latestPreciseLocation,
                 recentLocations = recentLocationsValue,
                 gpsError = gpsError,
                 recordingEnabled = telemetryStore != null,

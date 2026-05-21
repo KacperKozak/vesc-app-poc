@@ -59,6 +59,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     })),
   )
   const liveLocations = useBleStore((s) => s.liveLocationHistory)
+  const latestApproximateLocation = useBleStore((s) => s.latestApproximateLocation)
   const {
     sessions,
     selectedSession,
@@ -224,6 +225,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
   return {
     mode,
     liveLocations,
+    latestApproximateLocation,
     historyActive,
     mapStyleKey,
     setMapStyleKey,
