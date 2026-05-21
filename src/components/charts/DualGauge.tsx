@@ -14,6 +14,7 @@ import Svg, { Defs, Line, Path, RadialGradient, Stop } from 'react-native-svg'
 
 import { Sparkline, type SparklinePoint } from '@/components/charts/Sparkline'
 import { telemetry } from '@/constants/telemetry'
+import { interaction } from '@/constants/theme'
 import { routes } from '@/navigation/routes'
 
 export interface DualGaugeAlert {
@@ -607,7 +608,7 @@ export function DualGauge({
         <Pressable
           style={[styles.halfPressable, split && styles.halfPressableSplit]}
           onPress={() => router.push(routes.controlSpeed)}
-          android_ripple={{ color: 'rgba(148,163,184,0.18)', borderless: false, foreground: true }}
+          android_ripple={interaction.ripple}
         >
           <Sparkline
             points={speedSeries ?? []}
@@ -630,7 +631,7 @@ export function DualGauge({
         <Pressable
           style={[styles.halfPressable, split && styles.halfPressableSplit]}
           onPress={() => router.push(routes.controlDuty)}
-          android_ripple={{ color: 'rgba(148,163,184,0.18)', borderless: false, foreground: true }}
+          android_ripple={interaction.ripple}
         >
           <Sparkline
             points={dutySeries ?? []}
