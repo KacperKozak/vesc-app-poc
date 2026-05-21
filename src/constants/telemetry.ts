@@ -170,5 +170,3 @@ export const telemetryByControlId = Object.fromEntries(
     .filter((metric) => metric.controlId != null)
     .map((metric) => [metric.controlId, metric]),
 ) as Record<string, TelemetryMetricConfig>
-
-type TelemetryMetricKey = keyof typeof telemetry

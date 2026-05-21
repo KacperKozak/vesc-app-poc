@@ -26,24 +26,6 @@ export function findNearestSampleIndexByTime<T extends TimeStamped>(
   return targetMs - before.capturedAtMs <= after.capturedAtMs - targetMs ? hi : lo
 }
 
-export function clampHeadTime(
-  headTimeMs: number,
-  sessionStartMs: number,
-  sessionEndMs: number,
-): number {
-  return Math.max(sessionStartMs, Math.min(sessionEndMs, headTimeMs))
-}
-
-export function stepHeadTime(
-  headTimeMs: number,
-  direction: -1 | 1,
-  stepMs: number,
-  sessionStartMs: number,
-  sessionEndMs: number,
-): number {
-  return clampHeadTime(headTimeMs + direction * stepMs, sessionStartMs, sessionEndMs)
-}
-
 export function downsampleTimeSeries<T>(
   samples: T[],
   maxPoints: number,

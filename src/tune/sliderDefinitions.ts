@@ -114,15 +114,6 @@ export function fieldStep(field: RefloatConfigField): number {
   return 10
 }
 
-function snapFieldValue(value: number, field: RefloatConfigField): number {
-  const min = field.min ?? 0
-  const max = field.max ?? 1
-  const step = fieldStep(field)
-  const snapped = Math.round((value - min) / step) * step + min
-  const decimals = step < 1 ? Math.ceil(Math.abs(Math.log10(step))) : 0
-  return Number(clamp(snapped, min, max).toFixed(decimals))
-}
-
 export function snapValue(value: number, min: number, max: number, step: number): number {
   const snapped = Math.round((value - min) / step) * step + min
   const decimals = step < 1 ? Math.ceil(Math.abs(Math.log10(step))) : 0
