@@ -97,13 +97,17 @@ export function HistorySessionSheet({
             })
           )}
           {hasMore && (
-            <View style={styles.loadingRow}>
+            <Pressable
+              style={({ pressed }) => [styles.loadingRow, pressed && styles.loadingPressed]}
+              disabled={loadingMore}
+              onPress={onLoadMore}
+            >
               {loadingMore ? (
                 <ActivityIndicator size="small" color="#38bdf8" />
               ) : (
-                <Text style={styles.loadingText}>Scroll for older rides</Text>
+                <Text style={styles.loadingText}>Load older rides</Text>
               )}
-            </View>
+            </Pressable>
           )}
         </ScrollView>
       </View>
@@ -218,6 +222,13 @@ const styles = StyleSheet.create({
     minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#101827',
+  },
+  loadingPressed: {
+    backgroundColor: '#172554',
   },
   loadingText: {
     color: '#64748b',

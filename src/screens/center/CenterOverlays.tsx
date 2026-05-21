@@ -57,6 +57,7 @@ interface CenterHistoryOverlayProps {
   sessionSamples: TelemetrySample[]
   previousRide: HistorySession | null
   nextRide: HistorySession | null
+  canPreviousRide: boolean
   loadingSession: boolean
   historyLoading: boolean
   historyHasMore: boolean
@@ -66,6 +67,8 @@ interface CenterHistoryOverlayProps {
   setHistorySheetVisible: (visible: boolean) => void
   selectSession: (session: HistorySession | null) => Promise<void>
   loadMoreHistory: () => Promise<void>
+  selectPreviousRide: () => Promise<void>
+  selectNextRide: () => Promise<void>
   selectRide: (session: HistorySession) => void
   exitHistory: () => void
   removeSession: () => void
@@ -205,13 +208,13 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             deviceName={history.selectedSession.deviceName}
             samples={history.sessionSamples}
             loading={history.loadingSession}
-            canPrevious={!!history.previousRide}
+            canPrevious={history.canPreviousRide}
             canNext={!!history.nextRide}
             onPrevious={() => {
-              if (history.previousRide) void history.selectSession(history.previousRide)
+              void history.selectPreviousRide()
             }}
             onNext={() => {
-              if (history.nextRide) void history.selectSession(history.nextRide)
+              void history.selectNextRide()
             }}
             onOpenList={() => history.setHistorySheetVisible(true)}
             onSeek={history.onSeek}

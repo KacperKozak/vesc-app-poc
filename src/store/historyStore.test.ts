@@ -241,3 +241,24 @@ test('loads older history pages and merges sessions', async () => {
   ])
   expect(useHistoryStore.getState().hasMore).toBe(false)
 })
+
+test('keeps selected session addressable when older page expands it', async () => {
+  const newest = block({ id: 'newest', startAtMs: 3_000_000, endAtMs: 3_060_000 })
+  const partial = block({ id: 'partial', startAtMs: 2_000_000, endAtMs: 2_060_000 })
+  const olderSameRide = block({ id: 'older-same-ride', startAtMs: 1_960_000, endAtMs: 1_999_000 })
+  getTelemetryHistory.mockResolvedValueOnce([newest, partial])
+  getTelemetryHistory.mockResolvedValueOnce([olderSameRide])
+
+  const { useHistoryStore } = await import('./historyStore')
+
+  await useHistoryStore.getState().loadInitial()
+  useHistoryStore.setState({
+    hasMore: true,
+    selectedSession: useHistoryStore.getState().sessions[1],
+  })
+  await useHistoryStore.getState().loadMore()
+
+  expect(useHistoryStore.getState().sessions).toHaveLength(2)
+  expect(useHistoryStore.getState().selectedSession?.startAtMs).toBe(1_960_000)
+  expect(useHistoryStore.getState().selectedSession?.endAtMs).toBe(2_060_000)
+})
