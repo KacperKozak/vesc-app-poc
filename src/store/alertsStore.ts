@@ -43,7 +43,7 @@ export const useAlertsStore = create<AlertsState & AlertsActions>((set, get) => 
     set({ rules: await getAlertRules() })
   },
 
-  add(controlId, threshold, thresholdMax = null, soundType = 'default') {
+  add(controlId, threshold, thresholdMax = null, soundType = 'preset:beep') {
     const rule: AlertRule = {
       id: generateId(),
       controlId,

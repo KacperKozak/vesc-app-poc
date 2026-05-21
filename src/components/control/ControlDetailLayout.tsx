@@ -1,5 +1,5 @@
 import { useNavigation } from 'expo-router'
-import { PlusIcon, TrashIcon } from 'phosphor-react-native'
+import { PlusIcon, TrashIcon, WaveformIcon, RadioIcon } from 'phosphor-react-native'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import {
   Modal,
@@ -13,13 +13,18 @@ import {
 
 import { theme } from '@/constants/theme'
 import { type AlertSoundType, useAlertsStore } from '@/store/alertsStore'
-import { previewAlertSound } from 'vesc-ble'
+import {
+  type AlertPreset,
+  type AlertPresetCategory,
+  getAlertPresets,
+  previewAlertSound,
+} from 'vesc-ble'
 
-const ALERT_SOUND_OPTIONS: { label: string; value: AlertSoundType }[] = [
-  { label: 'Default', value: 'default' },
-  { label: 'Urgent', value: 'urgent' },
-  { label: 'Pulse', value: 'pulse' },
-]
+type AlertTab = 'single' | 'geiger'
+
+function getPresetsForCategory(category: AlertPresetCategory): AlertPreset[] {
+  return getAlertPresets().filter((p) => p.category === category)
+}
 
 interface Props {
   title: string
@@ -42,25 +47,74 @@ interface AddModalProps {
   onAdd(threshold: number, thresholdMax: number | null, soundType: AlertSoundType): void
 }
 
+function SoundPicker({
+  presets,
+  selected,
+  onSelect,
+}: {
+  presets: AlertPreset[]
+  selected: string
+  onSelect: (uri: string) => void
+}) {
+  return (
+    <View style={styles.modalField}>
+      <Text style={styles.fieldLabel}>SOUND</Text>
+      <View style={styles.soundRow}>
+        {presets.map((preset) => {
+          const active = selected === preset.uri
+          return (
+            <TouchableOpacity
+              key={preset.uri}
+              style={[styles.soundOption, active && styles.soundOptionActive]}
+              onPress={() => {
+                onSelect(preset.uri)
+                previewAlertSound(preset.uri)
+              }}
+            >
+              <Text style={[styles.soundOptionText, active && styles.soundOptionTextActive]}>
+                {preset.name}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 function AddAlertModal({ visible, unit, onClose, onAdd }: AddModalProps) {
+  const [tab, setTab] = useState<AlertTab>('single')
   const [thresholdText, setThresholdText] = useState('')
   const [maxText, setMaxText] = useState('')
-  const [soundType, setSoundType] = useState<AlertSoundType>('default')
+  const singlePresets = useMemo(() => getPresetsForCategory('single'), [])
+  const geigerPresets = useMemo(() => getPresetsForCategory('geiger'), [])
+  const [soundType, setSoundType] = useState<AlertSoundType>(singlePresets[0]?.uri ?? 'preset:beep')
+
+  function handleTabSwitch(next: AlertTab) {
+    setTab(next)
+    const presets = next === 'single' ? singlePresets : geigerPresets
+    setSoundType(presets[0]?.uri ?? 'preset:beep')
+  }
 
   function handleAdd() {
     const threshold = Number.parseFloat(thresholdText)
     if (!Number.isFinite(threshold)) return
-    const parsedMax = maxText.trim() ? Number.parseFloat(maxText) : null
-    const max = parsedMax != null && Number.isFinite(parsedMax) ? parsedMax : null
+    if (tab === 'geiger') {
+      const parsedMax = Number.parseFloat(maxText)
+      if (!Number.isFinite(parsedMax)) return
+      onAdd(threshold, parsedMax, soundType)
+    } else {
+      onAdd(threshold, null, soundType)
+    }
     setThresholdText('')
     setMaxText('')
-    onAdd(threshold, max, soundType)
   }
 
   function handleClose() {
     setThresholdText('')
     setMaxText('')
-    setSoundType('default')
+    setTab('single')
+    setSoundType(singlePresets[0]?.uri ?? 'preset:beep')
     onClose()
   }
 
@@ -88,6 +142,25 @@ function AddAlertModal({ visible, unit, onClose, onAdd }: AddModalProps) {
           >
             <Text style={styles.modalTitle}>Add Alert</Text>
 
+            <View style={styles.tabRow}>
+              <TouchableOpacity
+                style={[styles.tab, tab === 'single' && styles.tabActive]}
+                onPress={() => handleTabSwitch('single')}
+              >
+                <Text style={[styles.tabText, tab === 'single' && styles.tabTextActive]}>
+                  Single
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, tab === 'geiger' && styles.tabActive]}
+                onPress={() => handleTabSwitch('geiger')}
+              >
+                <Text style={[styles.tabText, tab === 'geiger' && styles.tabTextActive]}>
+                  Geiger
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.modalField}>
               <Text style={styles.fieldLabel}>THRESHOLD</Text>
               <View style={styles.inputRow}>
@@ -99,53 +172,37 @@ function AddAlertModal({ visible, unit, onClose, onAdd }: AddModalProps) {
                   placeholder="0"
                   placeholderTextColor="#475569"
                   autoFocus
-                  returnKeyType="next"
+                  returnKeyType={tab === 'geiger' ? 'next' : 'done'}
+                  onSubmitEditing={tab === 'single' ? handleAdd : undefined}
                 />
                 {unit ? <Text style={styles.unitLabel}>{unit}</Text> : null}
               </View>
             </View>
 
-            <View style={styles.modalField}>
-              <Text style={styles.fieldLabel}>MAX (OPTIONAL - GEIGER MODE)</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={maxText}
-                  onChangeText={setMaxText}
-                  placeholder="-"
-                  placeholderTextColor="#475569"
-                  returnKeyType="done"
-                  onSubmitEditing={handleAdd}
-                />
-                {unit ? <Text style={styles.unitLabel}>{unit}</Text> : null}
+            {tab === 'geiger' && (
+              <View style={styles.modalField}>
+                <Text style={styles.fieldLabel}>THRESHOLD MAX</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={maxText}
+                    onChangeText={setMaxText}
+                    placeholder="0"
+                    placeholderTextColor="#475569"
+                    returnKeyType="done"
+                    onSubmitEditing={handleAdd}
+                  />
+                  {unit ? <Text style={styles.unitLabel}>{unit}</Text> : null}
+                </View>
               </View>
-            </View>
+            )}
 
-            <View style={styles.modalField}>
-              <Text style={styles.fieldLabel}>SOUND</Text>
-              <View style={styles.soundRow}>
-                {ALERT_SOUND_OPTIONS.map((option) => {
-                  const selected = soundType === option.value
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.soundOption, selected && styles.soundOptionActive]}
-                      onPress={() => {
-                        setSoundType(option.value)
-                        previewAlertSound(option.value)
-                      }}
-                    >
-                      <Text
-                        style={[styles.soundOptionText, selected && styles.soundOptionTextActive]}
-                      >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-            </View>
+            <SoundPicker
+              presets={tab === 'single' ? singlePresets : geigerPresets}
+              selected={soundType}
+              onSelect={setSoundType}
+            />
 
             <TouchableOpacity style={styles.confirmButton} onPress={handleAdd}>
               <Text style={styles.confirmText}>Add</Text>
@@ -187,12 +244,17 @@ function AlertsSection({ controlId, unit }: AlertsSectionProps) {
             hitSlop={8}
           >
             <View style={[styles.dot, rule.enabled && styles.dotActive]} />
+            {rule.thresholdMax != null ? (
+              <RadioIcon size={12} color="#64748b" weight="fill" />
+            ) : (
+              <WaveformIcon size={12} color="#64748b" weight="fill" />
+            )}
             <Text style={[styles.ruleText, !rule.enabled && styles.ruleTextDisabled]}>
               {rule.thresholdMax != null
                 ? `${rule.threshold} - ${rule.thresholdMax}${unit ? ` ${unit}` : ''}`
                 : `${rule.threshold}${unit ? ` ${unit}` : ''}`}
             </Text>
-            <Text style={styles.ruleMeta}>{rule.soundType}</Text>
+            <Text style={styles.ruleMeta}>{rule.thresholdMax != null ? 'geiger' : 'single'}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => void remove(rule.id)} hitSlop={8}>
             <TrashIcon size={16} color={theme.error.color} weight="fill" />
@@ -438,5 +500,30 @@ const styles = StyleSheet.create({
     color: '#0c2a3f',
     fontSize: 15,
     fontWeight: '700',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 0,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#0f172a',
+  },
+  tabActive: {
+    backgroundColor: theme.wheel.bg,
+  },
+  tabText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#f1f5f9',
   },
 })
