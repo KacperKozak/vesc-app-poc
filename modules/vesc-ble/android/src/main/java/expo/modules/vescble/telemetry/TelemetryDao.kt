@@ -274,6 +274,95 @@ interface TelemetryDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertSettings(settings: AppSettingsEntity)
+
+  @Query("SELECT * FROM tune_profiles WHERE board_id = :boardId ORDER BY created_at ASC")
+  suspend fun getTuneProfilesByBoard(boardId: String): List<TuneProfileEntity>
+
+  @Query("SELECT * FROM tune_profiles WHERE id = :id LIMIT 1")
+  suspend fun getTuneProfile(id: String): TuneProfileEntity?
+
+  @Query("DELETE FROM tune_profiles WHERE id = :id")
+  suspend fun deleteTuneProfile(id: String)
+
+  @Query("DELETE FROM tune_history_entries WHERE profile_id = :profileId")
+  suspend fun deleteTuneHistoryForProfile(profileId: String)
+
+  @Query("UPDATE tune_profiles SET name = :name, updated_at = :updatedAt WHERE id = :profileId")
+  suspend fun updateProfileName(profileId: String, name: String, updatedAt: Long): Int
+
+  @Query("SELECT * FROM tune_history_entries WHERE id = :id LIMIT 1")
+  suspend fun getTuneHistoryEntry(id: Long): TuneHistoryEntryEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertTuneProfile(profile: TuneProfileEntity)
+
+  @Insert(onConflict = OnConflictStrategy.IGNORE)
+  suspend fun insertTuneProfile(profile: TuneProfileEntity): Long
+
+  @Query("SELECT COUNT(*) FROM tune_profiles WHERE board_id = :boardId")
+  suspend fun countTuneProfilesForBoard(boardId: String): Int
+
+  @Insert
+  suspend fun insertTuneHistoryEntry(entry: TuneHistoryEntryEntity): Long
+
+  @Query("SELECT * FROM tune_history_entries WHERE profile_id = :profileId ORDER BY created_at DESC")
+  suspend fun getTuneHistoryEntries(profileId: String): List<TuneHistoryEntryEntity>
+
+  @Query("UPDATE tune_profiles SET fields_json = :fieldsJson, updated_at = :updatedAt WHERE id = :profileId")
+  suspend fun updateProfileFields(profileId: String, fieldsJson: String, updatedAt: Long): Int
+
+  @Transaction
+  suspend fun saveTuneProfile(profileId: String, fieldsJson: String, updatedAt: Long): TuneProfileEntity {
+    val current = getTuneProfile(profileId) ?: throw IllegalArgumentException("Tune Profile not found: $profileId")
+    insertTuneHistoryEntry(
+      TuneHistoryEntryEntity(
+        profileId = current.id,
+        fieldsJson = current.fieldsJson,
+        createdAt = updatedAt,
+      ),
+    )
+    updateProfileFields(profileId, fieldsJson, updatedAt)
+    return getTuneProfile(profileId) ?: throw IllegalStateException("Tune Profile disappeared during save: $profileId")
+  }
+
+  @Transaction
+  suspend fun deleteTuneProfileSafe(profileId: String) {
+    val profile = getTuneProfile(profileId) ?: throw IllegalArgumentException("Tune Profile not found: $profileId")
+    if (countTuneProfilesForBoard(profile.boardId) <= 1) {
+      throw IllegalStateException("Cannot delete the last profile for a board")
+    }
+    deleteTuneHistoryForProfile(profileId)
+    deleteTuneProfile(profileId)
+  }
+
+  @Transaction
+  suspend fun rollbackTuneProfile(profileId: String, historyEntryId: Long): TuneProfileEntity {
+    val profile = getTuneProfile(profileId) ?: throw IllegalArgumentException("Tune Profile not found: $profileId")
+    val entry = getTuneHistoryEntry(historyEntryId) ?: throw IllegalArgumentException("History entry not found: $historyEntryId")
+    if (entry.profileId != profileId) throw IllegalArgumentException("History entry does not belong to this profile")
+    val now = System.currentTimeMillis()
+    insertTuneHistoryEntry(
+      TuneHistoryEntryEntity(
+        profileId = profile.id,
+        fieldsJson = profile.fieldsJson,
+        createdAt = now,
+      ),
+    )
+    updateProfileFields(profileId, entry.fieldsJson, now)
+    return getTuneProfile(profileId) ?: throw IllegalStateException("Tune Profile disappeared during rollback: $profileId")
+  }
+
+  @Transaction
+  suspend fun insertTuneProfileIfBoardHasNone(
+    profile: TuneProfileEntity,
+    historyEntry: TuneHistoryEntryEntity,
+  ): TuneProfileEntity? {
+    if (countTuneProfilesForBoard(profile.boardId) > 0) return null
+    val inserted = insertTuneProfile(profile)
+    if (inserted == -1L) return null
+    insertTuneHistoryEntry(historyEntry)
+    return profile
+  }
 }
 
 private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity): TelemetryMinuteBucketEntity {

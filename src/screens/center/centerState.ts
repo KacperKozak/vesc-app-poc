@@ -9,7 +9,7 @@ export function getPreviousRideSession(
   selected: HistorySession | null,
 ): HistorySession | null {
   if (!selected) return null
-  const index = sessions.findIndex((session) => session.id === selected.id)
+  const index = findSessionIndex(sessions, selected)
   if (index < 0) return null
   return sessions[index + 1] ?? null
 }
@@ -19,7 +19,19 @@ export function getNextRideSession(
   selected: HistorySession | null,
 ): HistorySession | null {
   if (!selected) return null
-  const index = sessions.findIndex((session) => session.id === selected.id)
+  const index = findSessionIndex(sessions, selected)
   if (index <= 0) return null
   return sessions[index - 1] ?? null
+}
+
+export function findSessionIndex(sessions: HistorySession[], selected: HistorySession): number {
+  const exact = sessions.findIndex((session) => session.id === selected.id)
+  if (exact >= 0) return exact
+
+  return sessions.findIndex(
+    (session) =>
+      session.deviceId === selected.deviceId &&
+      session.startAtMs <= selected.endAtMs &&
+      session.endAtMs >= selected.startAtMs,
+  )
 }

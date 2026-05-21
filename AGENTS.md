@@ -23,22 +23,26 @@ This is a PoC, but keep it sharp:
 - Make one focused stability change at a time when isolating bugs.
 - Remove unused code when replacing a path; do not keep dead code for later.
 - Keep trivial local predicates inline with their component/module. Do not create standalone helper
-  files for one-line booleans or tiny component-local decisions.
+  files for one-line booleans or tiny component-local decisions, but use existing utility functions when available.
 - Do not add tests for trivial predicates that TypeScript and the surrounding behavior already
   cover. Add tests for meaningful behavior, edge cases, contracts, or regressions.
 - Files under `src/components/` should be React components or component-owned assets. Put
   non-component shared logic in an appropriate domain folder only when it is genuinely shared.
 
-## Icons
+## React Native
 
-Use **`phosphor-react-native`** for all icons. Do **not** use emoji or unicode characters as icon substitutes.
+React Native UI conventions, including icon usage, live in `docs/agents/react.md`.
 
-```tsx
-import { LightningIcon, WarningCircleIcon } from 'phosphor-react-native'
+## Agent skills
 
-<LightningIcon size={16} color="#4ade80" weight="fill" />
-```
+### Issue tracker
 
-- Always use the **`Icon`-suffixed** export (e.g. `LightningIcon`, not `Lightning`). The un-suffixed names are deprecated and will produce warnings.
-- The `type Icon` export (for typing icon props) is **not** suffixed — import it as `type Icon` as-is.
-- `size` is typically `10`–`16` for inline/label icons, larger for standalone UI elements
+Issues and PRDs are tracked in GitHub Issues for `KacperKozak/vesc-app-poc`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo with root `CONTEXT.md` and root `docs/adr/`. See `docs/agents/domain.md`.

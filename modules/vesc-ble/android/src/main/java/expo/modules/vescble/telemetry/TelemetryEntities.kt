@@ -275,4 +275,46 @@ data class AppSettingsEntity(
   val autoRecording: Boolean = false,
   @ColumnInfo(name = "selected_board_id")
   val selectedBoardId: String? = null,
+  @ColumnInfo(name = "last_gps_latitude")
+  val lastGpsLatitude: Double? = null,
+  @ColumnInfo(name = "last_gps_longitude")
+  val lastGpsLongitude: Double? = null,
+)
+
+@Entity(
+  tableName = "tune_profiles",
+  indices = [
+    Index(value = ["board_id"]),
+  ],
+)
+data class TuneProfileEntity(
+  @PrimaryKey
+  val id: String,
+  @ColumnInfo(name = "board_id")
+  val boardId: String,
+  val name: String,
+  @ColumnInfo(name = "fields_json")
+  val fieldsJson: String,
+  @ColumnInfo(name = "created_at")
+  val createdAt: Long,
+  @ColumnInfo(name = "updated_at")
+  val updatedAt: Long,
+)
+
+@Entity(
+  tableName = "tune_history_entries",
+  indices = [
+    Index(value = ["profile_id"]),
+    Index(value = ["created_at"]),
+  ],
+)
+data class TuneHistoryEntryEntity(
+  @PrimaryKey(autoGenerate = true)
+  val id: Long = 0,
+  @ColumnInfo(name = "profile_id")
+  val profileId: String,
+  @ColumnInfo(name = "fields_json")
+  val fieldsJson: String,
+  @ColumnInfo(name = "created_at")
+  val createdAt: Long,
 )

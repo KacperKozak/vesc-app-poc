@@ -114,6 +114,32 @@ class VescBleModule : Module() {
     Function("setDebugRecordingEnabled") { enabled: Boolean ->
       requestedDebugRecordingEnabled = enabled
     }
+    Function("reportUiError") { message: String, source: String?, stack: String? ->
+      DiagnosticReporter.get(context.applicationContext).capture(
+        "ui_error",
+        mapOf(
+          "operation" to "ui",
+          "message" to message,
+          "source" to source,
+          "stack" to stack,
+        ),
+      )
+    }
+    Function("reportDiagnosticTest") {
+      val reporter = DiagnosticReporter.get(context.applicationContext)
+      reporter.capture(
+        "diagnostic_test",
+        mapOf(
+          "operation" to "dev_diagnostics",
+          "source" to "settings_dev",
+          "message" to "Manual diagnostic test",
+        ),
+      )
+      reporter.status()
+    }
+    Function("getDiagnosticStatus") {
+      DiagnosticReporter.get(context.applicationContext).status()
+    }
 
     AsyncFunction("selectBoard") Coroutine { boardId: String ->
       selectBoard(boardId)
@@ -138,6 +164,41 @@ class VescBleModule : Module() {
         onSuccess = { snapshot -> promise.resolve(snapshot) },
         onError = { code, message -> promise.reject(code, message, null) },
       )
+    }
+    AsyncFunction("pushProfileToBoard") { profileId: String, promise: Promise ->
+      VescForegroundService.pushProfileToBoard(
+        context.applicationContext,
+        profileId,
+        onSuccess = { snapshot -> promise.resolve(snapshot) },
+        onError = { code, message -> promise.reject(code, message, null) },
+      )
+    }
+    AsyncFunction("getTuneProfiles") Coroutine { boardId: String ->
+      AppDataRepository.get(context.applicationContext).getTuneProfiles(boardId)
+    }
+    AsyncFunction("getTuneProfile") Coroutine { profileId: String ->
+      AppDataRepository.get(context.applicationContext).getTuneProfile(profileId)
+    }
+    AsyncFunction("createProfile") Coroutine { boardId: String, name: String, fields: Map<String, Any?> ->
+      AppDataRepository.get(context.applicationContext).createProfile(boardId, name, fields)
+    }
+    AsyncFunction("renameProfile") Coroutine { profileId: String, name: String ->
+      AppDataRepository.get(context.applicationContext).renameProfile(profileId, name)
+    }
+    AsyncFunction("deleteProfile") Coroutine { profileId: String ->
+      AppDataRepository.get(context.applicationContext).deleteProfile(profileId)
+    }
+    AsyncFunction("getProfileHistory") Coroutine { profileId: String ->
+      AppDataRepository.get(context.applicationContext).getProfileHistory(profileId)
+    }
+    AsyncFunction("rollbackProfile") Coroutine { profileId: String, historyEntryId: Double ->
+      AppDataRepository.get(context.applicationContext).rollbackProfile(profileId, historyEntryId.toLong())
+    }
+    AsyncFunction("copyProfileToBoard") Coroutine { profileId: String, targetBoardId: String, newName: String ->
+      AppDataRepository.get(context.applicationContext).copyProfileToBoard(profileId, targetBoardId, newName)
+    }
+    AsyncFunction("saveProfile") Coroutine { profileId: String, fields: Map<String, Any?> ->
+      AppDataRepository.get(context.applicationContext).saveProfile(profileId, fields)
     }
     AsyncFunction("getTotalProfileStats") {
       runBlocking { ProfileStatsRepository.get(context.applicationContext).getTotalProfileStats() }

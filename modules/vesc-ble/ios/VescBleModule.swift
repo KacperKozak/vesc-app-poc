@@ -18,6 +18,7 @@ public class VescBleModule: Module {
   private var scanTimer: Timer?
   private var telemetryTimer: Timer?
   private var locationTimer: Timer?
+  private var lastGpsPersistedAt = Date.distantPast
 
   // MARK: - Mock data state
 
@@ -166,6 +167,14 @@ public class VescBleModule: Module {
       )
     }
 
+    AsyncFunction("getTuneProfiles") { (_: String, promise: Promise) in
+      promise.resolve([] as [Any])
+    }
+
+    AsyncFunction("getTuneProfile") { (_: String, promise: Promise) in
+      promise.resolve(nil)
+    }
+
     AsyncFunction("getTotalProfileStats") { (promise: Promise) in
       promise.resolve(Self.emptyProfileStats())
     }
@@ -286,6 +295,7 @@ public class VescBleModule: Module {
         guard let self = self else { return }
         self.mockLat += Double.random(in: -0.0001...0.0001)
         self.mockLon += Double.random(in: -0.0001...0.0001)
+        self.persistMockLocationIfNeeded(latitude: self.mockLat, longitude: self.mockLon)
         self.sendEvent("onLocation", [
           "latitude": self.mockLat,
           "longitude": self.mockLon,
@@ -306,6 +316,16 @@ public class VescBleModule: Module {
       self?.locationTimer?.invalidate()
       self?.locationTimer = nil
     }
+  }
+
+  private func persistMockLocationIfNeeded(latitude: Double, longitude: Double) {
+    let now = Date()
+    guard now.timeIntervalSince(lastGpsPersistedAt) >= 30 else { return }
+    lastGpsPersistedAt = now
+    var settings = Self.loadSettings()
+    settings["lastGpsLatitude"] = latitude
+    settings["lastGpsLongitude"] = longitude
+    Self.saveSettings(settings)
   }
 
   // MARK: - Telemetry
@@ -489,6 +509,8 @@ public class VescBleModule: Module {
     "autoConnect": true,
     "autoRecording": false,
     "selectedBoardId": NSNull(),
+    "lastGpsLatitude": NSNull(),
+    "lastGpsLongitude": NSNull(),
   ]
 
   private static func loadSettings() -> [String: Any] {
