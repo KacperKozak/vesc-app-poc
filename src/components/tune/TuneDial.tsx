@@ -14,7 +14,9 @@ import Animated, {
   useAnimatedStyle,
   useFrameCallback,
   useSharedValue,
+  withSequence,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -41,7 +43,10 @@ import {
   shouldPlayTuneDialHaptic,
 } from '@/components/tune/tuneDialPhysics'
 
-const DIAL_HEIGHT = 56
+const DIAL_HEIGHT = 78
+const VALUE_MARKER_SIZE = 26
+const VALUE_MARKER_TOP = 35
+const MARKER_LINE_WIDTH = 2.5
 const INDICATOR_COLOR = '#ef4444'
 const PREV_MARK_COLOR = '#facc15'
 const MAJOR_TICK_COLOR = '#94a3b8'
@@ -95,6 +100,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
   const lastStepIndex = useSharedValue(initialStepIndex)
   const lastEdgeHapticStepIndex = useSharedValue(-1)
   const renderedWidthScale = useSharedValue(1)
+  const valueBadgeScale = useSharedValue(1)
 
   const tick = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -390,7 +396,19 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
     transform: [{ translateX: translateX.value }],
   }))
 
+  useEffect(() => {
+    valueBadgeScale.value = withSequence(
+      withTiming(1.06, { duration: 80 }),
+      withTiming(1, { duration: 140 }),
+    )
+  }, [value, valueBadgeScale])
+
+  const valueBadgeStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: valueBadgeScale.value }],
+  }))
+
   const prevMarkOffset = previousValue != null ? valueToOffset(previousValue) : null
+  const previousValueLabel = previousValue != null ? formatTuneValue(previousValue) : null
   const decimals = step < 1 ? Math.ceil(Math.abs(Math.log10(step))) : 0
 
   const ticks = useMemo(() => {
@@ -440,13 +458,24 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
           <Animated.View style={styles.gestureArea}>
             <Animated.View style={[styles.strip, { width: totalWidth + 1 }, stripStyle]}>
               {ticks}
-              {prevMarkOffset != null && (
-                <View style={[styles.prevMark, { left: prevMarkOffset }]} />
+              {prevMarkOffset != null && previousValueLabel != null && (
+                <>
+                  <View style={[styles.prevMarkTop, { left: prevMarkOffset }]} />
+                  <View style={[styles.prevMarkBottom, { left: prevMarkOffset }]} />
+                  <View style={[styles.prevValueRing, { left: prevMarkOffset }]}>
+                    <Text style={styles.prevValueText}>{previousValueLabel}</Text>
+                  </View>
+                </>
               )}
             </Animated.View>
           </Animated.View>
         </GestureDetector>
         <View style={styles.indicator} pointerEvents="none" />
+        <View style={styles.valueBadgeAnchor} pointerEvents="none">
+          <Animated.View style={[styles.valueBadge, valueBadgeStyle]}>
+            <Text style={styles.valueBadgeText}>{formatTuneValue(value)}</Text>
+          </Animated.View>
+        </View>
       </View>
     </GestureHandlerRootView>
   )
@@ -478,7 +507,7 @@ const styles = StyleSheet.create({
   },
   majorTickLine: {
     width: 2,
-    height: 20,
+    height: 27,
     backgroundColor: MAJOR_TICK_COLOR,
     borderRadius: 1,
   },
@@ -487,7 +516,8 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
-    marginTop: 3,
+    lineHeight: 11,
+    marginTop: 9,
     width: 50,
     textAlign: 'center',
   },
@@ -495,7 +525,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     width: 1,
-    height: 10,
+    height: 13,
     backgroundColor: MINOR_TICK_COLOR,
     borderRadius: 0.5,
   },
@@ -503,26 +533,55 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 15,
     width: 1,
-    height: 7,
+    height: 9,
     backgroundColor: MINOR_TICK_COLOR,
     borderRadius: 0.5,
   },
-  prevMark: {
+  prevMarkTop: {
     position: 'absolute',
     top: 0,
-    width: 2,
-    height: DIAL_HEIGHT,
+    width: MARKER_LINE_WIDTH,
+    height: VALUE_MARKER_TOP,
+    marginLeft: -MARKER_LINE_WIDTH / 2,
     backgroundColor: PREV_MARK_COLOR,
-    opacity: 0.5,
     borderRadius: 1,
+  },
+  prevMarkBottom: {
+    position: 'absolute',
+    top: VALUE_MARKER_TOP + VALUE_MARKER_SIZE,
+    width: MARKER_LINE_WIDTH,
+    height: DIAL_HEIGHT - VALUE_MARKER_TOP - VALUE_MARKER_SIZE,
+    marginLeft: -MARKER_LINE_WIDTH / 2,
+    backgroundColor: PREV_MARK_COLOR,
+    borderRadius: 1,
+  },
+  prevValueRing: {
+    position: 'absolute',
+    top: VALUE_MARKER_TOP,
+    width: VALUE_MARKER_SIZE,
+    height: VALUE_MARKER_SIZE,
+    marginLeft: -VALUE_MARKER_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: PREV_MARK_COLOR,
+    borderRadius: VALUE_MARKER_SIZE / 2,
+  },
+  prevValueText: {
+    color: PREV_MARK_COLOR,
+    fontSize: 9,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    lineHeight: 11,
+    textAlign: 'center',
   },
   indicator: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     left: '50%',
-    width: 2.5,
-    marginLeft: -1.25,
+    width: MARKER_LINE_WIDTH,
+    marginLeft: -MARKER_LINE_WIDTH / 2,
     backgroundColor: INDICATOR_COLOR,
     borderRadius: 2,
     shadowColor: INDICATOR_COLOR,
@@ -530,5 +589,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius: 4,
     elevation: 4,
+  },
+  valueBadge: {
+    width: VALUE_MARKER_SIZE,
+    height: VALUE_MARKER_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: INDICATOR_COLOR,
+    borderRadius: VALUE_MARKER_SIZE / 2,
+    shadowColor: INDICATOR_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  valueBadgeAnchor: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: DIAL_HEIGHT - VALUE_MARKER_TOP - VALUE_MARKER_SIZE,
+    alignItems: 'center',
+  },
+  valueBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    lineHeight: 11,
+    textAlign: 'center',
   },
 })

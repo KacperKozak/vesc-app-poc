@@ -220,6 +220,7 @@ function AlertFormModal({
               </Text>
               <TuneDial
                 value={threshold}
+                previousValue={editRule?.threshold}
                 min={dialConfig.min}
                 max={dialConfig.max}
                 step={dialConfig.step}
@@ -236,6 +237,7 @@ function AlertFormModal({
                 </Text>
                 <TuneDial
                   value={thresholdMax}
+                  previousValue={editRule?.thresholdMax ?? undefined}
                   min={dialConfig.min}
                   max={dialConfig.max}
                   step={dialConfig.step}
