@@ -10,7 +10,6 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
   entities = [
     TelemetryFrameEntity::class,
-    HistoryLocationEntity::class,
     TelemetryMinuteBucketEntity::class,
     TelemetryMarkerEntity::class,
     BoardEntity::class,
@@ -19,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     TuneProfileEntity::class,
     TuneHistoryEntryEntity::class,
   ],
-  version = 8,
+  version = 9,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -104,6 +103,13 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_8_9 = object : Migration(8, 9) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS history_locations")
+        db.execSQL("DELETE FROM telemetry_minute_buckets WHERE sample_count = 0")
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -111,7 +117,14 @@ abstract class TelemetryDatabase : RoomDatabase() {
           TelemetryDatabase::class.java,
           "telemetry.db",
         )
-          .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+          .addMigrations(
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
+            MIGRATION_8_9,
+          )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {

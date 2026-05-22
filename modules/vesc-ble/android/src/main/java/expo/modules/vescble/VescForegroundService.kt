@@ -18,7 +18,6 @@ import android.util.Log
 import java.io.File
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
-import expo.modules.vescble.telemetry.TelemetryLocationCapture
 import expo.modules.vescble.telemetry.TelemetryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1594,7 +1593,6 @@ class VescForegroundService : Service() {
             altitudeM = altitudeM,
             timestamp = location.time,
             precise = precise,
-            saved = false,
         )
         latestLocation = snapshot
         if (!precise) {
@@ -1604,29 +1602,13 @@ class VescForegroundService : Service() {
             }
             return
         }
-        val capture = TelemetryLocationCapture(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            speedMps = speedMps,
-            bearingDeg = bearingDeg,
-            accuracyM = accuracyM,
-            altitudeM = altitudeM,
-            timestamp = location.time,
-            precise = precise,
-        )
-        val saved = telemetryStore?.recordLocation(
-            capture,
-            deviceId = boardConfig?.deviceId,
-            deviceName = boardConfig?.deviceName,
-        ) ?: false
-        val savedSnapshot = snapshot.copy(saved = saved)
-        latestLocation = savedSnapshot
-        latestPreciseLocation = savedSnapshot
-        persistLastGpsLocation(savedSnapshot)
-        appendRecentLocation(savedSnapshot)
-        emitEvent("onLocation", savedSnapshot.toMap())
-        if (boardConfig == null) showNotification(formatGpsNotificationText(savedSnapshot))
-        recorder?.recordLocation(savedSnapshot)
+        latestLocation = snapshot
+        latestPreciseLocation = snapshot
+        persistLastGpsLocation(snapshot)
+        appendRecentLocation(snapshot)
+        emitEvent("onLocation", snapshot.toMap())
+        if (boardConfig == null) showNotification(formatGpsNotificationText(snapshot))
+        recorder?.recordLocation(snapshot)
     }
 
     private fun persistLastGpsLocation(location: LocationSnapshot) {

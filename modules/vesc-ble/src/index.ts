@@ -24,7 +24,6 @@ export interface LocationEvent {
   altitudeM: number | null
   timestamp: number
   precise: boolean
-  saved: boolean
 }
 
 export type SessionStatus =

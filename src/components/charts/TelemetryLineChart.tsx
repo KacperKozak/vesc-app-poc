@@ -44,8 +44,6 @@ interface TelemetryLineChartProps {
   onGestureStart?: () => void
   formatValue?: (value: number) => string
   windowMs?: number
-  xMinMs?: number
-  xMaxMs?: number
 }
 
 export function TelemetryLineChart({
@@ -61,8 +59,6 @@ export function TelemetryLineChart({
   onGestureStart,
   formatValue,
   windowMs,
-  xMinMs,
-  xMaxMs,
 }: TelemetryLineChartProps) {
   'use no memo'
   const [chartWidth, setChartWidth] = useState(0)
@@ -86,40 +82,29 @@ export function TelemetryLineChart({
 
   const markerPosition = useMemo(() => {
     if (!currentPoint || chartWidth < 1) return null
-    return getChartPosition(points, currentPoint, range, chartWidth, height, windowMs, {
-      minMs: xMinMs ?? Number.NaN,
-      maxMs: xMaxMs ?? Number.NaN,
-    })
-  }, [chartWidth, currentPoint, height, points, range, windowMs, xMaxMs, xMinMs])
+    return getChartPosition(points, currentPoint, range, chartWidth, height, windowMs)
+  }, [chartWidth, currentPoint, height, points, range, windowMs])
 
   const polylinePoints = useMemo(
     () =>
       chartWidth > 0
         ? points
-            .map((point) =>
-              getChartPosition(points, point, range, chartWidth, height, windowMs, {
-                minMs: xMinMs ?? Number.NaN,
-                maxMs: xMaxMs ?? Number.NaN,
-              }),
-            )
+            .map((point) => getChartPosition(points, point, range, chartWidth, height, windowMs))
             .filter((point): point is { x: number; y: number } => point != null)
             .map((point) => `${point.x},${point.y}`)
             .join(' ')
         : '',
-    [chartWidth, height, points, range, windowMs, xMaxMs, xMinMs],
+    [chartWidth, height, points, range, windowMs],
   )
 
   const selectAtPageX = useCallback(
     (x: number) => {
       if (!onPointSelectedRef.current) return
-      const point = findNearestChartPointAtX(points, x - chartPageX, chartWidth, windowMs, {
-        minMs: xMinMs ?? Number.NaN,
-        maxMs: xMaxMs ?? Number.NaN,
-      })
+      const point = findNearestChartPointAtX(points, x - chartPageX, chartWidth, windowMs)
       if (!point) return
       onPointSelectedRef.current(point)
     },
-    [chartPageX, chartWidth, points, windowMs, xMaxMs, xMinMs],
+    [chartPageX, chartWidth, points, windowMs],
   )
 
   const panResponder = useMemo(
@@ -148,19 +133,13 @@ export function TelemetryLineChart({
 
   const timeLabels = useMemo(() => {
     if (points.length < 2) return null
-    if (xMinMs != null && xMaxMs != null && xMaxMs > xMinMs) {
-      return {
-        start: formatTime(new Date(xMinMs)),
-        end: formatTime(new Date(xMaxMs)),
-      }
-    }
     const now = points[points.length - 1].date
     const start = windowMs ? new Date(now.getTime() - windowMs) : points[0].date
     return {
       start: formatRelativeTime(start, now),
       end: 'now',
     }
-  }, [points, windowMs, xMaxMs, xMinMs])
+  }, [points, windowMs])
 
   const tooltipLeft = useMemo(() => {
     if (!markerPosition || chartWidth <= 0) return 0

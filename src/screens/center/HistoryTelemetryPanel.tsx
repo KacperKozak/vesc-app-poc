@@ -344,8 +344,6 @@ export function HistoryTelemetryPanel({
         containerStyle={styles.chart}
         formatValue={(v) => telemetry.speed.formatWithUnit(v)}
         onPointSelected={(point) => handlePointSelected(point)}
-        xMinMs={startAtMs}
-        xMaxMs={endAtMs}
       />
 
       {OPTIONAL_CHART_METRICS.filter((m) => activeCharts.has(m.key)).map((metric) => {
@@ -363,8 +361,6 @@ export function HistoryTelemetryPanel({
             containerStyle={styles.chart}
             formatValue={cfg.formatValue}
             onPointSelected={(point) => handlePointSelected(point)}
-            xMinMs={startAtMs}
-            xMaxMs={endAtMs}
           />
         )
       })}

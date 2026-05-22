@@ -11,12 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 private const val TAG = "TelemetryStore"
 private const val KEYFRAME_INTERVAL_MS = 60_000L
@@ -73,9 +69,7 @@ class TelemetryRepository private constructor(context: Context) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val lock = Any()
   private val pending = ArrayDeque<PendingFrame>()
-  private val pendingLocations = ArrayDeque<PendingLocation>()
   private val pendingMarkers = ArrayDeque<TelemetryMarkerEntity>()
-  private val lastLocationByDevice = mutableMapOf<String, LocationState>()
 
   private var flushScheduled = false
   private var lastState: FullTelemetryState? = null
@@ -138,12 +132,8 @@ class TelemetryRepository private constructor(context: Context) {
 
       pending.addLast(PendingFrame(frame, current))
       if (gapMarker != null) pendingMarkers.addLast(gapMarker)
-      while (pending.size + pendingLocations.size > MAX_PENDING_FRAMES) {
-        if (pending.isNotEmpty()) {
-          pending.removeFirst()
-        } else {
-          pendingLocations.removeFirst()
-        }
+      while (pending.size > MAX_PENDING_FRAMES) {
+        pending.removeFirst()
         droppedPendingFrames++
         forceNextKeyframe = true
       }
@@ -154,69 +144,13 @@ class TelemetryRepository private constructor(context: Context) {
         lastKeyframeAtMs = capture.capturedAtMs
         forceNextKeyframe = false
       }
-      if (pending.size + pendingLocations.size >= FLUSH_FRAME_COUNT) {
+      if (pending.size >= FLUSH_FRAME_COUNT) {
         flushScheduled = false
         scope.launch { flushNow() }
       } else {
         scheduleFlushLocked()
       }
     }
-  }
-
-  fun recordLocation(
-    location: TelemetryLocationCapture,
-    deviceId: String? = null,
-    deviceName: String? = null,
-  ): Boolean {
-    val state = LocationState.from(location, deviceId, deviceName)
-    synchronized(lock) {
-      val key = deviceId ?: UNKNOWN_TELEMETRY_DEVICE_ID
-      val previous = lastLocationByDevice[key]
-      if (previous != null &&
-        previous.locationTimestampMs == state.locationTimestampMs &&
-        previous.latitudeE7 == state.latitudeE7 &&
-        previous.longitudeE7 == state.longitudeE7
-      ) {
-        return false
-      }
-      val gapMs = lastHistoryAtMs?.let { state.capturedAtMs - it }
-      if (gapMs != null && gapMs > GAP_BOUNDARY_MS) {
-        pendingMarkers.addLast(
-          TelemetryMarkerEntity(
-            occurredAtMs = state.capturedAtMs,
-            elapsedRealtimeMs = state.elapsedRealtimeMs,
-            type = "gap",
-            deviceId = deviceId,
-            deviceName = deviceName,
-            message = null,
-            gapMs = gapMs,
-          ),
-        )
-      }
-      val distanceCm = previous
-        ?.takeIf { it.precise && state.precise && state.capturedAtMs >= it.capturedAtMs }
-        ?.let { distanceCm(it, state) }
-      val next = state.copy(distanceFromPreviousCm = distanceCm)
-      pendingLocations.addLast(PendingLocation(next.toEntity(), next))
-      while (pending.size + pendingLocations.size > MAX_PENDING_FRAMES) {
-        if (pending.isNotEmpty()) {
-          pending.removeFirst()
-        } else {
-          pendingLocations.removeFirst()
-        }
-        droppedPendingFrames++
-        forceNextKeyframe = true
-      }
-      lastLocationByDevice[key] = next
-      lastHistoryAtMs = state.capturedAtMs
-      if (pending.size + pendingLocations.size >= FLUSH_FRAME_COUNT) {
-        flushScheduled = false
-        scope.launch { flushNow() }
-      } else {
-        scheduleFlushLocked()
-      }
-    }
-    return true
   }
 
   fun flushBlocking() {
@@ -229,18 +163,18 @@ class TelemetryRepository private constructor(context: Context) {
   }
 
   suspend fun getHistory(options: Map<String, Any?>): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
-    val now = System.currentTimeMillis()
-    val fromMs = (options["fromMs"] as? Number)?.toLong() ?: 0L
-    val toMs = (options["toMs"] as? Number)?.toLong() ?: now
-    val beforeMs = (options["cursorBeforeMs"] as? Number)?.toLong() ?: toMs
-    val limit = ((options["limit"] as? Number)?.toInt() ?: DEFAULT_HISTORY_LIMIT).coerceIn(1, 500)
-    val deviceId = options["deviceId"] as? String
-
-    val buckets = dao.getHistoryBuckets(fromMs, toMs, beforeMs, deviceId, limit)
+    val query = HistoryQueryOptions.from(options)
+    val buckets = dao.getHistoryBuckets(
+      query.fromMs,
+      query.toMs,
+      query.beforeMs,
+      query.deviceId,
+      query.limit,
+    )
     if (buckets.isEmpty()) return@withContext emptyList()
     val markerFrom = buckets.minOf { it.bucketStartMs } - GAP_BOUNDARY_MS
     val markerTo = buckets.maxOf { it.bucketStartMs } + TELEMETRY_BUCKET_SIZE_MS
-    val markers = dao.getMarkers(markerFrom, markerTo, deviceId)
+    val markers = dao.getMarkers(markerFrom, markerTo, query.deviceId)
     buckets.map { bucket ->
       val marker = markers.lastOrNull {
         it.occurredAtMs >= bucket.firstSampleAtMs - 5_000L &&
@@ -281,48 +215,48 @@ class TelemetryRepository private constructor(context: Context) {
   }
 
   suspend fun getSamples(options: Map<String, Any?>): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
-    val fromMs = (options["fromMs"] as? Number)?.toLong()
-      ?: throw IllegalArgumentException("fromMs is required")
-    val toMs = (options["toMs"] as? Number)?.toLong()
-      ?: throw IllegalArgumentException("toMs is required")
-    val deviceId = options["deviceId"] as? String
-    val limit = ((options["limit"] as? Number)?.toInt() ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, 10_000)
+    val query = SampleQueryOptions.from(options)
+    getSampleStates(query.fromMs, query.toMs, query.deviceId, query.limit)
+      .map { it.state.toSampleMap(it.id) }
+  }
 
+  private suspend fun getSampleStates(
+    fromMs: Long,
+    toMs: Long,
+    deviceId: String?,
+    limit: Int,
+  ): List<HistoryTelemetryState> {
     val keyframe = dao.getLatestKeyframeBefore(fromMs, deviceId)
     val start = keyframe?.capturedAtMs ?: fromMs
     val frames = dao.getFrames(start, toMs, deviceId, limit + 1)
     var state: FullTelemetryState? = null
-    val samples = mutableListOf<Map<String, Any?>>()
+    val samples = mutableListOf<HistoryTelemetryState>()
     for (frame in frames) {
       state = FullTelemetryState.applyFrame(state, frame)
       val current = state ?: continue
       if (frame.capturedAtMs < fromMs) continue
-      samples.add(current.toSampleMap(frame.id))
+      samples.add(HistoryTelemetryState(frame.id, current))
       if (samples.size >= limit) break
     }
-    samples
+    return samples
   }
 
   suspend fun getRange(options: Map<String, Any?>): Map<String, Any?> = withContext(Dispatchers.IO) {
-    val fromMs = (options["fromMs"] as? Number)?.toLong()
-      ?: throw IllegalArgumentException("fromMs is required")
-    val toMs = (options["toMs"] as? Number)?.toLong()
-      ?: throw IllegalArgumentException("toMs is required")
-    val deviceId = options["deviceId"] as? String
-    val limit = ((options["limit"] as? Number)?.toInt() ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, 10_000)
+    val query = SampleQueryOptions.from(options)
+    val samples = getSampleStates(query.fromMs, query.toMs, query.deviceId, query.limit)
     mapOf(
-      "boardSamples" to getSamples(options),
-      "gpsSamples" to dao.getLocations(fromMs, toMs, deviceId, limit).map { it.toMap() },
-      "markers" to dao.getMarkers(fromMs, toMs, deviceId).map { it.toMap() },
+      "boardSamples" to samples.map { it.state.toSampleMap(it.id) },
+      "gpsSamples" to samples.toGpsSampleMaps(),
+      "markers" to dao.getMarkers(query.fromMs, query.toMs, query.deviceId).map { it.toMap() },
     )
   }
 
   suspend fun getSummary(): Map<String, Any?> = withContext(Dispatchers.IO) {
     mapOf(
       "sampleCount" to dao.countFrames(),
-      "gpsPointCount" to dao.countLocations(),
-      "firstAtMs" to listOfNotNull(dao.firstFrameAt(), dao.firstLocationAt()).minOrNull(),
-      "lastAtMs" to listOfNotNull(dao.lastFrameAt(), dao.lastLocationAt()).maxOrNull(),
+      "gpsPointCount" to dao.countTelemetryGpsPoints(),
+      "firstAtMs" to dao.firstFrameAt(),
+      "lastAtMs" to dao.lastFrameAt(),
       "droppedPendingSamples" to synchronized(lock) { droppedPendingFrames },
     )
   }
@@ -332,27 +266,20 @@ class TelemetryRepository private constructor(context: Context) {
   }
 
   suspend fun deleteRange(options: Map<String, Any?>): Int = withContext(Dispatchers.IO) {
-    val fromMs = (options["fromMs"] as? Number)?.toLong()
-      ?: throw IllegalArgumentException("fromMs is required")
-    val toMs = (options["toMs"] as? Number)?.toLong()
-      ?: throw IllegalArgumentException("toMs is required")
-    require(toMs >= fromMs) { "toMs must be greater than or equal to fromMs" }
-    val deviceId = options["deviceId"] as? String
+    val query = RangeMutationOptions.from(options)
     flushNow()
-    dao.deleteRange(fromMs, toMs, deviceId)
+    dao.deleteRange(query.fromMs, query.toMs, query.deviceId)
   }
 
   suspend fun clearAll() = withContext(Dispatchers.IO) {
     dao.clearAll()
     synchronized(lock) {
       pending.clear()
-      pendingLocations.clear()
       pendingMarkers.clear()
       lastState = null
       lastFrameAtMs = null
       lastHistoryAtMs = null
       lastKeyframeAtMs = null
-      lastLocationByDevice.clear()
       forceNextKeyframe = true
     }
   }
@@ -368,18 +295,15 @@ class TelemetryRepository private constructor(context: Context) {
 
   private suspend fun flushNow() {
     val frames: List<PendingFrame>
-    val locations: List<PendingLocation>
     val markers: List<TelemetryMarkerEntity>
     synchronized(lock) {
-      if (pending.isEmpty() && pendingLocations.isEmpty() && pendingMarkers.isEmpty()) {
+      if (pending.isEmpty() && pendingMarkers.isEmpty()) {
         flushScheduled = false
         return
       }
       frames = pending.toList()
-      locations = pendingLocations.toList()
       markers = pendingMarkers.toList()
       pending.clear()
-      pendingLocations.clear()
       pendingMarkers.clear()
       flushScheduled = false
     }
@@ -387,10 +311,9 @@ class TelemetryRepository private constructor(context: Context) {
     try {
       dao.insertBatch(
         frames = frames.map { it.frame },
-        locations = locations.map { it.location },
         buckets = buildTelemetryBuckets(
           telemetryPoints = frames.map { it.state.toBucketPoint() },
-          locationPoints = locations.map { it.state.toBucketPoint() },
+          locationPoints = frames.map { HistoryTelemetryState(it.frame.id, it.state) }.toBucketLocationPoints(),
         ),
         markers = markers,
       )
@@ -416,72 +339,69 @@ private data class PendingFrame(
   val state: FullTelemetryState,
 )
 
-private data class PendingLocation(
-  val location: HistoryLocationEntity,
-  val state: LocationState,
-)
-
-private data class LocationState(
-  val capturedAtMs: Long,
-  val elapsedRealtimeMs: Long,
+private data class HistoryQueryOptions(
+  val fromMs: Long,
+  val toMs: Long,
+  val beforeMs: Long,
   val deviceId: String?,
-  val deviceName: String?,
-  val latitudeE7: Int,
-  val longitudeE7: Int,
-  val gpsSpeedCentiMps: Int?,
-  val bearingCentiDeg: Int?,
-  val accuracyCm: Int?,
-  val altitudeCm: Int?,
-  val locationTimestampMs: Long,
-  val precise: Boolean,
-  val distanceFromPreviousCm: Long?,
+  val limit: Int,
 ) {
-  fun toEntity(): HistoryLocationEntity = HistoryLocationEntity(
-    capturedAtMs = capturedAtMs,
-    elapsedRealtimeMs = elapsedRealtimeMs,
-    deviceId = deviceId,
-    deviceName = deviceName,
-    latitudeE7 = latitudeE7,
-    longitudeE7 = longitudeE7,
-    gpsSpeedCentiMps = gpsSpeedCentiMps,
-    bearingCentiDeg = bearingCentiDeg,
-    accuracyCm = accuracyCm,
-    altitudeCm = altitudeCm,
-    locationTimestampMs = locationTimestampMs,
-    precise = precise,
-    distanceFromPreviousCm = distanceFromPreviousCm,
-  )
-
-  fun toBucketPoint(): BucketLocationPoint = BucketLocationPoint(
-    capturedAtMs = capturedAtMs,
-    deviceId = deviceId,
-    deviceName = deviceName,
-    precise = precise,
-    distanceFromPreviousCm = distanceFromPreviousCm,
-    gpsSpeedCentiMps = gpsSpeedCentiMps,
-  )
-
   companion object {
-    fun from(location: TelemetryLocationCapture, deviceId: String?, deviceName: String?): LocationState =
-      LocationState(
-        capturedAtMs = System.currentTimeMillis(),
-        elapsedRealtimeMs = SystemClock.elapsedRealtime(),
-        deviceId = deviceId,
-        deviceName = deviceName,
-        latitudeE7 = (location.latitude * 10_000_000.0).roundToInt(),
-        longitudeE7 = (location.longitude * 10_000_000.0).roundToInt(),
-        gpsSpeedCentiMps = location.speedMps?.let { (it * 100.0).roundToInt() },
-        bearingCentiDeg = location.bearingDeg?.let { (it * 100.0).roundToInt() },
-        accuracyCm = location.accuracyM?.let { (it * 100.0).roundToInt() },
-        altitudeCm = location.altitudeM?.let { (it * 100.0).roundToInt() },
-        locationTimestampMs = location.timestamp,
-        precise = location.precise,
-        distanceFromPreviousCm = null,
+    fun from(options: Map<String, Any?>): HistoryQueryOptions {
+      val toMs = options.long("toMs") ?: System.currentTimeMillis()
+      return HistoryQueryOptions(
+        fromMs = options.long("fromMs") ?: 0L,
+        toMs = toMs,
+        beforeMs = options.long("cursorBeforeMs") ?: toMs,
+        deviceId = options["deviceId"] as? String,
+        limit = (options.int("limit") ?: DEFAULT_HISTORY_LIMIT).coerceIn(1, 500),
+      )
+    }
+  }
+}
+
+private data class SampleQueryOptions(
+  val fromMs: Long,
+  val toMs: Long,
+  val deviceId: String?,
+  val limit: Int,
+) {
+  companion object {
+    fun from(options: Map<String, Any?>): SampleQueryOptions =
+      SampleQueryOptions(
+        fromMs = options.requiredLong("fromMs"),
+        toMs = options.requiredLong("toMs"),
+        deviceId = options["deviceId"] as? String,
+        limit = (options.int("limit") ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, 10_000),
       )
   }
 }
 
-private data class FullTelemetryState(
+private data class RangeMutationOptions(
+  val fromMs: Long,
+  val toMs: Long,
+  val deviceId: String?,
+) {
+  companion object {
+    fun from(options: Map<String, Any?>): RangeMutationOptions {
+      val fromMs = options.requiredLong("fromMs")
+      val toMs = options.requiredLong("toMs")
+      require(toMs >= fromMs) { "toMs must be greater than or equal to fromMs" }
+      return RangeMutationOptions(
+        fromMs = fromMs,
+        toMs = toMs,
+        deviceId = options["deviceId"] as? String,
+      )
+    }
+  }
+}
+
+internal data class HistoryTelemetryState(
+  val id: Long,
+  val state: FullTelemetryState,
+)
+
+internal data class FullTelemetryState(
   val capturedAtMs: Long,
   val elapsedRealtimeMs: Long,
   val deviceId: String?,
@@ -685,7 +605,7 @@ private data class FullTelemetryState(
   }
 }
 
-private data class ScaledLocation(
+internal data class ScaledLocation(
   val latitudeE7: Int,
   val longitudeE7: Int,
   val gpsSpeedCentiMps: Int?,
@@ -746,22 +666,6 @@ private fun distanceDeltaM(bucket: TelemetryMinuteBucketEntity): Double? {
   return ((last - first).coerceAtLeast(0L)) / 100.0
 }
 
-private fun HistoryLocationEntity.toMap(): Map<String, Any?> = mapOf(
-  "id" to id,
-  "capturedAtMs" to capturedAtMs,
-  "deviceId" to deviceId,
-  "deviceName" to (deviceName ?: UNKNOWN_TELEMETRY_DEVICE_NAME),
-  "latitude" to latitudeE7 / 10_000_000.0,
-  "longitude" to longitudeE7 / 10_000_000.0,
-  "speedMps" to gpsSpeedCentiMps?.let { it / 100.0 },
-  "bearingDeg" to bearingCentiDeg?.let { it / 100.0 },
-  "accuracyM" to accuracyCm?.let { it / 100.0 },
-  "altitudeM" to altitudeCm?.let { it / 100.0 },
-  "timestamp" to locationTimestampMs,
-  "precise" to precise,
-  "distanceFromPreviousM" to distanceFromPreviousCm?.let { it / 100.0 },
-)
-
 private fun TelemetryMarkerEntity.toMap(): Map<String, Any?> = mapOf(
   "id" to id,
   "occurredAtMs" to occurredAtMs,
@@ -772,13 +676,9 @@ private fun TelemetryMarkerEntity.toMap(): Map<String, Any?> = mapOf(
   "gapMs" to gapMs,
 )
 
-private fun distanceCm(from: LocationState, to: LocationState): Long {
-  val lat1 = Math.toRadians(from.latitudeE7 / 10_000_000.0)
-  val lat2 = Math.toRadians(to.latitudeE7 / 10_000_000.0)
-  val deltaLat = lat2 - lat1
-  val deltaLon = Math.toRadians((to.longitudeE7 - from.longitudeE7) / 10_000_000.0)
-  val a = sin(deltaLat / 2.0) * sin(deltaLat / 2.0) +
-    cos(lat1) * cos(lat2) * sin(deltaLon / 2.0) * sin(deltaLon / 2.0)
-  val c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a))
-  return (6_371_000.0 * c * 100.0).roundToLong()
-}
+private fun Map<String, Any?>.long(key: String): Long? = (this[key] as? Number)?.toLong()
+
+private fun Map<String, Any?>.int(key: String): Int? = (this[key] as? Number)?.toInt()
+
+private fun Map<String, Any?>.requiredLong(key: String): Long =
+  long(key) ?: throw IllegalArgumentException("$key is required")

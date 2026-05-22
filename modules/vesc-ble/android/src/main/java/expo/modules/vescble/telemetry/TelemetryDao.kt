@@ -13,9 +13,6 @@ interface TelemetryDao {
   suspend fun insertFrames(frames: List<TelemetryFrameEntity>): List<Long>
 
   @Insert
-  suspend fun insertLocations(locations: List<HistoryLocationEntity>): List<Long>
-
-  @Insert
   suspend fun insertMarkers(markers: List<TelemetryMarkerEntity>)
 
   @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -42,12 +39,10 @@ interface TelemetryDao {
   @Transaction
   suspend fun insertBatch(
     frames: List<TelemetryFrameEntity>,
-    locations: List<HistoryLocationEntity>,
     buckets: Collection<TelemetryMinuteBucketEntity>,
     markers: List<TelemetryMarkerEntity>,
   ) {
     if (frames.isNotEmpty()) insertFrames(frames)
-    if (locations.isNotEmpty()) insertLocations(locations)
     if (buckets.isNotEmpty()) upsertBuckets(buckets)
     if (markers.isNotEmpty()) insertMarkers(markers)
   }
@@ -59,6 +54,7 @@ interface TelemetryDao {
       AND bucket_start_ms <= :beforeMs
       AND bucket_start_ms >= :fromMs
       AND bucket_start_ms <= :toMs
+      AND sample_count > 0
     ORDER BY bucket_start_ms DESC
     LIMIT :limit
     """,
@@ -113,41 +109,20 @@ interface TelemetryDao {
   )
   suspend fun getFrames(fromMs: Long, toMs: Long, deviceId: String?, limit: Int): List<TelemetryFrameEntity>
 
-  @Query(
-    """
-    SELECT * FROM history_locations
-    WHERE captured_at_ms >= :fromMs
-      AND captured_at_ms <= :toMs
-      AND (:deviceId IS NULL OR device_id = :deviceId)
-    ORDER BY captured_at_ms ASC
-    LIMIT :limit
-    """,
-  )
-  suspend fun getLocations(fromMs: Long, toMs: Long, deviceId: String?, limit: Int): List<HistoryLocationEntity>
-
   @Query("SELECT COUNT(*) FROM telemetry_frames")
   suspend fun countFrames(): Long
 
-  @Query("SELECT COUNT(*) FROM history_locations")
-  suspend fun countLocations(): Long
+  @Query("SELECT COALESCE(SUM(gps_point_count), 0) FROM telemetry_minute_buckets WHERE sample_count > 0")
+  suspend fun countTelemetryGpsPoints(): Long
 
   @Query("SELECT MIN(captured_at_ms) FROM telemetry_frames")
   suspend fun firstFrameAt(): Long?
 
-  @Query("SELECT MIN(captured_at_ms) FROM history_locations")
-  suspend fun firstLocationAt(): Long?
-
   @Query("SELECT MAX(captured_at_ms) FROM telemetry_frames")
   suspend fun lastFrameAt(): Long?
 
-  @Query("SELECT MAX(captured_at_ms) FROM history_locations")
-  suspend fun lastLocationAt(): Long?
-
   @Query("DELETE FROM telemetry_frames WHERE captured_at_ms < :beforeMs")
   suspend fun deleteFramesBefore(beforeMs: Long): Int
-
-  @Query("DELETE FROM history_locations WHERE captured_at_ms < :beforeMs")
-  suspend fun deleteLocationsBefore(beforeMs: Long): Int
 
   @Query("DELETE FROM telemetry_markers WHERE occurred_at_ms < :beforeMs")
   suspend fun deleteMarkersBefore(beforeMs: Long): Int
@@ -158,10 +133,9 @@ interface TelemetryDao {
   @Transaction
   suspend fun deleteBefore(beforeMs: Long): Int {
     val frames = deleteFramesBefore(beforeMs)
-    val locations = deleteLocationsBefore(beforeMs)
     deleteMarkersBefore(beforeMs)
     deleteBucketsBefore(beforeMs)
-    return frames + locations
+    return frames
   }
 
   @Query(
@@ -176,19 +150,6 @@ interface TelemetryDao {
     """,
   )
   suspend fun deleteFramesRange(fromMs: Long, toMs: Long, deviceId: String?): Int
-
-  @Query(
-    """
-    DELETE FROM history_locations
-    WHERE captured_at_ms >= :fromMs
-      AND captured_at_ms <= :toMs
-      AND (
-        (:deviceId IS NOT NULL AND device_id = :deviceId)
-        OR (:deviceId IS NULL AND device_id IS NULL)
-      )
-    """,
-  )
-  suspend fun deleteLocationsRange(fromMs: Long, toMs: Long, deviceId: String?): Int
 
   @Query(
     """
@@ -216,17 +177,13 @@ interface TelemetryDao {
   @Transaction
   suspend fun deleteRange(fromMs: Long, toMs: Long, deviceId: String?): Int {
     val frames = deleteFramesRange(fromMs, toMs, deviceId)
-    val locations = deleteLocationsRange(fromMs, toMs, deviceId)
     deleteMarkersRange(fromMs, toMs, deviceId)
     deleteBucketsRange(fromMs, toMs, deviceId ?: UNKNOWN_TELEMETRY_DEVICE_ID)
-    return frames + locations
+    return frames
   }
 
   @Query("DELETE FROM telemetry_frames")
   suspend fun clearFrames()
-
-  @Query("DELETE FROM history_locations")
-  suspend fun clearLocations()
 
   @Query("DELETE FROM telemetry_markers")
   suspend fun clearMarkers()
@@ -237,7 +194,6 @@ interface TelemetryDao {
   @Transaction
   suspend fun clearAll() {
     clearFrames()
-    clearLocations()
     clearMarkers()
     clearBuckets()
   }
