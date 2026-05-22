@@ -3,6 +3,8 @@ import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
+import { getBreakoutReleasePan, getResistedRevealPan } from '@/screens/center/mapRevealMotion'
+
 interface MapRevealGestureProps {
   progress: SharedValue<number>
   dragOpacity: SharedValue<number>
@@ -15,10 +17,8 @@ interface MapRevealGestureProps {
   onFinish: (revealed: boolean, accumulatedX?: number, accumulatedY?: number) => void
 }
 
-const REVEAL_DISTANCE_DP = 170
-const REVEAL_TOSS_SECONDS = 0.16
-const MIN_TOSS_DISTANCE_DP = 34
-const RESISTANCE_AT_BREAK = 0.28
+const REVEAL_DISTANCE_DP = 120
+const RESISTANCE_AT_BREAK = 0.38
 const BREAK_RELEASE_MS = 100
 const FADE_TIMING = { duration: 260 } as const
 const REVEAL_SPRING = {
@@ -26,18 +26,6 @@ const REVEAL_SPRING = {
   stiffness: 160,
   mass: 0.8,
 } as const
-
-function getProjectedDistance(
-  translationX: number,
-  translationY: number,
-  velocityX: number,
-  velocityY: number,
-) {
-  return Math.hypot(
-    translationX + velocityX * REVEAL_TOSS_SECONDS,
-    translationY + velocityY * REVEAL_TOSS_SECONDS,
-  )
-}
 
 function createMapRevealGesture({
   progress,
@@ -53,6 +41,9 @@ function createMapRevealGesture({
   let completed = false
   let appliedX = 0
   let appliedY = 0
+  let breakoutX = 0
+  let breakoutY = 0
+  let breakoutStartedAt = 0
   let pinching = false
 
   const pan = Gesture.Pan()
@@ -63,6 +54,9 @@ function createMapRevealGesture({
       completed = false
       appliedX = 0
       appliedY = 0
+      breakoutX = 0
+      breakoutY = 0
+      breakoutStartedAt = 0
       progress.value = 0
       dragOpacity.value = 0
     })
@@ -70,6 +64,9 @@ function createMapRevealGesture({
       completed = false
       appliedX = 0
       appliedY = 0
+      breakoutX = 0
+      breakoutY = 0
+      breakoutStartedAt = 0
       progress.value = 0
       dragOpacity.value = 0
       onPanStart()
@@ -78,27 +75,30 @@ function createMapRevealGesture({
       completed = false
       appliedX = 0
       appliedY = 0
+      breakoutX = 0
+      breakoutY = 0
+      breakoutStartedAt = 0
       progress.value = 0
       dragOpacity.value = 0
     })
     .onUpdate((event) => {
       const distance = Math.hypot(event.translationX, event.translationY)
-      const projectedDistance = getProjectedDistance(
-        event.translationX,
-        event.translationY,
-        event.velocityX,
-        event.velocityY,
-      )
-      const shouldReveal =
-        distance >= REVEAL_DISTANCE_DP ||
-        (distance >= MIN_TOSS_DISTANCE_DP && projectedDistance >= REVEAL_DISTANCE_DP)
+      const shouldReveal = distance >= REVEAL_DISTANCE_DP
       const nextProgress = Math.min(1, distance / REVEAL_DISTANCE_DP)
       const easedProgress = nextProgress * nextProgress
       dragOpacity.value = nextProgress
 
       if (completed) {
-        appliedX = event.translationX
-        appliedY = event.translationY
+        const releasedPan = getBreakoutReleasePan(
+          event.translationX,
+          event.translationY,
+          breakoutX,
+          breakoutY,
+          Date.now() - breakoutStartedAt,
+          BREAK_RELEASE_MS,
+        )
+        appliedX = releasedPan.x
+        appliedY = releasedPan.y
         onPan(appliedX, appliedY)
         return
       }
@@ -107,31 +107,42 @@ function createMapRevealGesture({
         completed = true
         progress.value = 1
         dragOpacity.value = 1
-        const panGain = 1 - RESISTANCE_AT_BREAK * easedProgress
-        const nextAppliedX = event.translationX * panGain
-        const nextAppliedY = event.translationY * panGain
-        appliedX = nextAppliedX
-        appliedY = nextAppliedY
-        // animate the final break transition so the last shift is visible
-        onPan(appliedX, appliedY, BREAK_RELEASE_MS)
+        const resistedPan = getResistedRevealPan(
+          event.translationX,
+          event.translationY,
+          REVEAL_DISTANCE_DP,
+          RESISTANCE_AT_BREAK,
+        )
+        appliedX = resistedPan.x
+        appliedY = resistedPan.y
+        breakoutX = resistedPan.x
+        breakoutY = resistedPan.y
+        breakoutStartedAt = Date.now()
+        onPan(appliedX, appliedY)
         onReveal()
         return
       }
 
-      const panGain = 1 - RESISTANCE_AT_BREAK * easedProgress
-      const nextAppliedX = event.translationX * panGain
-      const nextAppliedY = event.translationY * panGain
-      appliedX = nextAppliedX
-      appliedY = nextAppliedY
+      const resistedPan = getResistedRevealPan(
+        event.translationX,
+        event.translationY,
+        REVEAL_DISTANCE_DP,
+        RESISTANCE_AT_BREAK,
+      )
+      appliedX = resistedPan.x
+      appliedY = resistedPan.y
       progress.value = easedProgress
       onPan(appliedX, appliedY)
     })
-    .onFinalize(() => {
+    .onFinalize((event) => {
       const wasCompleted = completed
       if (pinching) {
         completed = false
         appliedX = 0
         appliedY = 0
+        breakoutX = 0
+        breakoutY = 0
+        breakoutStartedAt = 0
         return
       }
       if (!completed) {
@@ -141,6 +152,9 @@ function createMapRevealGesture({
       completed = false
       appliedX = 0
       appliedY = 0
+      breakoutX = 0
+      breakoutY = 0
+      breakoutStartedAt = 0
       onFinish(wasCompleted)
     })
 
@@ -151,6 +165,9 @@ function createMapRevealGesture({
       completed = false
       appliedX = 0
       appliedY = 0
+      breakoutX = 0
+      breakoutY = 0
+      breakoutStartedAt = 0
       progress.value = 0
       dragOpacity.value = 0
       onZoomStart()
