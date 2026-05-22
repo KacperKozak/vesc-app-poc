@@ -1,3 +1,13 @@
+import Mapbox, {
+  Camera,
+  FillExtrusionLayer,
+  FillLayer,
+  LineLayer,
+  RasterLayer,
+  RasterSource,
+  ShapeSource,
+  type Camera as CameraRef,
+} from '@rnmapbox/maps'
 import {
   forwardRef,
   useCallback,
@@ -8,22 +18,12 @@ import {
   useState,
 } from 'react'
 import { Animated, PixelRatio, Platform, StyleSheet, Text, View } from 'react-native'
-import Mapbox, {
-  Camera,
-  FillLayer,
-  FillExtrusionLayer,
-  LineLayer,
-  RasterLayer,
-  RasterSource,
-  ShapeSource,
-  type Camera as CameraRef,
-} from '@rnmapbox/maps'
 import type { LocationEvent } from 'vesc-ble'
 
 import { MapPin } from '@/components/map/MapPin'
 import { MAPBOX_ACCESS_TOKEN, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
-import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { BLANK_STYLE, MAP_DEFAULTS, MAP_STYLES, type MapStyleKey } from '@/constants/mapStyles'
+import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { theme } from '@/constants/theme'
 import { getLiveGpsPresentation } from '@/helpers/liveGpsPresentation'
 import {
@@ -226,12 +226,13 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
 
   const restorePreviewPan = useCallback(() => {
     setFollowGps(true)
+    // Always animate back to the computed gpsCamera (falls back when no precise fix)
     if (cameraFix) {
       lastCenteredAtRef.current = cameraFix.timestamp
     }
     cameraRef.current?.setCamera({
       ...gpsCamera,
-      animationDuration: 260,
+      animationDuration: MAP_DEFAULTS.followAnimationDuration,
       animationMode: 'easeTo',
     })
   }, [cameraFix, gpsCamera])
@@ -243,11 +244,20 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       previewHistoryLoading,
       previewPanBy(deltaX: number, deltaY: number, animationDuration = 0) {
         setFollowGps(false)
+        if (deltaX === 0 && deltaY === 0 && animationDuration === 0) {
+          cameraRef.current?.moveBy({
+            x: 0,
+            y: 0,
+            animationMode: 'linearTo',
+            animationDuration: 0,
+          })
+          return
+        }
         cameraRef.current?.moveBy({
           x: deltaX * MAP_PAN_UNIT_SCALE,
           y: deltaY * MAP_PAN_UNIT_SCALE,
           animationMode: 'linearTo',
-          animationDuration,
+          animationDuration: animationDuration,
         })
       },
       restorePreviewPan,

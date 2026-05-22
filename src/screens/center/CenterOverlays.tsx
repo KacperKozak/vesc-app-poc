@@ -1,15 +1,25 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
-import { useCallback, useEffect, useState, type RefObject } from 'react'
 import { router } from 'expo-router'
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import {
   ArrowLeftIcon,
   ClockCounterClockwiseIcon,
   SlidersHorizontalIcon,
 } from 'phosphor-react-native'
+import { useCallback, useEffect, useState, type RefObject } from 'react'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { ConfirmModal } from '@/components/ConfirmModal'
+import { FloatingBar } from '@/components/FloatingBar'
+import { HistorySessionSheet } from '@/components/history/HistorySessionSheet'
+import { IconButton } from '@/components/IconButton'
+import { MapControls } from '@/components/map/MapControls'
+import { MapStyleSwitch } from '@/components/map/MapStyleSwitch'
+import type { MapStyleKey } from '@/constants/mapStyles'
+import { routes } from '@/navigation/routes'
 import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
+import type { CenterMapHandle } from '@/screens/center/CenterMap'
+import type { CenterViewState } from '@/screens/center/centerViewState'
 import { HistoryControls } from '@/screens/center/HistoryControls'
 import { HistoryStatsBar } from '@/screens/center/HistoryStatsBar'
 import { HistoryTelemetryPanel } from '@/screens/center/HistoryTelemetryPanel'
@@ -17,18 +27,8 @@ import { LiveHud } from '@/screens/center/LiveHud'
 import { MapRevealGesture } from '@/screens/center/MapRevealGesture'
 import { MapVignette } from '@/screens/center/MapVignette'
 import { TopBar } from '@/screens/center/TopBar'
-import type { CenterMapHandle } from '@/screens/center/CenterMap'
-import { ConfirmModal } from '@/components/ConfirmModal'
-import { IconButton } from '@/components/IconButton'
-import { FloatingBar } from '@/components/FloatingBar'
-import { HistorySessionSheet } from '@/components/history/HistorySessionSheet'
-import { MapControls } from '@/components/map/MapControls'
-import { MapStyleSwitch } from '@/components/map/MapStyleSwitch'
-import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
 import type { HistorySession, TelemetrySample } from '@/store/historyStore'
-import type { MapStyleKey } from '@/constants/mapStyles'
-import type { CenterViewState } from '@/screens/center/centerViewState'
 
 interface CenterBoardOverlayProps {
   boards: Board[]
@@ -140,12 +140,13 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
 
   const handleRevealFinish = useCallback(
     (revealed: boolean) => {
-      if (!revealed) {
+      const actuallyRevealed = revealed || mode === 'map'
+      if (!actuallyRevealed) {
         mapRef.current?.restorePreviewPan()
       }
       setRevealGestureActive(false)
     },
-    [mapRef],
+    [mapRef, mode],
   )
 
   useEffect(() => {
