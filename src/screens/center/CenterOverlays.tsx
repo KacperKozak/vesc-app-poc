@@ -127,11 +127,30 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
   }, [])
 
   const handleRevealPan = useCallback(
-    (deltaX: number, deltaY: number, animationDuration?: number) => {
-      mapRef.current?.previewPanBy(deltaX, deltaY, animationDuration)
+    (totalX: number, totalY: number, animationDuration?: number) => {
+      mapRef.current?.previewPanBy(totalX, totalY, animationDuration)
     },
     [mapRef],
   )
+
+  const handleRevealPanStart = useCallback(() => {
+    mapRef.current?.beginPreviewPan()
+  }, [mapRef])
+
+  const handleRevealZoomStart = useCallback(() => {
+    mapRef.current?.beginPreviewZoom()
+  }, [mapRef])
+
+  const handleRevealZoom = useCallback(
+    (scale: number) => {
+      mapRef.current?.previewZoomBy(scale)
+    },
+    [mapRef],
+  )
+
+  const handleRevealZoomEnd = useCallback(() => {
+    mapRef.current?.endPreviewZoom()
+  }, [mapRef])
 
   const handleReveal = useCallback(() => {
     setRevealGestureActive(true)
@@ -168,7 +187,11 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
         <MapRevealGesture
           progress={revealProgress}
           dragOpacity={dragOpacity}
+          onPanStart={handleRevealPanStart}
           onPan={handleRevealPan}
+          onZoomStart={handleRevealZoomStart}
+          onZoom={handleRevealZoom}
+          onZoomEnd={handleRevealZoomEnd}
           onReveal={handleReveal}
           onFinish={handleRevealFinish}
         />

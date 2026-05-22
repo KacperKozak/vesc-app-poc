@@ -17,7 +17,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Animated, PixelRatio, Platform, StyleSheet, Text, View } from 'react-native'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 import type { LocationEvent } from 'vesc-ble'
 
 import { MapPin } from '@/components/map/MapPin'
@@ -38,16 +38,70 @@ import { useSettingsStore } from '@/store/settingsStore'
 
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
-const MAP_PAN_UNIT_SCALE = Platform.OS === 'android' ? PixelRatio.get() : 1
-
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
   previewHistoryLoading: () => void
+  beginPreviewPan: () => void
   previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
+  beginPreviewZoom: () => void
+  previewZoomBy: (scale: number) => void
+  endPreviewZoom: () => void
   restorePreviewPan: () => void
   resetRotation: () => void
   togglePerspective: () => void
   setPadding: (bottom: number) => void
+}
+
+interface CameraSnapshot {
+  centerCoordinate: [number, number]
+  zoomLevel: number
+  heading: number
+  pitch: number
+}
+
+const MERCATOR_TILE_SIZE = 512
+const MAX_MERCATOR_LATITUDE = 85.05112878
+const MIN_ZOOM = 0
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function longitudeToWorldX(longitude: number, worldSize: number) {
+  return ((longitude + 180) / 360) * worldSize
+}
+
+function latitudeToWorldY(latitude: number, worldSize: number) {
+  const clampedLatitude = clamp(latitude, -MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE)
+  const sinLatitude = Math.sin((clampedLatitude * Math.PI) / 180)
+  return (0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) * worldSize
+}
+
+function worldXToLongitude(x: number, worldSize: number) {
+  return (x / worldSize) * 360 - 180
+}
+
+function worldYToLatitude(y: number, worldSize: number) {
+  const mercatorY = 0.5 - y / worldSize
+  return (180 / Math.PI) * (2 * Math.atan(Math.exp(mercatorY * 2 * Math.PI)) - Math.PI / 2)
+}
+
+function getCameraForScreenPan(baseCamera: CameraSnapshot, totalX: number, totalY: number) {
+  const worldSize = MERCATOR_TILE_SIZE * 2 ** baseCamera.zoomLevel
+  const [longitude, latitude] = baseCamera.centerCoordinate
+  const headingRadians = (-baseCamera.heading * Math.PI) / 180
+  const worldDeltaX = totalX * Math.cos(headingRadians) - totalY * Math.sin(headingRadians)
+  const worldDeltaY = totalX * Math.sin(headingRadians) + totalY * Math.cos(headingRadians)
+  const centerX = longitudeToWorldX(longitude, worldSize) - worldDeltaX
+  const centerY = latitudeToWorldY(latitude, worldSize) - worldDeltaY
+
+  return {
+    ...baseCamera,
+    centerCoordinate: [
+      worldXToLongitude(centerX, worldSize),
+      clamp(worldYToLatitude(centerY, worldSize), -MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE),
+    ] as [number, number],
+  }
 }
 
 interface CenterMapProps {
@@ -87,6 +141,9 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   ref,
 ) {
   const cameraRef = useRef<CameraRef>(null)
+  const previewPanBaseRef = useRef<CameraSnapshot | null>(null)
+  const previewZoomBaseRef = useRef<CameraSnapshot | null>(null)
+  const currentCameraRef = useRef<CameraSnapshot | null>(null)
   const lastCenteredAtRef = useRef<number | null>(null)
   const mapRevealedRef = useRef(false)
   const mapOpacity = useRef(new Animated.Value(0)).current
@@ -226,12 +283,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
 
   const restorePreviewPan = useCallback(() => {
     setFollowGps(true)
-    // Always animate back to the computed gpsCamera (falls back when no precise fix)
+    const restoreCamera = previewPanBaseRef.current ?? gpsCamera
+    previewPanBaseRef.current = null
+    // Return to the camera captured when the reveal gesture started.
     if (cameraFix) {
       lastCenteredAtRef.current = cameraFix.timestamp
     }
     cameraRef.current?.setCamera({
-      ...gpsCamera,
+      ...restoreCamera,
       animationDuration: MAP_DEFAULTS.followAnimationDuration,
       animationMode: 'easeTo',
     })
@@ -242,23 +301,39 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     () => ({
       recenterLive,
       previewHistoryLoading,
+      beginPreviewPan() {
+        previewPanBaseRef.current = currentCameraRef.current ?? {
+          ...gpsCamera,
+          heading: 0,
+          pitch: MAP_DEFAULTS.defaultPitch,
+        }
+        setFollowGps(false)
+      },
       previewPanBy(deltaX: number, deltaY: number, animationDuration = 0) {
         setFollowGps(false)
-        if (deltaX === 0 && deltaY === 0 && animationDuration === 0) {
-          cameraRef.current?.moveBy({
-            x: 0,
-            y: 0,
-            animationMode: 'linearTo',
-            animationDuration: 0,
-          })
-          return
-        }
-        cameraRef.current?.moveBy({
-          x: deltaX * MAP_PAN_UNIT_SCALE,
-          y: deltaY * MAP_PAN_UNIT_SCALE,
+        const baseCamera = previewPanBaseRef.current
+        if (!baseCamera) return
+        cameraRef.current?.setCamera({
+          ...getCameraForScreenPan(baseCamera, deltaX, deltaY),
           animationMode: 'linearTo',
-          animationDuration: animationDuration,
+          animationDuration,
         })
+      },
+      beginPreviewZoom() {
+        previewZoomBaseRef.current = currentCameraRef.current
+        setFollowGps(false)
+      },
+      previewZoomBy(scale: number) {
+        const baseCamera = previewZoomBaseRef.current
+        if (!baseCamera || scale <= 0) return
+        cameraRef.current?.setCamera({
+          ...baseCamera,
+          zoomLevel: clamp(baseCamera.zoomLevel + Math.log2(scale), MIN_ZOOM, MAP_DEFAULTS.maxZoom),
+          animationDuration: 0,
+        })
+      },
+      endPreviewZoom() {
+        previewZoomBaseRef.current = null
       },
       restorePreviewPan,
       resetRotation() {
@@ -287,6 +362,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       },
     }),
     [
+      gpsCamera,
       onHeadingChange,
       onPerspectiveChange,
       perspectiveEnabled,
@@ -357,6 +433,12 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         }}
         onCameraChanged={(state) => {
           const [longitude, latitude] = state.properties.center
+          currentCameraRef.current = {
+            centerCoordinate: [longitude, latitude],
+            zoomLevel: state.properties.zoom,
+            heading: state.properties.heading,
+            pitch: state.properties.pitch,
+          }
           const [targetLongitude, targetLatitude] = gpsCamera.centerCoordinate
           if (
             Math.abs(longitude - targetLongitude) < 0.0001 &&
