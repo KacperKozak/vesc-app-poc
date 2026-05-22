@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import { Animated, PixelRatio, Platform, StyleSheet, Text, View } from 'react-native'
 import Mapbox, {
   Camera,
   FillLayer,
@@ -38,9 +38,13 @@ import { useSettingsStore } from '@/store/settingsStore'
 
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
+const MAP_PAN_UNIT_SCALE = Platform.OS === 'android' ? PixelRatio.get() : 1
+
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
   previewHistoryLoading: () => void
+  previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
+  restorePreviewPan: () => void
   resetRotation: () => void
   togglePerspective: () => void
   setPadding: (bottom: number) => void
@@ -57,7 +61,6 @@ interface CenterMapProps {
   perspectiveEnabled: boolean
   onPerspectiveChange: (enabled: boolean) => void
   onHeadingChange: (heading: number) => void
-  onMapFocus: () => void
   onLongPressTarget: (target: { latitude: number; longitude: number }) => void
   targetLocation: { latitude: number; longitude: number } | null
   onClearTarget: () => void
@@ -76,7 +79,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     perspectiveEnabled,
     onPerspectiveChange,
     onHeadingChange,
-    onMapFocus,
     onLongPressTarget,
     targetLocation,
     onClearTarget,
@@ -222,11 +224,33 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     })
   }, [gpsCamera])
 
+  const restorePreviewPan = useCallback(() => {
+    setFollowGps(true)
+    if (cameraFix) {
+      lastCenteredAtRef.current = cameraFix.timestamp
+    }
+    cameraRef.current?.setCamera({
+      ...gpsCamera,
+      animationDuration: 260,
+      animationMode: 'easeTo',
+    })
+  }, [cameraFix, gpsCamera])
+
   useImperativeHandle(
     ref,
     () => ({
       recenterLive,
       previewHistoryLoading,
+      previewPanBy(deltaX: number, deltaY: number, animationDuration = 0) {
+        setFollowGps(false)
+        cameraRef.current?.moveBy({
+          x: deltaX * MAP_PAN_UNIT_SCALE,
+          y: deltaY * MAP_PAN_UNIT_SCALE,
+          animationMode: 'linearTo',
+          animationDuration,
+        })
+      },
+      restorePreviewPan,
       resetRotation() {
         cameraRef.current?.setCamera({
           heading: 0,
@@ -252,7 +276,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         })
       },
     }),
-    [onHeadingChange, onPerspectiveChange, perspectiveEnabled, previewHistoryLoading, recenterLive],
+    [
+      onHeadingChange,
+      onPerspectiveChange,
+      perspectiveEnabled,
+      previewHistoryLoading,
+      recenterLive,
+      restorePreviewPan,
+    ],
   )
 
   useEffect(() => {
@@ -325,7 +356,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           }
           if (state.gestures.isGestureActive) {
             setFollowGps(false)
-            onMapFocus()
           }
           onHeadingChange(state.properties.heading)
           onPerspectiveChange(state.properties.pitch > MAP_DEFAULTS.pitchThreshold)

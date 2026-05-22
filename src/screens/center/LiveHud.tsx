@@ -1,18 +1,28 @@
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
 import { DualGaugeIndicator } from '@/components/cards'
 
-export function LiveHud() {
+interface LiveHudProps {
+  revealProgress?: SharedValue<number>
+}
+
+export function LiveHud({ revealProgress }: LiveHudProps) {
   const insets = useSafeAreaInsets()
+  const revealStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: revealProgress ? -52 * revealProgress.value : 0 }],
+  }))
 
   return (
-    <View
+    <Animated.View
       style={[styles.wrap, { paddingTop: Math.max(insets.top + 46, 64) }]}
       pointerEvents="box-none"
     >
-      <DualGaugeIndicator compact transparent />
-    </View>
+      <Animated.View style={revealStyle}>
+        <DualGaugeIndicator compact transparent />
+      </Animated.View>
+    </Animated.View>
   )
 }
 
