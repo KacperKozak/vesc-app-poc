@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
 import { Sparkline } from '@/components/charts/Sparkline'
 import { BatteryIndicator } from '@/components/cards/BatteryIndicator'
@@ -14,7 +15,11 @@ import { useLiveWindowMs } from '@/store/settingsStore'
 const FOOTPAD_ACTIVE_V = 0.8
 export const STRIP_CONTENT_HEIGHT = 160
 
-export function BottomTelemetryStrip() {
+interface BottomTelemetryStripProps {
+  revealProgress?: SharedValue<number>
+}
+
+export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripProps) {
   const insets = useSafeAreaInsets()
   const windowMs = useLiveWindowMs()
   const motorTempSeries = useLiveMetric(liveSelectors.motorTemp)
@@ -35,130 +40,135 @@ export function BottomTelemetryStrip() {
   const pitch = pitchSeries.at(-1)?.value ?? 0
   const pitchDeg = Math.max(-18, Math.min(18, pitch))
   const imuConnected = bleStatus === 'connected'
+  const revealStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: revealProgress ? 74 * revealProgress.value : 0 }],
+  }))
 
   return (
-    <View
+    <Animated.View
       style={[styles.wrap, { paddingBottom: Math.max(insets.bottom * 0.5, 8) }]}
       pointerEvents="box-none"
     >
-      <View style={styles.strip}>
-        <Pressable
-          style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
-          android_ripple={interaction.ripple}
-          onPress={() => router.push(routes.controlTemperatures)}
-        >
-          <Text style={styles.subLabel}>Motor</Text>
-          <Text style={styles.value} numberOfLines={1}>
-            {fmtVal(motorTemp, telemetry.motorTemp.formatWithUnit)}
-          </Text>
-          <Sparkline
-            points={motorTempSeries}
-            color={telemetry.motorTemp.color}
-            height={18}
-            fmtMax={telemetry.motorTemp.formatWithUnit}
-            showMaxBadge
-            minSpan={20}
-            windowMs={windowMs}
-          />
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
-          android_ripple={interaction.ripple}
-          onPress={() => router.push(routes.controlTemperatures)}
-        >
-          <Text style={styles.subLabel}>Ctrl</Text>
-          <Text style={styles.value} numberOfLines={1}>
-            {fmtVal(controllerTemp, telemetry.controllerTemp.formatWithUnit)}
-          </Text>
-          <Sparkline
-            points={controllerTempSeries}
-            color={telemetry.controllerTemp.color}
-            height={18}
-            fmtMax={telemetry.controllerTemp.formatWithUnit}
-            showMaxBadge
-            minSpan={20}
-            windowMs={windowMs}
-          />
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
-          android_ripple={interaction.ripple}
-          onPress={() => router.push(routes.controlCurrents)}
-        >
-          <Text style={styles.subLabel}>Motor</Text>
-          <Text style={styles.value} numberOfLines={1}>
-            {fmtVal(motorCurrent, telemetry.motorCurrent.formatWithUnit)}
-          </Text>
-          <Sparkline
-            points={motorCurrentSeries}
-            color={telemetry.motorCurrent.color}
-            height={18}
-            fmtMax={telemetry.motorCurrent.formatWithUnit}
-            showMaxBadge
-            minSpan={20}
-            windowMs={windowMs}
-          />
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
-          android_ripple={interaction.ripple}
-          onPress={() => router.push(routes.controlCurrents)}
-        >
-          <Text style={styles.subLabel}>Batt</Text>
-          <Text style={styles.value} numberOfLines={1}>
-            {fmtVal(batteryCurrent, telemetry.battCurrent.formatWithUnit)}
-          </Text>
-          <Sparkline
-            points={batteryCurrentSeries}
-            color={telemetry.battCurrent.color}
-            height={18}
-            fmtMax={telemetry.battCurrent.formatWithUnit}
-            showMaxBadge
-            minSpan={20}
-            windowMs={windowMs}
-          />
-        </Pressable>
-      </View>
+      <Animated.View style={revealStyle}>
+        <View style={styles.strip}>
+          <Pressable
+            style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
+            android_ripple={interaction.ripple}
+            onPress={() => router.push(routes.controlTemperatures)}
+          >
+            <Text style={styles.subLabel}>Motor</Text>
+            <Text style={styles.value} numberOfLines={1}>
+              {fmtVal(motorTemp, telemetry.motorTemp.formatWithUnit)}
+            </Text>
+            <Sparkline
+              points={motorTempSeries}
+              color={telemetry.motorTemp.color}
+              height={18}
+              fmtMax={telemetry.motorTemp.formatWithUnit}
+              showMaxBadge
+              minSpan={20}
+              windowMs={windowMs}
+            />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
+            android_ripple={interaction.ripple}
+            onPress={() => router.push(routes.controlTemperatures)}
+          >
+            <Text style={styles.subLabel}>Ctrl</Text>
+            <Text style={styles.value} numberOfLines={1}>
+              {fmtVal(controllerTemp, telemetry.controllerTemp.formatWithUnit)}
+            </Text>
+            <Sparkline
+              points={controllerTempSeries}
+              color={telemetry.controllerTemp.color}
+              height={18}
+              fmtMax={telemetry.controllerTemp.formatWithUnit}
+              showMaxBadge
+              minSpan={20}
+              windowMs={windowMs}
+            />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
+            android_ripple={interaction.ripple}
+            onPress={() => router.push(routes.controlCurrents)}
+          >
+            <Text style={styles.subLabel}>Motor</Text>
+            <Text style={styles.value} numberOfLines={1}>
+              {fmtVal(motorCurrent, telemetry.motorCurrent.formatWithUnit)}
+            </Text>
+            <Sparkline
+              points={motorCurrentSeries}
+              color={telemetry.motorCurrent.color}
+              height={18}
+              fmtMax={telemetry.motorCurrent.formatWithUnit}
+              showMaxBadge
+              minSpan={20}
+              windowMs={windowMs}
+            />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.metricCell, pressed && styles.cellPressed]}
+            android_ripple={interaction.ripple}
+            onPress={() => router.push(routes.controlCurrents)}
+          >
+            <Text style={styles.subLabel}>Batt</Text>
+            <Text style={styles.value} numberOfLines={1}>
+              {fmtVal(batteryCurrent, telemetry.battCurrent.formatWithUnit)}
+            </Text>
+            <Sparkline
+              points={batteryCurrentSeries}
+              color={telemetry.battCurrent.color}
+              height={18}
+              fmtMax={telemetry.battCurrent.formatWithUnit}
+              showMaxBadge
+              minSpan={20}
+              windowMs={windowMs}
+            />
+          </Pressable>
+        </View>
 
-      <View style={styles.bottomRow}>
-        <Pressable
-          style={({ pressed }) => [styles.sideIcon, pressed && styles.cellPressed]}
-          android_ripple={interaction.rippleBorderless}
-          onPress={() => router.push(routes.controlImu)}
-        >
-          <View
-            style={[
-              styles.imuLine,
-              {
-                transform: [{ rotate: `${imuConnected ? pitchDeg : 0}deg` }],
-                backgroundColor: imuConnected ? '#a78bfa' : '#64748b',
-              },
-            ]}
-          />
-        </Pressable>
-        <BatteryIndicator transparent containerStyle={styles.batteryCenter} />
-        <Pressable
-          style={({ pressed }) => [styles.sideIcon, pressed && styles.cellPressed]}
-          android_ripple={interaction.rippleBorderless}
-          onPress={() => router.push(routes.controlFootpad)}
-        >
-          <View style={styles.footpadRow}>
+        <View style={styles.bottomRow}>
+          <Pressable
+            style={({ pressed }) => [styles.sideIcon, pressed && styles.cellPressed]}
+            android_ripple={interaction.rippleBorderless}
+            onPress={() => router.push(routes.controlImu)}
+          >
             <View
               style={[
-                styles.footpadDot,
-                adc1 != null && adc1 > FOOTPAD_ACTIVE_V && styles.footpadActive,
+                styles.imuLine,
+                {
+                  transform: [{ rotate: `${imuConnected ? pitchDeg : 0}deg` }],
+                  backgroundColor: imuConnected ? '#a78bfa' : '#64748b',
+                },
               ]}
             />
-            <View
-              style={[
-                styles.footpadDot,
-                adc2 != null && adc2 > FOOTPAD_ACTIVE_V && styles.footpadActive,
-              ]}
-            />
-          </View>
-        </Pressable>
-      </View>
-    </View>
+          </Pressable>
+          <BatteryIndicator transparent containerStyle={styles.batteryCenter} />
+          <Pressable
+            style={({ pressed }) => [styles.sideIcon, pressed && styles.cellPressed]}
+            android_ripple={interaction.rippleBorderless}
+            onPress={() => router.push(routes.controlFootpad)}
+          >
+            <View style={styles.footpadRow}>
+              <View
+                style={[
+                  styles.footpadDot,
+                  adc1 != null && adc1 > FOOTPAD_ACTIVE_V && styles.footpadActive,
+                ]}
+              />
+              <View
+                style={[
+                  styles.footpadDot,
+                  adc2 != null && adc2 > FOOTPAD_ACTIVE_V && styles.footpadActive,
+                ]}
+              />
+            </View>
+          </Pressable>
+        </View>
+      </Animated.View>
+    </Animated.View>
   )
 }
 

@@ -1,24 +1,23 @@
-export const DIAL_WIDTH_BASELINE = 700
-export const TARGET_LABEL_PX = 70
-export const MIN_STEP_PX = 2
-export const ALL_STEP_LABEL_MIN_PX = 56
+const DIAL_WIDTH_BASELINE = 700
+const TARGET_LABEL_PX = 70
+const MIN_STEP_PX = 2
+const ALL_STEP_LABEL_MIN_PX = 56
 
 export const DRAG_RANGE_GAIN = 1
 export const THROW_DISTANCE_GAIN = 0.9
 export const MAX_THROW_VELOCITY = 900
-export const THROW_SAMPLE_SMOOTHING = 0.16
-export const THROW_RELEASE_BOOST_LIMIT = 1.35
-export const THROW_STATIONARY_FADE_START_MS = 80
-export const THROW_STATIONARY_FADE_END_MS = 120
-export const MIN_THROW_DURATION_MS = 800
-export const MAX_THROW_DURATION_MS = 2000
-export const STRONG_THROW_INPUT_VELOCITY = 1800
+const THROW_SAMPLE_SMOOTHING = 0.16
+const THROW_RELEASE_BOOST_LIMIT = 1.35
+const THROW_STATIONARY_FADE_START_MS = 80
+const THROW_STATIONARY_FADE_END_MS = 120
+const MIN_THROW_DURATION_MS = 800
+const MAX_THROW_DURATION_MS = 2000
+const STRONG_THROW_INPUT_VELOCITY = 1800
 export const THROW_EASE_POWER = 1.15
 export const MOMENTUM_CARRY = 0.9
 export const DETENT_DECAY_PER_FRAME = 0.9
 export const DETENT_PULL = 140
-export const DETENT_FULL_STRENGTH_STEPS = 20
-export const MIN_DENSE_DETENT_STRENGTH = 0
+const DETENT_FULL_STRENGTH_STEPS = 20
 export const DETENT_CAPTURE_VELOCITY = 950
 export const LOCK_VELOCITY = 22
 
@@ -33,14 +32,7 @@ export interface TuneDialLayout {
   renderMidpointTicks: boolean
 }
 
-export interface TuneDialThrowState {
-  offset: number
-  velocity: number
-  durationMs: number
-  elapsedMs: number
-}
-
-export function niceMajorValue(range: number): number {
+function niceMajorValue(range: number): number {
   if (range <= 1) return 0.1
   if (range <= 2) return 0.5
   if (range <= 5) return 1
@@ -84,6 +76,13 @@ export function computeRangeScale(totalWidth: number): number {
   return totalWidth / DIAL_WIDTH_BASELINE
 }
 
+export function computeRenderedWidthScale(renderedWidth: number, screenWidth: number): number {
+  'worklet'
+
+  if (renderedWidth <= 0 || screenWidth <= 0) return 1
+  return Math.max(0.55, Math.min(1, Math.sqrt(renderedWidth / screenWidth)))
+}
+
 export function computeDetentStrength(totalSteps: number): number {
   'worklet'
 
@@ -91,7 +90,7 @@ export function computeDetentStrength(totalSteps: number): number {
   return 1
 }
 
-export function computeMomentumEmitEverySteps(totalSteps: number): number {
+function computeMomentumEmitEverySteps(totalSteps: number): number {
   'worklet'
 
   return Math.max(1, Math.ceil(totalSteps / DETENT_FULL_STRENGTH_STEPS))
@@ -192,75 +191,4 @@ export function computeThrowDurationMs(
   )
 
   return MIN_THROW_DURATION_MS + (MAX_THROW_DURATION_MS - MIN_THROW_DURATION_MS) * throwPower
-}
-
-export function tickTuneDialThrowFrame(
-  state: TuneDialThrowState,
-  layout: Pick<TuneDialLayout, 'stepPx' | 'totalSteps' | 'totalWidth'>,
-  frameMs: number,
-): TuneDialThrowState {
-  const rawDt = frameMs
-  const dt = Math.min(rawDt, 34) / 1000
-  const previousProgress =
-    state.durationMs > 0 ? Math.min(1, state.elapsedMs / state.durationMs) : 1
-  const elapsedMs = state.durationMs > 0 ? Math.min(state.durationMs, state.elapsedMs + rawDt) : 0
-  const progress = state.durationMs > 0 ? Math.min(1, elapsedMs / state.durationMs) : 1
-  const remainingRatio =
-    previousProgress >= 1 ? 0 : (1 - progress) / Math.max(0.001, 1 - previousProgress)
-  let velocity = state.velocity * Math.pow(Math.max(0, remainingRatio), THROW_EASE_POWER)
-
-  if (Math.abs(velocity) <= LOCK_VELOCITY) {
-    return {
-      offset: Math.round(state.offset / layout.stepPx) * layout.stepPx,
-      velocity: 0,
-      durationMs: 0,
-      elapsedMs: 0,
-    }
-  }
-
-  let offset = state.offset + velocity * dt
-  if (offset > 0 || offset < -layout.totalWidth) {
-    offset = Math.max(-layout.totalWidth, Math.min(0, offset))
-    return { offset, velocity: 0, durationMs: 0, elapsedMs: 0 }
-  }
-
-  const nearestStepIndex = Math.max(
-    0,
-    Math.min(layout.totalSteps, Math.round(-offset / layout.stepPx)),
-  )
-  const nearestStepOffset = -nearestStepIndex * layout.stepPx
-  const detentStrength = computeDetentStrength(layout.totalSteps)
-  const detentRadius = Math.max(1.5, Math.min(layout.stepPx * 0.34, 18))
-  const detentPull = DETENT_PULL * detentStrength
-  const detentDecayPerFrame = 1 - (1 - DETENT_DECAY_PER_FRAME) * detentStrength
-  const detentCaptureVelocity = DETENT_CAPTURE_VELOCITY * detentStrength
-  const detentDistance = offset - nearestStepOffset
-
-  if (Math.abs(detentDistance) <= detentRadius && Math.abs(velocity) <= detentCaptureVelocity) {
-    velocity =
-      (velocity - detentDistance * detentPull * dt) * Math.pow(detentDecayPerFrame, dt * 60)
-  }
-
-  return { offset, velocity, durationMs: state.durationMs, elapsedMs }
-}
-
-export function simulateTuneDialThrow(
-  layout: Pick<TuneDialLayout, 'stepPx' | 'totalSteps' | 'totalWidth'>,
-  gestureVelocityX: number,
-  startOffset = 0,
-  frameMs = 16,
-): TuneDialThrowState {
-  const velocity = computeThrowStartVelocity(gestureVelocityX, layout.totalWidth)
-  let state: TuneDialThrowState = {
-    offset: startOffset,
-    velocity,
-    durationMs: computeThrowDurationMs(gestureVelocityX, velocity, layout.totalWidth),
-    elapsedMs: 0,
-  }
-
-  for (let i = 0; i < 240 && state.velocity !== 0; i++) {
-    state = tickTuneDialThrowFrame(state, layout, frameMs)
-  }
-
-  return state
 }

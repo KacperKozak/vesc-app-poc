@@ -106,43 +106,6 @@ data class TelemetryFrameEntity(
 )
 
 @Entity(
-  tableName = "history_locations",
-  indices = [
-    Index(value = ["captured_at_ms"]),
-    Index(value = ["device_id", "captured_at_ms"]),
-  ],
-)
-data class HistoryLocationEntity(
-  @androidx.room.PrimaryKey(autoGenerate = true)
-  val id: Long = 0,
-  @ColumnInfo(name = "captured_at_ms")
-  val capturedAtMs: Long,
-  @ColumnInfo(name = "elapsed_realtime_ms")
-  val elapsedRealtimeMs: Long,
-  @ColumnInfo(name = "device_id")
-  val deviceId: String?,
-  @ColumnInfo(name = "device_name")
-  val deviceName: String?,
-  @ColumnInfo(name = "latitude_e7")
-  val latitudeE7: Int,
-  @ColumnInfo(name = "longitude_e7")
-  val longitudeE7: Int,
-  @ColumnInfo(name = "gps_speed_centi_mps")
-  val gpsSpeedCentiMps: Int?,
-  @ColumnInfo(name = "bearing_centi_deg")
-  val bearingCentiDeg: Int?,
-  @ColumnInfo(name = "accuracy_cm")
-  val accuracyCm: Int?,
-  @ColumnInfo(name = "altitude_cm")
-  val altitudeCm: Int?,
-  @ColumnInfo(name = "location_timestamp_ms")
-  val locationTimestampMs: Long,
-  val precise: Boolean,
-  @ColumnInfo(name = "distance_from_previous_cm")
-  val distanceFromPreviousCm: Long?,
-)
-
-@Entity(
   tableName = "telemetry_minute_buckets",
   primaryKeys = ["bucket_start_ms", "device_id"],
   indices = [Index(value = ["bucket_start_ms"])],

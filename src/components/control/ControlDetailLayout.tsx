@@ -119,15 +119,16 @@ function AlertFormModal({
   const isEditing = editRule != null
   const dialConfig = useMemo(() => getAlertDialConfig(controlId), [controlId])
 
+  const singlePresets = useMemo(() => getPresetsForCategory('single'), [])
+  const geigerPresets = useMemo(() => getPresetsForCategory('geiger'), [])
+
   const [tab, setTab] = useState<AlertTab>('single')
   const [threshold, setThreshold] = useState(dialConfig.min)
   const [thresholdMax, setThresholdMax] = useState(dialConfig.max)
-  const singlePresets = useMemo(() => getPresetsForCategory('single'), [])
-  const geigerPresets = useMemo(() => getPresetsForCategory('geiger'), [])
   const [soundType, setSoundType] = useState<AlertSoundType>(singlePresets[0]?.uri ?? 'preset:beep')
+  const [prevVisible, setPrevVisible] = useState(visible)
 
-  useEffect(() => {
-    if (!visible) return
+  if (visible && !prevVisible) {
     if (editRule) {
       setTab(editRule.thresholdMax != null ? 'geiger' : 'single')
       setThreshold(editRule.threshold)
@@ -146,7 +147,10 @@ function AlertFormModal({
       )
       setSoundType(singlePresets[0]?.uri ?? 'preset:beep')
     }
-  }, [visible, editRule, dialConfig, singlePresets])
+  }
+  if (visible !== prevVisible) {
+    setPrevVisible(visible)
+  }
 
   const handleTabSwitch = useCallback(
     (next: AlertTab) => {
@@ -220,6 +224,7 @@ function AlertFormModal({
               </Text>
               <TuneDial
                 value={threshold}
+                previousValue={editRule?.threshold}
                 min={dialConfig.min}
                 max={dialConfig.max}
                 step={dialConfig.step}
@@ -236,6 +241,7 @@ function AlertFormModal({
                 </Text>
                 <TuneDial
                   value={thresholdMax}
+                  previousValue={editRule?.thresholdMax ?? undefined}
                   min={dialConfig.min}
                   max={dialConfig.max}
                   step={dialConfig.step}

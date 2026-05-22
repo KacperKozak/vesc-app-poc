@@ -48,9 +48,7 @@ internal fun buildTelemetryBuckets(
     val bucketStart = point.capturedAtMs - (point.capturedAtMs % TELEMETRY_BUCKET_SIZE_MS)
     val deviceId = point.deviceId ?: UNKNOWN_TELEMETRY_DEVICE_ID
     val key = bucketStart to deviceId
-    val bucket = buckets.getOrPut(key) {
-      MutableBucket(bucketStart, deviceId, point.deviceName)
-    }
+    val bucket = buckets[key] ?: continue
     bucket.addLocation(point)
   }
   return buckets.values.map { it.toEntity() }

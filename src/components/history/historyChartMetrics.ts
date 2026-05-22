@@ -33,8 +33,6 @@ export const OPTIONAL_CHART_METRICS: readonly {
   },
 ]
 
-export type VisibleChartMetric = 'speed' | OptionalChartMetric
-
 export function toggleOptionalChartMetric(
   activeMetrics: ReadonlySet<OptionalChartMetric>,
   metric: OptionalChartMetric,
@@ -46,15 +44,4 @@ export function toggleOptionalChartMetric(
     next.add(metric)
   }
   return next
-}
-
-export function getVisibleChartMetrics(
-  activeMetrics: ReadonlySet<OptionalChartMetric>,
-): VisibleChartMetric[] {
-  return [
-    'speed',
-    ...OPTIONAL_CHART_METRICS.map((metric) => metric.key).filter((metric) =>
-      activeMetrics.has(metric),
-    ),
-  ]
 }

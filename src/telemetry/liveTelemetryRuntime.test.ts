@@ -75,7 +75,6 @@ function location(overrides: Partial<LocationEvent> = {}): LocationEvent {
     altitudeM: 250,
     timestamp: 10_000,
     precise: true,
-    saved: true,
     ...overrides,
   }
 }
@@ -162,14 +161,12 @@ describe('live telemetry runtime', () => {
   test('keeps approximate locations out of live trail history', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
 
-    runtime.ingestLocation(
-      location({ timestamp: 12_000, precise: false, saved: false, accuracyM: 100 }),
-    )
+    runtime.ingestLocation(location({ timestamp: 12_000, precise: false, accuracyM: 100 }))
     const snapshot = runtime.consumePendingSnapshot()
 
     expect(snapshot?.liveLocationHistory).toEqual([])
     expect(snapshot?.latestApproximateLocation).toEqual(
-      location({ timestamp: 12_000, precise: false, saved: false, accuracyM: 100 }),
+      location({ timestamp: 12_000, precise: false, accuracyM: 100 }),
     )
     expect(snapshot?.liveStatus).toMatchObject({
       gpsSampleCount: 0,

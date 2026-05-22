@@ -16,7 +16,9 @@ import {
   type TuneHistoryEntry,
 } from 'vesc-ble'
 
-export type { TuneProfile, TuneProfileFieldValue, TuneHistoryEntry } from 'vesc-ble'
+import { useTuneSnapshotStore } from '@/store/tuneSnapshotStore'
+
+export type { TuneProfile, TuneProfileFieldValue } from 'vesc-ble'
 
 export interface TuneProfileBoardDiff {
   fieldId: string
@@ -130,6 +132,8 @@ function nextDraftWithField(
   return next
 }
 
+let profileLoadRequestId = 0
+
 export const useTuneProfileStore = create<TuneProfileState & TuneProfileActions>((set, get) => ({
   profiles: [],
   activeProfile: null,
@@ -145,20 +149,18 @@ export const useTuneProfileStore = create<TuneProfileState & TuneProfileActions>
   error: null,
 
   async loadProfiles(boardId) {
+    const requestId = ++profileLoadRequestId
+    const currentActive = get().activeProfile
     set({
-      profiles: [],
-      activeProfile: null,
-      draftFields: {},
-      hasDirtyFields: false,
-      boardDiff: [],
-      hasBoardDiff: false,
       loading: true,
       error: null,
       activeBoardId: boardId,
     })
     try {
       const profiles = await nativeGetTuneProfiles(boardId)
-      const currentActive = get().activeProfile
+      if (requestId !== profileLoadRequestId || get().activeBoardId !== boardId) {
+        return get().profiles
+      }
       const activeProfile =
         profiles.find((profile) => profile.id === currentActive?.id) ?? profiles[0] ?? null
       const diff = boardDiff(activeProfile, get().boardFields)
@@ -174,6 +176,9 @@ export const useTuneProfileStore = create<TuneProfileState & TuneProfileActions>
       })
       return profiles
     } catch (error) {
+      if (requestId !== profileLoadRequestId || get().activeBoardId !== boardId) {
+        return get().profiles
+      }
       set({ loading: false, error: errorMessage(error) })
       throw error
     }
@@ -446,6 +451,7 @@ export const useTuneProfileStore = create<TuneProfileState & TuneProfileActions>
     set({ syncing: true, error: null })
     try {
       const snapshot = await nativePushProfileToBoard(profile.id)
+      useTuneSnapshotStore.getState().setSnapshot(snapshot)
       get().setBoardSnapshot(snapshot)
       set({ syncing: false })
     } catch (error) {
@@ -455,6 +461,7 @@ export const useTuneProfileStore = create<TuneProfileState & TuneProfileActions>
   },
 
   clear() {
+    profileLoadRequestId += 1
     set({
       profiles: [],
       activeProfile: null,

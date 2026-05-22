@@ -60,7 +60,6 @@ data class LocationSnapshot(
     val altitudeM: Double?,
     val timestamp: Long,
     val precise: Boolean,
-    val saved: Boolean,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "latitude" to latitude,
@@ -71,7 +70,6 @@ data class LocationSnapshot(
         "altitudeM" to altitudeM,
         "timestamp" to timestamp,
         "precise" to precise,
-        "saved" to saved,
     )
 }
 

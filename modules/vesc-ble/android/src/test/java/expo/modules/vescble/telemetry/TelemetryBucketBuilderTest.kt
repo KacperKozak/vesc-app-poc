@@ -1,7 +1,6 @@
 package expo.modules.vescble.telemetry
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TelemetryBucketBuilderTest {
@@ -76,8 +75,8 @@ class TelemetryBucketBuilderTest {
   }
 
   @Test
-  fun createsGpsOnlyBucketForUnknownDevice() {
-    val bucket = buildTelemetryBuckets(
+  fun ignoresGpsOnlyPoints() {
+    val buckets = buildTelemetryBuckets(
       telemetryPoints = emptyList(),
       locationPoints = listOf(
         BucketLocationPoint(
@@ -89,16 +88,9 @@ class TelemetryBucketBuilderTest {
           gpsSpeedCentiMps = null,
         ),
       ),
-    ).single()
+    )
 
-    assertEquals(60_000L, bucket.bucketStartMs)
-    assertEquals(UNKNOWN_TELEMETRY_DEVICE_ID, bucket.deviceId)
-    assertNull(bucket.deviceName)
-    assertEquals(0, bucket.sampleCount)
-    assertEquals(1, bucket.gpsPointCount)
-    assertEquals(1, bucket.preciseGpsPointCount)
-    assertEquals(0L, bucket.gpsDistanceCm)
-    assertNull(bucket.maxGpsSpeedCentiMps)
+    assertEquals(emptyList<TelemetryMinuteBucketEntity>(), buckets)
   }
 
   @Test

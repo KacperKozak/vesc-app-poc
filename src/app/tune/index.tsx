@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Modal,
@@ -21,14 +21,7 @@ import {
   XIcon,
 } from 'phosphor-react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import {
-  getRefloatConfigSnapshot,
-  type TuneProfile,
-  type RefloatConfigField,
-  type RefloatConfigGroup,
-  type RefloatConfigSnapshot,
-  type TuneProfileFieldValue,
-} from 'vesc-ble'
+import { type TuneProfile, type RefloatConfigField, type TuneProfileFieldValue } from 'vesc-ble'
 
 import { Banner } from '@/components/Banner'
 import { IconButton } from '@/components/IconButton'
@@ -42,133 +35,60 @@ import { TuneConfigCell } from '@/components/tune/TuneConfigCell'
 import { TuneGroupGrid } from '@/components/tune/TuneGroupGrid'
 import { TuneSyncBar } from '@/components/tune/TuneSyncBar'
 import { routes } from '@/navigation/routes'
-import { useBoardStore, type Board } from '@/store/boardStore'
-import { useBleStore } from '@/store/bleStore'
+import { type Board } from '@/store/boardStore'
 import { useTuneProfileStore } from '@/store/tuneProfileStore'
-import { APP_TUNE_GROUPS, APP_TUNE_FIELD_BY_ID, formatTuneValue } from '@/tune/fields'
+import { formatTuneValue } from '@/tune/fields'
 import {
   BASIC_SLIDER_BY_ID,
-  basicSlidersFromSnapshot,
   fieldHelp,
   fieldStep,
   getLinkedFieldPreviews,
   isEditableNumberField,
+  type BasicSliderItem,
 } from '@/tune/sliderDefinitions'
-import { getSyncBarState } from '@/tune/syncBarState'
-
-type LoadState =
-  | { phase: 'loading'; snapshot: RefloatConfigSnapshot | null; error: string | null }
-  | { phase: 'ready'; snapshot: RefloatConfigSnapshot; error: null }
-  | { phase: 'empty'; snapshot: null; error: null }
-  | { phase: 'error'; snapshot: RefloatConfigSnapshot | null; error: string }
+import { useTuneScreenData } from '@/tune/useTuneScreenData'
 
 type InfoModalState = { title: string; message: string } | null
 
 type EditorKind = { kind: 'field'; fieldId: string } | { kind: 'basic'; sliderId: string }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message
-  return 'Unable to read Refloat config.'
-}
-
-function isDisplayableFieldValue(
-  value: TuneProfileFieldValue | undefined,
-): value is number | boolean | string {
-  return typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
-}
-
-function groupsWithProfileValues(
-  groups: RefloatConfigGroup[],
-  fields: Record<string, TuneProfileFieldValue> | null,
-): RefloatConfigGroup[] {
-  return groups.map((group) => ({
-    ...group,
-    fields: group.fields.map((field) => {
-      const appField = APP_TUNE_FIELD_BY_ID.get(field.id)
-      const profileValue = fields?.[field.id]
-      return {
-        ...field,
-        label: appField?.label ?? field.label,
-        unit: appField?.unit ?? field.unit,
-        min: appField?.min ?? field.min,
-        max: appField?.max ?? field.max,
-        value: isDisplayableFieldValue(profileValue) ? profileValue : field.value,
-      }
-    }),
-  }))
-}
-
-function snapshotFromTuneProfile(boardId: string, profile: TuneProfile): RefloatConfigSnapshot {
-  return {
-    capturedAt: Date.now(),
-    boardId,
-    canId: 0,
-    schemaHash: 'app-tune-v1',
-    rawConfigHash: '',
-    rawConfigLength: 0,
-    fwVersion: null,
-    missingFieldIds: [],
-    groups: APP_TUNE_GROUPS.map((group) => ({
-      id: group.id,
-      title: group.title,
-      fields: group.fields.flatMap((field) => {
-        const value = profile.fields[field.id]
-        if (!isDisplayableFieldValue(value)) return []
-        return [
-          {
-            id: field.id,
-            label: field.label,
-            value,
-            unit: field.unit,
-            min: field.min,
-            max: field.max,
-          },
-        ]
-      }),
-    })).filter((group) => group.fields.length > 0),
-  }
-}
-
 export default function TuneScreen() {
   const navigation = useNavigation()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const bleStatus = useBleStore((s) => s.status)
-  const boardConnected = bleStatus === 'connected'
-  const allBoards = useBoardStore((s) => s.boards)
-  const selectedBoardId = useBoardStore((s) => s.activeBoardId)
-  const boardsLoaded = useBoardStore((s) => s.hasLoaded)
-  const loadBoards = useBoardStore((s) => s.load)
-  const profiles = useTuneProfileStore((s) => s.profiles)
-  const activeProfile = useTuneProfileStore((s) => s.activeProfile)
-  const draftFields = useTuneProfileStore((s) => s.draftFields)
-  const hasDirtyFields = useTuneProfileStore((s) => s.hasDirtyFields)
-  const savingProfile = useTuneProfileStore((s) => s.saving)
-  const syncingProfile = useTuneProfileStore((s) => s.syncing)
-  const profileError = useTuneProfileStore((s) => s.error)
-  const boardDiff = useTuneProfileStore((s) => s.boardDiff)
-  const hasBoardDiff = useTuneProfileStore((s) => s.hasBoardDiff)
-  const loadProfiles = useTuneProfileStore((s) => s.loadProfiles)
+  const {
+    activeProfile,
+    allBoards,
+    basicSliders,
+    boardConnected,
+    boardDiffByField,
+    boardSnapshot,
+    boardSnapshotStatus,
+    boardsLoaded,
+    dirtyFields,
+    displayGroups,
+    draftFields,
+    loadOffline,
+    loadOnline,
+    profileError,
+    profileState,
+    profiles,
+    retryBoardSnapshot,
+    schemaMismatchFields,
+    selectedBoardId,
+    syncBarState,
+  } = useTuneScreenData()
   const setActiveProfile = useTuneProfileStore((s) => s.setActiveProfile)
   const storeCreateProfile = useTuneProfileStore((s) => s.createProfile)
   const storeRenameProfile = useTuneProfileStore((s) => s.renameProfile)
   const storeDeleteProfile = useTuneProfileStore((s) => s.deleteProfile)
   const storeCopyProfile = useTuneProfileStore((s) => s.copyProfileToBoard)
   const setDraftField = useTuneProfileStore((s) => s.setDraftField)
-  const setBoardSnapshot = useTuneProfileStore((s) => s.setBoardSnapshot)
-  const getDirtyFields = useTuneProfileStore((s) => s.getDirtyFields)
   const revertField = useTuneProfileStore((s) => s.revertField)
   const acceptBoardField = useTuneProfileStore((s) => s.acceptBoardField)
   const discardAllEdits = useTuneProfileStore((s) => s.discardAllEdits)
   const saveActiveProfile = useTuneProfileStore((s) => s.saveActiveProfile)
   const syncToBoard = useTuneProfileStore((s) => s.syncToBoard)
-  const clearProfiles = useTuneProfileStore((s) => s.clear)
-
-  const [state, setState] = useState<LoadState>({
-    phase: 'loading',
-    snapshot: null,
-    error: null,
-  })
   const [infoModal, setInfoModal] = useState<InfoModalState>(null)
   const [editor, setEditor] = useState<FieldEditorTarget | null>(null)
   const [editorKind, setEditorKind] = useState<EditorKind | null>(null)
@@ -178,86 +98,6 @@ export default function TuneScreen() {
   const [copySourceProfile, setCopySourceProfile] = useState<TuneProfile | null>(null)
   const [copyTargetBoard, setCopyTargetBoard] = useState<Board | null>(null)
   const [deleteConfirmProfile, setDeleteConfirmProfile] = useState<TuneProfile | null>(null)
-
-  const cellRefs = useRef<Map<string, { current: View | null }>>(new Map())
-
-  function getRef(id: string): { current: View | null } {
-    if (!cellRefs.current.has(id)) {
-      cellRefs.current.set(id, { current: null })
-    }
-    return cellRefs.current.get(id)!
-  }
-
-  const loadOnline = useCallback(async () => {
-    setState((current) => ({ phase: 'loading', snapshot: current.snapshot, error: null }))
-    try {
-      const snapshot = await getRefloatConfigSnapshot()
-      if (snapshot.boardId) {
-        await loadProfiles(snapshot.boardId).catch(() => [])
-      } else {
-        clearProfiles()
-      }
-      setBoardSnapshot(snapshot)
-      setState({ phase: 'ready', snapshot, error: null })
-    } catch (error) {
-      setState((current) => ({
-        phase: 'error',
-        snapshot: current.snapshot,
-        error: errorMessage(error),
-      }))
-    }
-  }, [clearProfiles, loadProfiles, setBoardSnapshot])
-
-  const loadOffline = useCallback(
-    async (boardId: string) => {
-      setState((current) => ({ phase: 'loading', snapshot: current.snapshot, error: null }))
-      try {
-        const profileList = await loadProfiles(boardId)
-        const profile = profileList[0]
-        if (!profile) {
-          setBoardSnapshot(null)
-          setState({ phase: 'empty', snapshot: null, error: null })
-          return
-        }
-        const snapshot = snapshotFromTuneProfile(boardId, profile)
-        setBoardSnapshot(null)
-        setState({ phase: 'ready', snapshot, error: null })
-      } catch (error) {
-        setState((current) => ({
-          phase: 'error',
-          snapshot: current.snapshot,
-          error: errorMessage(error),
-        }))
-      }
-    },
-    [loadProfiles, setBoardSnapshot],
-  )
-
-  useEffect(() => {
-    if (!boardsLoaded) {
-      void loadBoards()
-    }
-  }, [boardsLoaded, loadBoards])
-
-  useEffect(() => {
-    if (boardConnected) {
-      void loadOnline()
-    } else if (selectedBoardId) {
-      void loadOffline(selectedBoardId)
-    } else if (boardsLoaded) {
-      clearProfiles()
-      setBoardSnapshot(null)
-      setState({ phase: 'loading', snapshot: null, error: null })
-    }
-  }, [
-    boardConnected,
-    boardsLoaded,
-    clearProfiles,
-    loadOffline,
-    loadOnline,
-    selectedBoardId,
-    setBoardSnapshot,
-  ])
 
   const openHistory = useCallback(() => {
     router.push(routes.tuneHistory)
@@ -275,74 +115,13 @@ export default function TuneScreen() {
             <IconButton
               icon={ArrowsClockwiseIcon}
               onPress={() => void loadOnline()}
-              loading={state.phase === 'loading'}
+              loading={boardSnapshotStatus === 'loading'}
             />
           ) : null}
         </View>
       ),
     })
-  }, [activeProfile, boardConnected, openHistory, loadOnline, navigation, state.phase])
-
-  const snapshot = state.snapshot
-  const profileFields = useMemo(
-    () => (activeProfile ? { ...activeProfile.fields, ...draftFields } : null),
-    [activeProfile, draftFields],
-  )
-  const displayGroups = useMemo(
-    () => (snapshot ? groupsWithProfileValues(snapshot.groups, profileFields) : []),
-    [profileFields, snapshot],
-  )
-  const displaySnapshot = useMemo(
-    () => (snapshot ? { ...snapshot, groups: displayGroups } : null),
-    [displayGroups, snapshot],
-  )
-  const basicSliders = useMemo(
-    () => (displaySnapshot ? basicSlidersFromSnapshot(displaySnapshot) : []),
-    [displaySnapshot],
-  )
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const dirtyFields = useMemo(() => getDirtyFields(), [getDirtyFields, draftFields, activeProfile])
-
-  const schemaMismatchFields = useMemo(() => {
-    if (!activeProfile || !snapshot) return null
-    const boardFieldIds = new Set(snapshot.groups.flatMap((g) => g.fields.map((f) => f.id)))
-    const profileFieldIds = Object.keys(activeProfile.fields)
-    const profileOnly = profileFieldIds.filter((id) => !boardFieldIds.has(id))
-    const boardOnly = [...boardFieldIds].filter(
-      (id) => !Object.prototype.hasOwnProperty.call(activeProfile.fields, id),
-    )
-    if (profileOnly.length === 0 && boardOnly.length === 0) return null
-    return { profileOnly, boardOnly }
-  }, [activeProfile, snapshot])
-
-  const boardDiffByField = useMemo(
-    () => new Map(boardDiff.map((item) => [item.fieldId, item])),
-    [boardDiff],
-  )
-
-  const syncBarState = useMemo(
-    () =>
-      getSyncBarState({
-        hasProfile: activeProfile != null,
-        bleStatus,
-        hasDirtyFields,
-        hasBoardDiff,
-        dirtyCount: Object.keys(dirtyFields).length,
-        diffCount: boardDiff.length,
-        saving: savingProfile,
-        syncing: syncingProfile,
-      }),
-    [
-      activeProfile,
-      bleStatus,
-      hasDirtyFields,
-      hasBoardDiff,
-      dirtyFields,
-      boardDiff,
-      savingProfile,
-      syncingProfile,
-    ],
-  )
+  }, [activeProfile, boardConnected, boardSnapshotStatus, openHistory, loadOnline, navigation])
 
   const showBadgeInfo = (title: string, message: string) => {
     setInfoModal({ title, message })
@@ -483,9 +262,11 @@ export default function TuneScreen() {
     void syncToBoard().catch(() => undefined)
   }
 
+  const hasTuneView = activeProfile != null
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {!boardConnected && !selectedBoardId && boardsLoaded && !snapshot ? (
+      {!selectedBoardId && boardsLoaded && !hasTuneView ? (
         <Placeholder
           icon={BluetoothSlashIcon}
           title="No board selected"
@@ -493,16 +274,14 @@ export default function TuneScreen() {
         />
       ) : null}
 
-      {state.phase === 'loading' && !snapshot && (boardConnected || selectedBoardId) ? (
+      {profileState.phase === 'loading' && !hasTuneView && selectedBoardId ? (
         <View style={styles.centerState}>
           <ActivityIndicator color="#38bdf8" />
-          <Text style={styles.stateText}>
-            {boardConnected ? 'Reading board config...' : 'Loading saved tune profile...'}
-          </Text>
+          <Text style={styles.stateText}>Loading saved tune profile...</Text>
         </View>
       ) : null}
 
-      {state.phase === 'empty' ? (
+      {profileState.phase === 'empty' ? (
         <Placeholder
           icon={FadersIcon}
           title="No saved tunes"
@@ -510,26 +289,20 @@ export default function TuneScreen() {
         />
       ) : null}
 
-      {state.phase === 'error' && !snapshot ? (
+      {profileState.phase === 'error' && !hasTuneView ? (
         <View style={styles.centerState}>
           <WarningCircleIcon size={28} color="#f87171" />
-          <Text style={styles.errorText}>{state.error}</Text>
+          <Text style={styles.errorText}>{profileState.error}</Text>
           <Pressable
             style={styles.retryButton}
-            onPress={() =>
-              boardConnected
-                ? void loadOnline()
-                : selectedBoardId
-                  ? void loadOffline(selectedBoardId)
-                  : undefined
-            }
+            onPress={() => (selectedBoardId ? void loadOffline(selectedBoardId) : undefined)}
           >
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {snapshot ? (
+      {hasTuneView ? (
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}
           contentInsetAdjustmentBehavior="automatic"
@@ -539,13 +312,6 @@ export default function TuneScreen() {
             title="Work in progress"
             message="Tune editing is experimental. Do not sync changes to the board until this feature is stable."
           />
-
-          {state.phase === 'error' ? (
-            <View style={styles.errorBanner}>
-              <WarningCircleIcon size={16} color="#fca5a5" />
-              <Text style={styles.errorBannerText}>{state.error}</Text>
-            </View>
-          ) : null}
 
           {profileError ? (
             <View style={styles.errorBanner}>
@@ -605,61 +371,62 @@ export default function TuneScreen() {
             />
           ) : null}
 
-          <View style={styles.metaRow}>
-            {snapshot.fwVersion ? (
+          {boardSnapshot ? (
+            <View style={styles.metaRow}>
+              {boardSnapshot.fwVersion ? (
+                <InfoBadge
+                  label={boardSnapshot.fwVersion}
+                  onPress={() =>
+                    showBadgeInfo(
+                      'Firmware',
+                      'Firmware reported by the connected controller. This is useful diagnostic context, but the config decoder uses the board XML schema as the source of truth.',
+                    )
+                  }
+                />
+              ) : null}
               <InfoBadge
-                label={snapshot.fwVersion}
+                label={`CAN ${boardSnapshot.canId}`}
                 onPress={() =>
                   showBadgeInfo(
-                    'Firmware',
-                    'Firmware reported by the connected controller. This is useful diagnostic context, but the config decoder uses the board XML schema as the source of truth.',
+                    'CAN ID',
+                    `Controller CAN ID ${boardSnapshot.canId}. Refloat config commands are forwarded to this controller before reading the schema and binary config.`,
                   )
                 }
               />
-            ) : null}
-            <InfoBadge
-              label={`CAN ${snapshot.canId}`}
-              onPress={() =>
-                showBadgeInfo(
-                  'CAN ID',
-                  `Controller CAN ID ${snapshot.canId}. Refloat config commands are forwarded to this controller before reading the schema and binary config.`,
-                )
-              }
-            />
-            <InfoBadge
-              label={`${snapshot.rawConfigLength} bytes`}
-              onPress={() =>
-                showBadgeInfo(
-                  'Config Size',
-                  `${snapshot.rawConfigLength} bytes is the size of the raw Refloat custom config payload read from the controller. The app decodes only known tune fields from that binary struct.`,
-                )
-              }
-            />
-            {snapshot.missingFieldIds.length > 0 ? (
               <InfoBadge
-                label={`${snapshot.missingFieldIds.length} missing`}
-                danger
+                label={`${boardSnapshot.rawConfigLength} bytes`}
                 onPress={() =>
                   showBadgeInfo(
-                    'Missing Fields',
-                    `These allowlisted fields were not present in the board schema: ${snapshot.missingFieldIds.join(', ')}`,
+                    'Config Size',
+                    `${boardSnapshot.rawConfigLength} bytes is the size of the raw Refloat custom config payload read from the controller. The app decodes only known tune fields from that binary struct.`,
                   )
                 }
               />
-            ) : null}
-          </View>
+              {boardSnapshot.missingFieldIds.length > 0 ? (
+                <InfoBadge
+                  label={`${boardSnapshot.missingFieldIds.length} missing`}
+                  danger
+                  onPress={() =>
+                    showBadgeInfo(
+                      'Missing Fields',
+                      `These allowlisted fields were not present in the board schema: ${boardSnapshot.missingFieldIds.join(', ')}`,
+                    )
+                  }
+                />
+              ) : null}
+            </View>
+          ) : null}
 
           <TuneGroupGrid
             title="Basic"
             subtitle={activeProfile ? 'tap to adjust' : 'derived preview'}
           >
             {basicSliders.map((item) => (
-              <BasicSliderCell
+              <BasicSliderItemCell
                 key={item.id}
-                ref={getRef(item.id) as React.RefObject<View>}
                 item={item}
                 editable={activeProfile != null}
-                onPress={() => openBasicSliderEditor(item.id, getRef(item.id))}
+                onPress={openBasicSliderEditor}
                 onInfo={() =>
                   showBadgeInfo(
                     item.label,
@@ -688,16 +455,15 @@ export default function TuneScreen() {
               }
             >
               {group.fields.map((field) => (
-                <TuneConfigCell
+                <TuneFieldCell
                   key={field.id}
-                  ref={getRef(field.id) as React.RefObject<View>}
                   field={field}
                   savedValue={activeProfile?.fields[field.id]}
                   boardValue={boardDiffByField.get(field.id)?.boardValue}
                   profileValue={boardDiffByField.get(field.id)?.profileValue}
                   dirty={Object.prototype.hasOwnProperty.call(dirtyFields, field.id)}
                   boardChanged={boardDiffByField.has(field.id)}
-                  onPress={() => openFieldEditor(field, getRef(field.id))}
+                  onPress={openFieldEditor}
                   onInfo={() => showFieldInfo(field)}
                   onRevert={() => revertField(field.id)}
                   onAcceptBoard={() => acceptBoardField(field.id)}
@@ -708,13 +474,14 @@ export default function TuneScreen() {
         </ScrollView>
       ) : null}
 
-      {snapshot ? (
+      {hasTuneView ? (
         <TuneSyncBar
           state={syncBarState}
           onSave={handleSave}
           onSaveAndSync={handleSaveAndSync}
           onSync={handleSync}
           onDiscard={discardAllEdits}
+          onRetryConfig={() => void retryBoardSnapshot()}
           bottomOffset={insets.bottom + 16}
         />
       ) : null}
@@ -805,6 +572,73 @@ function InfoBadge({
   )
 }
 
+function BasicSliderItemCell({
+  item,
+  editable,
+  onPress,
+  onInfo,
+  onResetFormula,
+}: {
+  item: BasicSliderItem
+  editable: boolean
+  onPress: (sliderId: string, ref: { current: View | null }) => void
+  onInfo: () => void
+  onResetFormula: () => void
+}) {
+  const cellRef = useRef<View | null>(null)
+  return (
+    <BasicSliderCell
+      ref={cellRef}
+      item={item}
+      editable={editable}
+      onPress={() => onPress(item.id, cellRef)}
+      onInfo={onInfo}
+      onResetFormula={onResetFormula}
+    />
+  )
+}
+
+function TuneFieldCell({
+  field,
+  savedValue,
+  boardValue,
+  profileValue,
+  dirty,
+  boardChanged,
+  onPress,
+  onInfo,
+  onRevert,
+  onAcceptBoard,
+}: {
+  field: RefloatConfigField
+  savedValue: TuneProfileFieldValue | undefined
+  boardValue: TuneProfileFieldValue | undefined
+  profileValue: TuneProfileFieldValue | undefined
+  dirty: boolean
+  boardChanged: boolean
+  onPress: (field: RefloatConfigField, ref: { current: View | null }) => void
+  onInfo: () => void
+  onRevert: () => void
+  onAcceptBoard: () => void
+}) {
+  const cellRef = useRef<View | null>(null)
+  return (
+    <TuneConfigCell
+      ref={cellRef}
+      field={field}
+      savedValue={savedValue}
+      boardValue={boardValue}
+      profileValue={profileValue}
+      dirty={dirty}
+      boardChanged={boardChanged}
+      onPress={() => onPress(field, cellRef)}
+      onInfo={onInfo}
+      onRevert={onRevert}
+      onAcceptBoard={onAcceptBoard}
+    />
+  )
+}
+
 function TextPromptModal({
   visible,
   title,
@@ -822,41 +656,65 @@ function TextPromptModal({
   onConfirm: (value: string) => void
   onDismiss: () => void
 }) {
-  const [text, setText] = useState(initialValue)
-
-  useEffect(() => {
-    if (visible) setText(initialValue)
-  }, [visible, initialValue])
-
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
-      <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
-        <Pressable style={styles.promptModal} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.promptTitle}>{title}</Text>
-          <TextInput
-            style={styles.promptInput}
-            value={text}
-            onChangeText={setText}
-            placeholder={placeholder}
-            placeholderTextColor="#475569"
-            autoFocus
-            selectTextOnFocus
-          />
-          <View style={styles.promptActions}>
-            <Pressable style={styles.promptCancelBtn} onPress={onDismiss}>
-              <Text style={styles.promptCancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={styles.promptConfirmBtn}
-              onPress={() => text.trim() && onConfirm(text.trim())}
-            >
-              <CheckIcon size={15} color="#020617" weight="bold" />
-              <Text style={styles.promptConfirmText}>{confirmLabel}</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
+      {visible ? (
+        <TextPromptModalContent
+          title={title}
+          placeholder={placeholder}
+          initialValue={initialValue}
+          confirmLabel={confirmLabel}
+          onConfirm={onConfirm}
+          onDismiss={onDismiss}
+        />
+      ) : null}
     </Modal>
+  )
+}
+
+function TextPromptModalContent({
+  title,
+  placeholder,
+  initialValue,
+  confirmLabel,
+  onConfirm,
+  onDismiss,
+}: {
+  title: string
+  placeholder?: string
+  initialValue: string
+  confirmLabel: string
+  onConfirm: (value: string) => void
+  onDismiss: () => void
+}) {
+  const [text, setText] = useState(initialValue)
+  return (
+    <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
+      <Pressable style={styles.promptModal} onPress={(e) => e.stopPropagation()}>
+        <Text style={styles.promptTitle}>{title}</Text>
+        <TextInput
+          style={styles.promptInput}
+          value={text}
+          onChangeText={setText}
+          placeholder={placeholder}
+          placeholderTextColor="#475569"
+          autoFocus
+          selectTextOnFocus
+        />
+        <View style={styles.promptActions}>
+          <Pressable style={styles.promptCancelBtn} onPress={onDismiss}>
+            <Text style={styles.promptCancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            style={styles.promptConfirmBtn}
+            onPress={() => text.trim() && onConfirm(text.trim())}
+          >
+            <CheckIcon size={15} color="#020617" weight="bold" />
+            <Text style={styles.promptConfirmText}>{confirmLabel}</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Pressable>
   )
 }
 

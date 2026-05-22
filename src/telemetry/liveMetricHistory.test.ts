@@ -51,7 +51,6 @@ function location(overrides: Partial<LocationEvent> = {}): LocationEvent {
     altitudeM: 250,
     timestamp: 10_000,
     precise: true,
-    saved: true,
     ...overrides,
   }
 }
@@ -89,7 +88,7 @@ describe('live metric history', () => {
     const buffer = createLiveMetricBuffer()
     appendLocationSample(
       buffer,
-      location({ timestamp: 1_000, precise: false, saved: false, accuracyM: 80 }),
+      location({ timestamp: 1_000, precise: false, accuracyM: 80 }),
       10_000,
     )
 

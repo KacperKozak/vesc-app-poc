@@ -97,7 +97,6 @@ export function CenterScreen({
         perspectiveEnabled={controller.perspectiveEnabled}
         onPerspectiveChange={controller.setPerspectiveEnabled}
         onHeadingChange={controller.setHeading}
-        onMapFocus={controller.handleMapFocus}
         onLongPressTarget={controller.setTargetLocation}
         targetLocation={controller.targetLocation}
         onClearTarget={controller.clearTargetLocation}
@@ -126,6 +125,7 @@ export function CenterScreen({
           clearTargetLocation: controller.clearTargetLocation,
           mapStyleKey: controller.mapStyleKey,
           setMapStyleKey: controller.setMapStyleKey,
+          enterMapFocus: controller.handleMapFocus,
           setRotationLocked: controller.setRotationLocked,
           exitMapFocus: controller.exitMapFocus,
         }}

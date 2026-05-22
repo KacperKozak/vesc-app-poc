@@ -1,8 +1,14 @@
-import type { RefloatConfigField, RefloatConfigSnapshot, TuneProfileFieldValue } from 'vesc-ble'
+import type {
+  RefloatConfigField,
+  RefloatConfigGroup,
+  RefloatConfigSnapshot,
+  TuneProfileFieldValue,
+} from 'vesc-ble'
 
 import { APP_TUNE_FIELD_BY_ID, formatTuneValue } from '@/tune/fields'
+import { isDisplayableFieldValue } from '@/tune/fieldValues'
 
-export const FIELD_INFO: Record<string, string> = {
+const FIELD_INFO: Record<string, string> = {
   kp: 'Main proportional angle response. Higher values make the board respond more strongly to nose angle error.',
   kp2: 'Responds to angular velocity. This acts like damping and is especially noticeable during fast or aggressive nose-angle changes.',
   kp_brake: 'Multiplier for angle response while braking.',
@@ -77,13 +83,13 @@ export interface BasicSliderDefinition {
   checkMatch: (fields: Map<string, number | null>) => boolean
 }
 
-export const EPSILON = 0.015
+const EPSILON = 0.015
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-export function interpolate(
+function interpolate(
   x: number,
   inputRange: [number, number],
   outputRange: [number, number],
@@ -93,12 +99,12 @@ export function interpolate(
   return outMin + ((x - inMin) / (inMax - inMin)) * (outMax - outMin)
 }
 
-export function roundTo(value: number, decimals: number): number {
+function roundTo(value: number, decimals: number): number {
   const factor = 10 ** decimals
   return Math.round(value * factor) / factor
 }
 
-export function nearEqual(a: number, b: number): boolean {
+function nearEqual(a: number, b: number): boolean {
   return Math.abs(a - b) <= EPSILON
 }
 
@@ -114,15 +120,6 @@ export function fieldStep(field: RefloatConfigField): number {
   return 10
 }
 
-export function snapFieldValue(value: number, field: RefloatConfigField): number {
-  const min = field.min ?? 0
-  const max = field.max ?? 1
-  const step = fieldStep(field)
-  const snapped = Math.round((value - min) / step) * step + min
-  const decimals = step < 1 ? Math.ceil(Math.abs(Math.log10(step))) : 0
-  return Number(clamp(snapped, min, max).toFixed(decimals))
-}
-
 export function snapValue(value: number, min: number, max: number, step: number): number {
   const snapped = Math.round((value - min) / step) * step + min
   const decimals = step < 1 ? Math.ceil(Math.abs(Math.log10(step))) : 0
@@ -132,12 +129,6 @@ export function snapValue(value: number, min: number, max: number, step: number)
 export function formatSliderValue(item: BasicSliderItem): string {
   if (item.value == null) return 'Missing'
   return Number.isInteger(item.value) ? item.value.toFixed(0) : item.value.toFixed(1)
-}
-
-export function isDisplayableFieldValue(
-  value: TuneProfileFieldValue | undefined,
-): value is number | boolean | string {
-  return typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
 }
 
 export function formatProfileValue(value: TuneProfileFieldValue | undefined): string {
@@ -160,7 +151,7 @@ export function fieldHelp(field: RefloatConfigField): string {
   return FIELD_INFO[field.id] ?? 'Read-only field decoded from the board custom config schema.'
 }
 
-export const BASIC_SLIDERS: BasicSliderDefinition[] = [
+const BASIC_SLIDERS: BasicSliderDefinition[] = [
   {
     id: 'aggressiveness',
     label: 'Aggressiveness',
@@ -291,13 +282,13 @@ export const BASIC_SLIDERS: BasicSliderDefinition[] = [
 
 export const BASIC_SLIDER_BY_ID = new Map(BASIC_SLIDERS.map((s) => [s.id, s]))
 
-export function basicSlidersFromSnapshot(
-  snapshot: RefloatConfigSnapshot,
+export function basicSlidersFromGroups(
+  groups: RefloatConfigGroup[],
   overrideFields?: Map<string, number | null>,
 ): BasicSliderItem[] {
   const fieldMap = overrideFields ?? new Map<string, number | null>()
   if (!overrideFields) {
-    for (const group of snapshot.groups) {
+    for (const group of groups) {
       for (const field of group.fields) {
         const v =
           typeof field.value === 'number' && Number.isFinite(field.value) ? field.value : null

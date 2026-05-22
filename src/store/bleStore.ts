@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { EventSubscription } from 'expo-modules-core'
 import {
   scan as nativeScan,
   stopScan as nativeStopScan,
@@ -26,13 +25,17 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { liveTelemetryRuntime } from '@/telemetry/liveTelemetryRuntime'
 import { type LiveStatusSummary } from '@/telemetry/liveMetricHistory'
 
+interface EventSubscription {
+  remove(): void
+}
+
 export interface ScannedDevice {
   id: string
   name: string
   rssi: number
 }
 
-export type BleStatus = BoardPhase
+type BleStatus = BoardPhase
 
 interface BleState {
   status: BleStatus
@@ -129,18 +132,15 @@ function cleanupBleStoreModule(): void {
 }
 
 function applyLiveState(state: LiveStateEvent, set: BleSet): void {
-  const hasRecentSnapshot =
-    state.board.recentTelemetry.length > 0 ||
-    state.gps.recentLocations.length > 0 ||
-    state.gps.latestApproximateFix != null ||
-    state.gps.latestFix != null
-  if (hasRecentSnapshot) {
+  const hasRecentSamples =
+    state.board.recentTelemetry.length > 0 || state.gps.recentLocations.length > 0
+  if (hasRecentSamples) {
     clearLiveHistoryPublishTimer()
   }
-  if (!hasRecentSnapshot) {
+  if (!hasRecentSamples) {
     liveTelemetryRuntime.syncConnectionSeq(state.board.connectionSeq)
   }
-  const live = hasRecentSnapshot
+  const live = hasRecentSamples
     ? liveTelemetryRuntime.seedFromLiveState(state)
     : liveTelemetryRuntime.getSnapshot()
 
@@ -155,7 +155,7 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
     connectedId: state.board.connectedBoardId ?? state.board.bleId,
     error: state.board.error ?? state.gps.error ?? state.scan.error ?? undefined,
     telemetryRecordingEnabled: state.recording.enabled,
-    ...(hasRecentSnapshot
+    ...(hasRecentSamples
       ? {
           liveLocationHistory: live.liveLocationHistory,
           latestApproximateLocation: live.latestApproximateLocation,
