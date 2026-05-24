@@ -155,6 +155,13 @@ export interface TelemetryHistoryOptions {
   cursorBeforeMs?: number
 }
 
+export interface DiagnosticEventOptions {
+  fromMs?: number
+  toMs?: number
+  deviceId?: string
+  limit?: number
+}
+
 export interface TelemetryDeleteRangeOptions {
   fromMs: number
   toMs: number
@@ -182,7 +189,14 @@ export interface TelemetryHistoryBlock {
   faultCount: number
   distanceDeltaM: number | null
   gpsDistanceM: number | null
-  boundaryBefore: 'none' | 'connected' | 'disconnected' | 'error' | 'gap' | 'app_stop'
+  boundaryBefore:
+    | 'none'
+    | 'connected'
+    | 'disconnected'
+    | 'connection_lost'
+    | 'error'
+    | 'gap'
+    | 'app_stop'
   boundaryMessage?: string | null
   gapBeforeMs?: number | null
 }
@@ -234,7 +248,7 @@ export interface HistoryGpsSample {
 export interface HistoryMarker {
   id: number
   occurredAtMs: number
-  type: 'connected' | 'disconnected' | 'error' | 'gap' | 'app_stop'
+  type: 'connected' | 'disconnected' | 'connection_lost' | 'error' | 'gap' | 'app_stop'
   deviceId: string | null
   deviceName: string | null
   message: string | null
@@ -335,6 +349,18 @@ export interface DiagnosticStatus {
   lastCaptureAt: number | null
 }
 
+export interface LocalDiagnosticEvent {
+  id: number
+  occurredAtMs: number
+  eventName: string
+  operation: string | null
+  phase: string | null
+  deviceId: string | null
+  deviceName: string | null
+  message: string | null
+  propertiesJson: string
+}
+
 // ---------------------------------------------------------------------------
 // Typed emitter
 // ---------------------------------------------------------------------------
@@ -392,6 +418,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
     limit?: number
   }): Promise<HistoryRange>
   getTelemetrySummary(): Promise<TelemetrySummary>
+  getDiagnosticEvents(options: DiagnosticEventOptions): Promise<LocalDiagnosticEvent[]>
   getDatabaseSizeBytes(): Promise<number>
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
   getTuneProfiles(boardId: string): Promise<TuneProfile[]>
@@ -576,6 +603,12 @@ export async function getHistoryRange(options: {
 
 export async function getTelemetrySummary(): Promise<TelemetrySummary> {
   return native.getTelemetrySummary()
+}
+
+export async function getDiagnosticEvents(
+  options: DiagnosticEventOptions = {},
+): Promise<LocalDiagnosticEvent[]> {
+  return native.getDiagnosticEvents(options)
 }
 
 export async function getDatabaseSizeBytes(): Promise<number> {

@@ -84,6 +84,7 @@ const RADAR_MAX_ZOOM = 10
 const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
   app_stop: 'Recording stopped',
   connected: 'Board connected',
+  connection_lost: 'Board connection lost',
   disconnected: 'Board disconnected',
   error: 'Error',
   gap: 'History gap',
@@ -92,6 +93,7 @@ const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
 const HISTORY_MARKER_ICONS: Record<HistoryMarker['type'], Icon> = {
   app_stop: StopIcon,
   connected: PlugsConnectedIcon,
+  connection_lost: LinkBreakIcon,
   disconnected: LinkBreakIcon,
   error: WarningCircleIcon,
   gap: ClockCountdownIcon,
@@ -100,6 +102,7 @@ const HISTORY_MARKER_ICONS: Record<HistoryMarker['type'], Icon> = {
 const HISTORY_MARKER_COLORS: Record<HistoryMarker['type'], string> = {
   app_stop: '#f59e0b',
   connected: theme.gps.color,
+  connection_lost: theme.warning.color,
   disconnected: theme.warning.color,
   error: theme.error.color,
   gap: '#eab308',

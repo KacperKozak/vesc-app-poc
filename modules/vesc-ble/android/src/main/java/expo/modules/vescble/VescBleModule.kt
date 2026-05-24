@@ -173,6 +173,9 @@ class VescBleModule : Module() {
     AsyncFunction("getTelemetrySummary") {
       runBlocking { TelemetryRepository.get(context.applicationContext).getSummary() }
     }
+    AsyncFunction("getDiagnosticEvents") Coroutine { options: Map<String, Any?> ->
+      TelemetryRepository.get(context.applicationContext).getDiagnosticEvents(options)
+    }
     AsyncFunction("getDatabaseSizeBytes") {
       val dbFile = context.applicationContext.getDatabasePath("telemetry.db")
       if (dbFile.exists()) dbFile.length() else 0L
