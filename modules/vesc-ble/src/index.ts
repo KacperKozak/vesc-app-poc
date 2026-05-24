@@ -35,6 +35,7 @@ export type SessionStatus =
   | 'connected'
   | 'stale'
   | 'reconnecting'
+  | 'rescanning'
   | 'disconnecting'
   | 'error'
 export type BoardStatus = SessionStatus

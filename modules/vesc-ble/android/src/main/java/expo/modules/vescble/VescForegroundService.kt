@@ -1614,7 +1614,7 @@ class VescForegroundService : Service() {
             if (
                 reconnectScanCallback == callback &&
                 boardConfig?.autoReconnect == true &&
-                boardStatus == BoardPhase.Reconnecting
+                boardStatus == BoardPhase.Rescanning
             ) {
                 recordLocalDiagnostic(
                     "reconnect_scan_timeout",

@@ -56,6 +56,7 @@ export function TopBar({
     bleStatus === 'connected' ||
     bleStatus === 'stale' ||
     bleStatus === 'reconnecting' ||
+    bleStatus === 'rescanning' ||
     bleStatus === 'waiting_for_telemetry'
   const name = activeBoard?.name ?? 'No board'
   const statusColor =
