@@ -225,11 +225,17 @@ interface TelemetryDao {
   @Query("DELETE FROM alerts WHERE id = :id")
   suspend fun deleteAlertRule(id: String)
 
-  @Query("SELECT * FROM app_settings WHERE id = 1 LIMIT 1")
-  suspend fun getSettings(): AppSettingsEntity?
+  @Query("SELECT * FROM app_settings")
+  suspend fun getAllAppSettings(): List<AppSettingEntity>
+
+  @Query("SELECT * FROM app_settings WHERE key = :key LIMIT 1")
+  suspend fun getAppSetting(key: String): AppSettingEntity?
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsertSettings(settings: AppSettingsEntity)
+  suspend fun upsertAppSetting(setting: AppSettingEntity)
+
+  @Query("DELETE FROM app_settings WHERE key = :key")
+  suspend fun deleteAppSetting(key: String)
 
   @Query("SELECT * FROM tune_profiles WHERE board_id = :boardId ORDER BY created_at ASC")
   suspend fun getTuneProfilesByBoard(boardId: String): List<TuneProfileEntity>
@@ -328,6 +334,8 @@ private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity)
     firstSampleAtMs = minOf(firstSampleAtMs, next.firstSampleAtMs),
     lastSampleAtMs = maxOf(lastSampleAtMs, next.lastSampleAtMs),
     sumAbsSpeedCentiKmh = sumAbsSpeedCentiKmh + next.sumAbsSpeedCentiKmh,
+    movingSpeedSampleCount = mergeNullableSums(movingSpeedSampleCount, next.movingSpeedSampleCount),
+    sumMovingAbsSpeedCentiKmh = mergeNullableSums(sumMovingAbsSpeedCentiKmh, next.sumMovingAbsSpeedCentiKmh),
     maxAbsSpeedCentiKmh = maxOf(maxAbsSpeedCentiKmh, next.maxAbsSpeedCentiKmh),
     minBatteryVoltageMv = when {
       minBatteryVoltageMv == null -> next.minBatteryVoltageMv
@@ -361,4 +369,14 @@ private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity)
       else -> maxOf(maxGpsSpeedCentiMps, next.maxGpsSpeedCentiMps)
     },
   )
+}
+
+private fun mergeNullableSums(a: Int?, b: Int?): Int? {
+  if (a == null && b == null) return null
+  return (a ?: 0) + (b ?: 0)
+}
+
+private fun mergeNullableSums(a: Long?, b: Long?): Long? {
+  if (a == null && b == null) return null
+  return (a ?: 0L) + (b ?: 0L)
 }

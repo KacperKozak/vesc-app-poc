@@ -184,7 +184,7 @@ class VescForegroundService : Service() {
         }
 
         private fun idleState(repository: AppDataRepository): Map<String, Any?> {
-            val settings = kotlinx.coroutines.runBlocking { repository.getSettingsEntity() }
+            val settings = kotlinx.coroutines.runBlocking { repository.getTypedSettings() }
             return mapOf(
                 "board" to mapOf(
                     "phase" to "idle",
@@ -492,7 +492,7 @@ class VescForegroundService : Service() {
             recorder = VescSessionRecorder(this, start.boardConfig).also { it.start() }
         }
         telemetryStore = if (start.boardConfig.telemetryRecordingEnabled || requestedTelemetryRecordingEnabled) {
-            TelemetryRepository.get(applicationContext)
+            configuredTelemetryStore()
         } else {
             null
         }
@@ -1273,13 +1273,13 @@ class VescForegroundService : Service() {
         boardStatus = BoardPhase.Connected
         val autoRecording = try {
             kotlinx.coroutines.runBlocking {
-                AppDataRepository.get(applicationContext).getSettingsEntity().autoRecording
+                AppDataRepository.get(applicationContext).getTypedSettings().autoRecording
             }
         } catch (_: Exception) {
             false
         }
         if (autoRecording && telemetryStore == null) {
-            telemetryStore = TelemetryRepository.get(applicationContext)
+            telemetryStore = configuredTelemetryStore()
         }
         boardError = null
         telemetryStore?.recordMarker("connected", boardConfig?.deviceId, boardConfig?.deviceName)
@@ -1560,7 +1560,7 @@ class VescForegroundService : Service() {
                 return
             }
             if (telemetryStore == null) {
-                telemetryStore = TelemetryRepository.get(applicationContext)
+                telemetryStore = configuredTelemetryStore()
                 telemetryStore?.recordMarker("connected", session.deviceId, session.deviceName, null)
             }
             emitState()
@@ -1576,6 +1576,19 @@ class VescForegroundService : Service() {
         telemetryStore?.flushBlocking()
         telemetryStore = null
         emitState()
+    }
+
+    private fun configuredTelemetryStore(): TelemetryRepository {
+        val store = TelemetryRepository.get(applicationContext)
+        val threshold = try {
+            kotlinx.coroutines.runBlocking {
+                AppDataRepository.get(applicationContext).getTypedSettings().movingSpeedThresholdKmh
+            }
+        } catch (_: Exception) {
+            3.0
+        }
+        store.setMovingSpeedThresholdKmh(threshold)
+        return store
     }
 
     private fun onLocationUpdated(location: Location) {
@@ -1628,7 +1641,7 @@ class VescForegroundService : Service() {
 
     private fun liveStateMap(includeRecent: Boolean = false): Map<String, Any?> {
         val settings = kotlinx.coroutines.runBlocking {
-            AppDataRepository.get(applicationContext).getSettingsEntity()
+            AppDataRepository.get(applicationContext).getTypedSettings()
         }
         setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
         val now = System.currentTimeMillis()
@@ -1728,7 +1741,7 @@ class VescForegroundService : Service() {
 
     private fun refreshLiveHistoryLimit() {
         val settings = kotlinx.coroutines.runBlocking {
-            AppDataRepository.get(applicationContext).getSettingsEntity()
+            AppDataRepository.get(applicationContext).getTypedSettings()
         }
         setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
     }

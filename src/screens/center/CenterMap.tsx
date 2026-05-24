@@ -30,6 +30,7 @@ import type { LocationEvent } from 'vesc-ble'
 
 import { InfoModal } from '@/components/InfoModal'
 import { MapPin } from '@/components/map/MapPin'
+import { RainViewerOverlay } from '@/components/map/RainViewerOverlay'
 import { MAPBOX_ACCESS_TOKEN, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
 import { BLANK_STYLE, MAP_DEFAULTS, MAP_STYLES, type MapStyleKey } from '@/constants/mapStyles'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
@@ -59,6 +60,7 @@ export interface CenterMapHandle {
   resetRotation: () => void
   togglePerspective: () => void
   setPadding: (bottom: number) => void
+  zoomToLevel: (zoom: number) => void
 }
 
 interface CameraSnapshot {
@@ -76,6 +78,7 @@ interface SelectedHistoryMarker {
 const MERCATOR_TILE_SIZE = 512
 const MAX_MERCATOR_LATITUDE = 85.05112878
 const MIN_ZOOM = 0
+const RADAR_MAX_ZOOM = 10
 
 const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
   app_stop: 'Recording stopped',
@@ -229,11 +232,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const [selectedHistoryMarker, setSelectedHistoryMarker] = useState<SelectedHistoryMarker | null>(
     null,
   )
+  const [showRadar, setShowRadar] = useState(true)
+
   const gpsFix = liveLocations.at(-1) ?? null
   const [initialApproximateFix, setInitialApproximateFix] = useState<LocationEvent | null>(null)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const lastGpsLatitude = useSettingsStore((s) => s.lastGpsLatitude)
   const lastGpsLongitude = useSettingsStore((s) => s.lastGpsLongitude)
+  const rainRadarEnabled = useSettingsStore((s) => s.rainRadarEnabled)
   const persistedFallback = useMemo(
     () =>
       lastGpsLatitude != null && lastGpsLongitude != null
@@ -440,6 +446,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           animationMode: 'easeTo',
         })
       },
+      zoomToLevel(zoom: number) {
+        setFollowGps(false)
+        const current = currentCameraRef.current
+        cameraRef.current?.setCamera({
+          ...(current ? { centerCoordinate: current.centerCoordinate } : {}),
+          zoomLevel: zoom,
+          animationDuration: MAP_DEFAULTS.animationDuration,
+          animationMode: 'easeTo',
+        })
+      },
     }),
     [
       gpsCamera,
@@ -531,6 +547,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           }
           onHeadingChange(state.properties.heading)
           onPerspectiveChange(state.properties.pitch > MAP_DEFAULTS.pitchThreshold)
+          setShowRadar(state.properties.zoom <= RADAR_MAX_ZOOM)
         }}
       >
         <Camera
@@ -566,6 +583,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
             <RasterLayer id="center-mapy-tiles-layer" sourceID="center-mapy-tiles" style={{}} />
           </RasterSource>
         ) : null}
+
+        <RainViewerOverlay visible={showRadar && rainRadarEnabled} />
 
         {!historyActive && liveTrailShape && (
           <ShapeSource id="center-live-trail-source" shape={liveTrailShape} lineMetrics>
@@ -677,6 +696,11 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         dismissLabel="Close"
         onDismiss={() => setSelectedHistoryMarker(null)}
       />
+      {showRadar && rainRadarEnabled ? (
+        <Text style={styles.radarAttribution} pointerEvents="none">
+          Weather data by RainViewer
+        </Text>
+      ) : null}
       <View style={styles.edgeGuardLeft} pointerEvents="box-only" />
       <View style={styles.edgeGuardRight} pointerEvents="box-only" />
     </Animated.View>
@@ -726,5 +750,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
+  },
+  radarAttribution: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 10,
+    fontWeight: '500',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
 })

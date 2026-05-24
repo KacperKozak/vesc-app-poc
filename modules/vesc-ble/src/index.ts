@@ -173,7 +173,8 @@ export interface TelemetryHistoryBlock {
   preciseGpsPointCount: number
   maxAbsSpeedKmh: number
   maxGpsSpeedKmh: number | null
-  avgAbsSpeedKmh: number
+  avgSpeedKmh: number
+  avgSpeedSampleCount: number
   minBatteryVoltage: number | null
   maxMotorCurrent: number
   maxBatteryCurrent: number
@@ -322,6 +323,8 @@ export interface AppSettings {
   selectedBoardId: string | null
   lastGpsLatitude: number | null
   lastGpsLongitude: number | null
+  movingSpeedThresholdKmh: number
+  rainRadarEnabled: boolean
 }
 
 export interface DiagnosticStatus {

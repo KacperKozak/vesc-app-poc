@@ -125,6 +125,10 @@ data class TelemetryMinuteBucketEntity(
   val lastSampleAtMs: Long,
   @ColumnInfo(name = "sum_abs_speed_centi_kmh")
   val sumAbsSpeedCentiKmh: Long,
+  @ColumnInfo(name = "moving_speed_sample_count")
+  val movingSpeedSampleCount: Int?,
+  @ColumnInfo(name = "sum_moving_abs_speed_centi_kmh")
+  val sumMovingAbsSpeedCentiKmh: Long?,
   @ColumnInfo(name = "max_abs_speed_centi_kmh")
   val maxAbsSpeedCentiKmh: Int,
   @ColumnInfo(name = "min_battery_voltage_mv")
@@ -227,21 +231,24 @@ data class AlertRuleEntity(
 )
 
 @Entity(tableName = "app_settings")
-data class AppSettingsEntity(
+data class AppSettingEntity(
   @PrimaryKey
-  val id: Int = 1,
-  @ColumnInfo(name = "live_history_limit")
+  val key: String,
+  @ColumnInfo(name = "value_json")
+  val valueJson: String,
+  @ColumnInfo(name = "updated_at")
+  val updatedAt: Long,
+)
+
+data class AppSettings(
   val liveHistoryLimit: Int = 5,
-  @ColumnInfo(name = "auto_connect")
   val autoConnect: Boolean = true,
-  @ColumnInfo(name = "auto_recording")
   val autoRecording: Boolean = false,
-  @ColumnInfo(name = "selected_board_id")
   val selectedBoardId: String? = null,
-  @ColumnInfo(name = "last_gps_latitude")
   val lastGpsLatitude: Double? = null,
-  @ColumnInfo(name = "last_gps_longitude")
   val lastGpsLongitude: Double? = null,
+  val movingSpeedThresholdKmh: Double = 3.0,
+  val rainRadarEnabled: Boolean = false,
 )
 
 @Entity(

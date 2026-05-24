@@ -14,11 +14,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     TelemetryMarkerEntity::class,
     BoardEntity::class,
     AlertRuleEntity::class,
-    AppSettingsEntity::class,
+    AppSettingEntity::class,
     TuneProfileEntity::class,
     TuneHistoryEntryEntity::class,
   ],
-  version = 9,
+  version = 12,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -110,6 +110,34 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN moving_speed_sample_count INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN sum_moving_abs_speed_centi_kmh INTEGER")
+      }
+    }
+
+    private val MIGRATION_10_11 = object : Migration(10, 11) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE app_settings ADD COLUMN moving_avg_speed_threshold_kmh REAL NOT NULL DEFAULT 3.0")
+      }
+    }
+
+    private val MIGRATION_11_12 = object : Migration(11, 12) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS app_settings")
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT NOT NULL PRIMARY KEY,
+            value_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+          """.trimIndent(),
+        )
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -124,6 +152,9 @@ abstract class TelemetryDatabase : RoomDatabase() {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12,
           )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {

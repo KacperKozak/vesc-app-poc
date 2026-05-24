@@ -8,6 +8,8 @@ const DEFAULTS: AppSettings = {
   selectedBoardId: null,
   lastGpsLatitude: null,
   lastGpsLongitude: null,
+  movingSpeedThresholdKmh: 3,
+  rainRadarEnabled: true,
 }
 
 interface SettingsState extends AppSettings {
