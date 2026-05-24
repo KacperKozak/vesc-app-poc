@@ -1,13 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { CheckCircleIcon, ListIcon, TestTubeIcon, WarningCircleIcon } from 'phosphor-react-native'
+import { CheckCircleIcon, TestTubeIcon, WarningCircleIcon } from 'phosphor-react-native'
 import { getDiagnosticStatus, reportDiagnosticTest, type DiagnosticStatus } from 'vesc-ble'
-import { router } from 'expo-router'
 
 import { reportUiError } from '@/diagnostics/uiDiagnostics'
 import { theme } from '@/constants/theme'
-import { routes } from '@/navigation/routes'
 
 export default function DiagnosticSettingsScreen() {
   const [diagnosticStatus, setDiagnosticStatus] = useState<DiagnosticStatus | null>(() => {
@@ -122,23 +120,6 @@ export default function DiagnosticSettingsScreen() {
             </Text>
           </View>
         ) : null}
-
-        <Text style={styles.sectionTitle}>Local events</Text>
-
-        <View style={styles.card}>
-          <Pressable
-            style={styles.row}
-            onPress={() => router.push(routes.settingsDiagnosticEvents)}
-          >
-            <View style={styles.rowIcon}>
-              <ListIcon size={20} color="#94a3b8" weight="duotone" />
-            </View>
-            <View style={styles.rowBody}>
-              <Text style={styles.rowLabel}>Event log</Text>
-              <Text style={styles.rowHint}>Browse locally persisted diagnostic events</Text>
-            </View>
-          </Pressable>
-        </View>
       </ScrollView>
     </SafeAreaView>
   )

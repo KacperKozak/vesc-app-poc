@@ -21,7 +21,7 @@ export const routes = {
   controlFootpad: '/control/footpad',
   controlImu: '/control/imu',
   settingsSoundPlayground: '/settings/soundPlayground' as Href,
-  settingsDiagnosticEvents: '/settings/diagnosticEvents' as Href,
+  settingsDiagnosticEvents: '/settings/eventLog' as Href,
 } as const
 
 export const stackScreens = {
@@ -31,7 +31,7 @@ export const stackScreens = {
   settingsDev: 'settings/dev',
   settingsComponents: 'settings/components',
   settingsDiagnostic: 'settings/diagnostic',
-  settingsDiagnosticEvents: 'settings/diagnosticEvents',
+  settingsDiagnosticEvents: 'settings/eventLog',
   settingsOther: 'settings/other',
   tune: 'tune/index',
   tuneHistory: 'tune/history',
