@@ -23,7 +23,7 @@ const devPages = [
   },
   {
     label: 'Diagnostic',
-    hint: 'PostHog status and manual diagnostic events',
+    hint: 'PostHog status, manual events, local event log',
     route: routes.settingsDiagnostic,
     icon: ChartLineUpIcon,
   },
