@@ -12,6 +12,29 @@ import { getDiagnosticEvents, type LocalDiagnosticEvent } from 'vesc-ble'
 
 const PAGE_SIZE = 50
 
+const GOOD_EVENTS = new Set(['board_ready', 'gatt_connected', 'gatt_ready', 'reconnect_scan_found'])
+
+const BAD_EVENTS = new Set([
+  'ble_connect_failed',
+  'ble_disconnected_unexpectedly',
+  'config_decode_failed',
+  'profile_push_failed',
+  'board_ready_timeout',
+  'reconnect_scan_failed',
+  'reconnect_scan_start_failed',
+  'reconnect_scan_timeout',
+  'connect_phase_timeout',
+  'telemetry_parse_failed',
+  'telemetry_stale',
+  'telemetry_unavailable',
+])
+
+function getEventColor(eventName: string): string {
+  if (GOOD_EVENTS.has(eventName)) return '#22c55e'
+  if (BAD_EVENTS.has(eventName)) return '#ef4444'
+  return '#eab308'
+}
+
 function formatProperties(json: string): string {
   try {
     return JSON.stringify(JSON.parse(json), null, 2)
@@ -31,10 +54,12 @@ function EventItem({
 }) {
   const time = new Date(event.occurredAtMs).toLocaleTimeString()
   const meta = [event.operation, event.phase, event.deviceName].filter(Boolean).join(' · ')
+  const dotColor = getEventColor(event.eventName)
 
   return (
     <Pressable style={styles.eventRow} onPress={() => onToggle(event.id)}>
       <View style={styles.eventHeader}>
+        <View style={[styles.dot, { backgroundColor: dotColor }]} />
         <Text style={styles.eventTime}>{time}</Text>
         <Text style={styles.eventName} numberOfLines={expanded ? undefined : 1}>
           {event.eventName}
@@ -195,7 +220,13 @@ const styles = StyleSheet.create({
   eventHeader: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'baseline',
+    alignItems: 'center',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
   },
   eventTime: {
     color: '#64748b',
