@@ -255,7 +255,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const lastGpsLatitude = useSettingsStore((s) => s.lastGpsLatitude)
   const lastGpsLongitude = useSettingsStore((s) => s.lastGpsLongitude)
-  const rainRadarEnabled = useSettingsStore((s) => s.rainRadarEnabled)
   const persistedFallback = useMemo(
     () =>
       lastGpsLatitude != null && lastGpsLongitude != null
@@ -636,7 +635,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           </RasterSource>
         ) : null}
 
-        <RainViewerOverlay visible={weatherActive || (showRadar && rainRadarEnabled)} />
+        <RainViewerOverlay visible={weatherActive || showRadar} />
 
         {!historyActive && liveTrailShape && (
           <ShapeSource id="center-live-trail-source" shape={liveTrailShape} lineMetrics>
@@ -748,7 +747,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         dismissLabel="Close"
         onDismiss={() => setSelectedHistoryMarker(null)}
       />
-      {weatherActive || (showRadar && rainRadarEnabled) ? (
+      {weatherActive || showRadar ? (
         <Text style={styles.radarAttribution} pointerEvents="none">
           Weather data by RainViewer
         </Text>

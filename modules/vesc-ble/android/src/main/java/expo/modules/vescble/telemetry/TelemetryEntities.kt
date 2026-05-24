@@ -248,7 +248,6 @@ data class AppSettings(
   val lastGpsLatitude: Double? = null,
   val lastGpsLongitude: Double? = null,
   val movingSpeedThresholdKmh: Double = 3.0,
-  val rainRadarEnabled: Boolean = false,
 )
 
 @Entity(
