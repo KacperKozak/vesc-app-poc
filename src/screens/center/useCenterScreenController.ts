@@ -142,6 +142,10 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       key: selectedSession.id,
       latitude,
       longitude,
+      minLatitude: selectedSession.minLatitude,
+      maxLatitude: selectedSession.maxLatitude,
+      minLongitude: selectedSession.minLongitude,
+      maxLongitude: selectedSession.maxLongitude,
     }
   }, [loadingSession, selectedSession, sessionGpsSamples])
 

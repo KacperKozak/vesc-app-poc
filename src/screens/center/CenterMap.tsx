@@ -51,7 +51,7 @@ Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
-  previewHistorySession: (coordinate: { latitude: number; longitude: number }) => void
+  previewHistorySession: (preview: HistoryPreviewTarget) => void
   beginPreviewPan: () => void
   previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
   beginPreviewZoom: () => void
@@ -76,12 +76,23 @@ interface SelectedHistoryMarker {
   gps: HistoryGpsSample
 }
 
+interface HistoryPreviewTarget {
+  latitude: number
+  longitude: number
+  minLatitude: number | null
+  maxLatitude: number | null
+  minLongitude: number | null
+  maxLongitude: number | null
+}
+
 const MERCATOR_TILE_SIZE = 512
 const MAX_MERCATOR_LATITUDE = 85.05112878
 const MIN_ZOOM = 0
 const RADAR_MAX_ZOOM = 10
-const HISTORY_PREVIEW_ZOOM = 12.5
-const HISTORY_PREVIEW_BOTTOM_PADDING = 220
+const HISTORY_PREVIEW_ZOOM = 11.8
+const HISTORY_PREVIEW_BOTTOM_PADDING = 300
+const HISTORY_PREVIEW_SIDE_PADDING = 72
+const HISTORY_PREVIEW_TOP_PADDING = 120
 
 const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
   app_stop: 'Recording stopped',
@@ -217,11 +228,11 @@ interface CenterMapProps {
   onClearTarget: () => void
   weatherActive: boolean
   seekPosition: HistoryGpsSample | null
-  historyPreview: {
-    key: string
-    latitude: number
-    longitude: number
-  } | null
+  historyPreview:
+    | ({
+        key: string
+      } & HistoryPreviewTarget)
+    | null
 }
 
 export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function CenterMap(
@@ -249,7 +260,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const previewPanBaseRef = useRef<CameraSnapshot | null>(null)
   const previewZoomBaseRef = useRef<CameraSnapshot | null>(null)
   const currentCameraRef = useRef<CameraSnapshot | null>(null)
-  const historyPreviewTargetRef = useRef<{ latitude: number; longitude: number } | null>(null)
+  const historyPreviewTargetRef = useRef<HistoryPreviewTarget | null>(null)
   const styleReloadCameraRef = useRef<CameraSnapshot | null>(null)
   const previousMapStyleKeyRef = useRef(mapStyleKey)
   const lastCenteredAtRef = useRef<number | null>(null)
@@ -412,10 +423,31 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   }, [rideRoute])
 
   const previewHistorySession = useCallback(
-    (coordinate: { latitude: number; longitude: number }) => {
-      historyPreviewTargetRef.current = coordinate
+    (preview: HistoryPreviewTarget) => {
+      historyPreviewTargetRef.current = preview
       setFollowGps(false)
-      cameraRef.current?.setCamera(getHistoryPreviewCamera(coordinate))
+      if (
+        preview.minLatitude != null &&
+        preview.maxLatitude != null &&
+        preview.minLongitude != null &&
+        preview.maxLongitude != null &&
+        (preview.minLatitude !== preview.maxLatitude ||
+          preview.minLongitude !== preview.maxLongitude)
+      ) {
+        cameraRef.current?.fitBounds(
+          [preview.maxLongitude, preview.maxLatitude],
+          [preview.minLongitude, preview.minLatitude],
+          [
+            HISTORY_PREVIEW_TOP_PADDING,
+            HISTORY_PREVIEW_SIDE_PADDING,
+            HISTORY_PREVIEW_BOTTOM_PADDING,
+            HISTORY_PREVIEW_SIDE_PADDING,
+          ],
+          MAP_DEFAULTS.animationDuration,
+        )
+      } else {
+        cameraRef.current?.setCamera(getHistoryPreviewCamera(preview))
+      }
       onHeadingChange(0)
     },
     [getHistoryPreviewCamera, onHeadingChange],
@@ -505,10 +537,31 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       setPadding(bottom: number) {
         const historyTarget = historyPreviewTargetRef.current
         if (historyTarget) {
-          cameraRef.current?.setCamera({
-            ...getHistoryPreviewCamera(historyTarget),
-            padding: { paddingBottom: bottom, paddingTop: 0, paddingLeft: 0, paddingRight: 0 },
-          })
+          if (
+            historyTarget.minLatitude != null &&
+            historyTarget.maxLatitude != null &&
+            historyTarget.minLongitude != null &&
+            historyTarget.maxLongitude != null &&
+            (historyTarget.minLatitude !== historyTarget.maxLatitude ||
+              historyTarget.minLongitude !== historyTarget.maxLongitude)
+          ) {
+            cameraRef.current?.fitBounds(
+              [historyTarget.maxLongitude, historyTarget.maxLatitude],
+              [historyTarget.minLongitude, historyTarget.minLatitude],
+              [
+                HISTORY_PREVIEW_TOP_PADDING,
+                HISTORY_PREVIEW_SIDE_PADDING,
+                Math.max(bottom, HISTORY_PREVIEW_BOTTOM_PADDING),
+                HISTORY_PREVIEW_SIDE_PADDING,
+              ],
+              bottom === 0 ? 0 : 300,
+            )
+          } else {
+            cameraRef.current?.setCamera({
+              ...getHistoryPreviewCamera(historyTarget),
+              padding: { paddingBottom: bottom, paddingTop: 0, paddingLeft: 0, paddingRight: 0 },
+            })
+          }
           return
         }
         cameraRef.current?.setCamera({

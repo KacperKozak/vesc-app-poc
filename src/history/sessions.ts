@@ -26,6 +26,10 @@ export interface HistorySession {
   firstLongitude: number | null
   centerLatitude: number | null
   centerLongitude: number | null
+  minLatitude: number | null
+  maxLatitude: number | null
+  minLongitude: number | null
+  maxLongitude: number | null
   faultCount: number
   boundaryBefore: TelemetryMinuteBucket['boundaryBefore']
 }
@@ -58,6 +62,10 @@ interface MutableSessionAggregate {
   latitudeSum: number
   longitudeSum: number
   coordinateCount: number
+  minLatitude: number | null
+  maxLatitude: number | null
+  minLongitude: number | null
+  maxLongitude: number | null
   faultCount: number
 }
 
@@ -121,6 +129,10 @@ function createAggregate(block: TelemetryMinuteBucket): MutableSessionAggregate 
     latitudeSum: 0,
     longitudeSum: 0,
     coordinateCount: 0,
+    minLatitude: null,
+    maxLatitude: null,
+    minLongitude: null,
+    maxLongitude: null,
     faultCount: 0,
   }
   mergeBlockIntoAggregate(aggregate, block)
@@ -180,6 +192,22 @@ function mergeBlockIntoAggregate(
     session.latitudeSum += block.firstLatitude
     session.longitudeSum += block.firstLongitude
     session.coordinateCount += 1
+    session.minLatitude =
+      session.minLatitude == null
+        ? block.firstLatitude
+        : Math.min(session.minLatitude, block.firstLatitude)
+    session.maxLatitude =
+      session.maxLatitude == null
+        ? block.firstLatitude
+        : Math.max(session.maxLatitude, block.firstLatitude)
+    session.minLongitude =
+      session.minLongitude == null
+        ? block.firstLongitude
+        : Math.min(session.minLongitude, block.firstLongitude)
+    session.maxLongitude =
+      session.maxLongitude == null
+        ? block.firstLongitude
+        : Math.max(session.maxLongitude, block.firstLongitude)
   }
 }
 
@@ -220,6 +248,10 @@ function finalizeSession(session: MutableSessionAggregate): HistorySession {
     firstLongitude: session.firstLongitude,
     centerLatitude,
     centerLongitude,
+    minLatitude: session.minLatitude,
+    maxLatitude: session.maxLatitude,
+    minLongitude: session.minLongitude,
+    maxLongitude: session.maxLongitude,
     faultCount: session.faultCount,
     boundaryBefore: session.boundaryBefore,
   }

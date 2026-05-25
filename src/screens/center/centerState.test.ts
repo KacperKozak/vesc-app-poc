@@ -35,6 +35,10 @@ function session(id: string, startAtMs: number): HistorySession {
     firstLongitude: null,
     centerLatitude: null,
     centerLongitude: null,
+    minLatitude: null,
+    maxLatitude: null,
+    minLongitude: null,
+    maxLongitude: null,
     boundaryBefore: 'none',
   }
 }
