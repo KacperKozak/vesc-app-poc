@@ -1,43 +1,7 @@
 import { expect, test } from 'bun:test'
 
-import type { TelemetryMinuteBucket } from 'vesc-ble'
 import { groupHistorySessions } from './sessions'
-
-function block(overrides: Partial<TelemetryMinuteBucket>): TelemetryMinuteBucket {
-  const startAtMs = overrides.startAtMs ?? 0
-  const endAtMs = overrides.endAtMs ?? startAtMs + 60_000
-  return {
-    id: overrides.id ?? `b-${startAtMs}`,
-    startAtMs,
-    endAtMs,
-    bucketStartMs: overrides.bucketStartMs ?? startAtMs,
-    deviceId: overrides.deviceId ?? 'dev-a',
-    deviceName: overrides.deviceName ?? 'Board A',
-    sampleCount: overrides.sampleCount ?? 10,
-    gpsPointCount: overrides.gpsPointCount ?? 5,
-    preciseGpsPointCount: overrides.preciseGpsPointCount ?? 4,
-    maxAbsSpeedKmh: overrides.maxAbsSpeedKmh ?? 20,
-    maxGpsSpeedKmh: overrides.maxGpsSpeedKmh ?? 18,
-    avgSpeedKmh: overrides.avgSpeedKmh ?? 15,
-    avgSpeedSampleCount: overrides.avgSpeedSampleCount ?? 10,
-    minBatteryVoltage: overrides.minBatteryVoltage ?? 52,
-    maxMotorCurrent: overrides.maxMotorCurrent ?? 10,
-    maxBatteryCurrent: overrides.maxBatteryCurrent ?? 8,
-    maxDuty: overrides.maxDuty ?? 0.5,
-    faultCount: overrides.faultCount ?? 0,
-    distanceDeltaM: overrides.distanceDeltaM !== undefined ? overrides.distanceDeltaM : 100,
-    gpsDistanceM: overrides.gpsDistanceM !== undefined ? overrides.gpsDistanceM : 120,
-    maxTempMosfet: overrides.maxTempMosfet ?? null,
-    maxTempMotor: overrides.maxTempMotor ?? null,
-    firstLatitude: overrides.firstLatitude ?? null,
-    firstLongitude: overrides.firstLongitude ?? null,
-    boundaryBefore: overrides.boundaryBefore ?? 'none',
-    boundaryMessage: overrides.boundaryMessage ?? null,
-    gapBeforeMs: overrides.gapBeforeMs ?? null,
-    batteryUsedWh: overrides.batteryUsedWh ?? 0,
-    batteryRegenWh: overrides.batteryRegenWh ?? 0,
-  }
-}
+import { makeBlock as block } from '@/test-utils/factories'
 
 test('combines same-device adjacent blocks under 10 min gap', () => {
   const sessions = groupHistorySessions([
