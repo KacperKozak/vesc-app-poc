@@ -265,6 +265,12 @@ class AppDataRepository private constructor(private val context: Context) {
         instance ?: AppDataRepository(context.applicationContext).also { instance = it }
       }
     }
+
+    fun resetForDatabaseSwap() {
+      synchronized(this) {
+        instance = null
+      }
+    }
   }
 }
 

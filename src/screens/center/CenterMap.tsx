@@ -38,6 +38,7 @@ import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { theme } from '@/constants/theme'
 import { getLiveGpsPresentation } from '@/helpers/liveGpsPresentation'
 import {
+  distanceMeters,
   getBounds,
   makeCircleFeature,
   makeTrailLineString,
@@ -51,7 +52,7 @@ Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
-  previewHistoryLoading: () => void
+  previewHistorySession: (preview: HistoryPreviewTarget) => void
   beginPreviewPan: () => void
   previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
   beginPreviewZoom: () => void
@@ -76,10 +77,27 @@ interface SelectedHistoryMarker {
   gps: HistoryGpsSample
 }
 
+interface HistoryPreviewTarget {
+  latitude: number
+  longitude: number
+  minLatitude: number | null
+  maxLatitude: number | null
+  minLongitude: number | null
+  maxLongitude: number | null
+}
+
 const MERCATOR_TILE_SIZE = 512
 const MAX_MERCATOR_LATITUDE = 85.05112878
 const MIN_ZOOM = 0
 const RADAR_MAX_ZOOM = 10
+const HISTORY_PREVIEW_ZOOM = 11.8
+const HISTORY_PREVIEW_BOTTOM_PADDING = 300
+const HISTORY_PREVIEW_SIDE_PADDING = 72
+const HISTORY_PREVIEW_TOP_PADDING = 120
+const HISTORY_DYNAMIC_FULL_DISTANCE_M = 80_000
+const HISTORY_DYNAMIC_MAX_EXTRA_PADDING = 220
+const HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS = 450
+const HISTORY_DYNAMIC_MAX_ZOOM_OUT = 2.4
 
 const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
   app_stop: 'Recording stopped',
@@ -215,6 +233,11 @@ interface CenterMapProps {
   onClearTarget: () => void
   weatherActive: boolean
   seekPosition: HistoryGpsSample | null
+  historyPreview:
+    | ({
+        key: string
+      } & HistoryPreviewTarget)
+    | null
 }
 
 export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function CenterMap(
@@ -234,6 +257,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     weatherActive,
     onClearTarget,
     seekPosition,
+    historyPreview,
   },
   ref,
 ) {
@@ -241,6 +265,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const previewPanBaseRef = useRef<CameraSnapshot | null>(null)
   const previewZoomBaseRef = useRef<CameraSnapshot | null>(null)
   const currentCameraRef = useRef<CameraSnapshot | null>(null)
+  const historyPreviewTargetRef = useRef<HistoryPreviewTarget | null>(null)
   const styleReloadCameraRef = useRef<CameraSnapshot | null>(null)
   const previousMapStyleKeyRef = useRef(mapStyleKey)
   const lastCenteredAtRef = useRef<number | null>(null)
@@ -358,6 +383,24 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     [rideRoute],
   )
 
+  const getHistoryPreviewCamera = useCallback(
+    (coordinate: { latitude: number; longitude: number }) => ({
+      centerCoordinate: [coordinate.longitude, coordinate.latitude] as [number, number],
+      zoomLevel: HISTORY_PREVIEW_ZOOM,
+      heading: 0,
+      pitch: getPitchForZoom(HISTORY_PREVIEW_ZOOM, perspectiveEnabled),
+      padding: {
+        paddingBottom: HISTORY_PREVIEW_BOTTOM_PADDING,
+        paddingTop: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+      },
+      animationDuration: MAP_DEFAULTS.animationDuration,
+      animationMode: 'easeTo' as const,
+    }),
+    [perspectiveEnabled],
+  )
+
   const recenterLive = useCallback(
     (options?: { resetPadding?: boolean }) => {
       setFollowGps(true)
@@ -384,19 +427,51 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [90, 40, 120, 40], 700)
   }, [rideRoute])
 
-  const previewHistoryLoading = useCallback(() => {
-    setFollowGps(false)
-    cameraRef.current?.setCamera({
-      ...gpsCamera,
-      zoomLevel: Math.max(MAP_DEFAULTS.fallbackZoom, gpsCamera.zoomLevel - 1.2),
-      pitch: getPitchForZoom(
-        Math.max(MAP_DEFAULTS.fallbackZoom, gpsCamera.zoomLevel - 1.2),
-        perspectiveEnabled,
-      ),
-      animationDuration: MAP_DEFAULTS.animationDuration,
-      animationMode: 'easeTo',
-    })
-  }, [gpsCamera, perspectiveEnabled])
+  const previewHistorySession = useCallback(
+    (preview: HistoryPreviewTarget) => {
+      historyPreviewTargetRef.current = preview
+      setFollowGps(false)
+      const current = currentCameraRef.current
+      const jumpDistanceM = current
+        ? distanceMeters(
+            { longitude: current.centerCoordinate[0], latitude: current.centerCoordinate[1] },
+            preview,
+          )
+        : 0
+      const distanceProgress = clamp(jumpDistanceM / HISTORY_DYNAMIC_FULL_DISTANCE_M, 0, 1)
+      const extraPadding = HISTORY_DYNAMIC_MAX_EXTRA_PADDING * distanceProgress
+      const animationDuration =
+        MAP_DEFAULTS.animationDuration + HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS * distanceProgress
+      if (
+        preview.minLatitude != null &&
+        preview.maxLatitude != null &&
+        preview.minLongitude != null &&
+        preview.maxLongitude != null &&
+        (preview.minLatitude !== preview.maxLatitude ||
+          preview.minLongitude !== preview.maxLongitude)
+      ) {
+        cameraRef.current?.fitBounds(
+          [preview.maxLongitude, preview.maxLatitude],
+          [preview.minLongitude, preview.minLatitude],
+          [
+            HISTORY_PREVIEW_TOP_PADDING + extraPadding * 0.5,
+            HISTORY_PREVIEW_SIDE_PADDING + extraPadding,
+            HISTORY_PREVIEW_BOTTOM_PADDING + extraPadding,
+            HISTORY_PREVIEW_SIDE_PADDING + extraPadding,
+          ],
+          animationDuration,
+        )
+      } else {
+        cameraRef.current?.setCamera({
+          ...getHistoryPreviewCamera(preview),
+          zoomLevel: HISTORY_PREVIEW_ZOOM - HISTORY_DYNAMIC_MAX_ZOOM_OUT * distanceProgress,
+          animationDuration,
+        })
+      }
+      onHeadingChange(0)
+    },
+    [getHistoryPreviewCamera, onHeadingChange],
+  )
 
   const restorePreviewPan = useCallback(() => {
     setFollowGps(true)
@@ -418,7 +493,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     ref,
     () => ({
       recenterLive,
-      previewHistoryLoading,
+      previewHistorySession,
       beginPreviewPan() {
         previewPanBaseRef.current = currentCameraRef.current ?? {
           ...gpsCamera,
@@ -503,7 +578,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       onHeadingChange,
       onPerspectiveChange,
       perspectiveEnabled,
-      previewHistoryLoading,
+      previewHistorySession,
       recenterLive,
       restorePreviewPan,
     ],
@@ -511,6 +586,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
 
   useEffect(() => {
     if (!cameraFix || !followGps || historyActive) return
+    historyPreviewTargetRef.current = null
     if (lastCenteredAtRef.current === cameraFix.timestamp) return
     lastCenteredAtRef.current = cameraFix.timestamp
     cameraRef.current?.setCamera({
@@ -522,14 +598,20 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   }, [cameraFix, followGps, gpsCamera, historyActive, perspectiveEnabled])
 
   useEffect(() => {
-    if (!historyActive) return
+    if (!historyActive || !historyPreview) return
+    previewHistorySession(historyPreview)
+  }, [historyActive, historyPreview, previewHistorySession])
+
+  useEffect(() => {
+    if (!historyActive || rideRoute.length < 2) return
+    historyPreviewTargetRef.current = null
     const frame = requestAnimationFrame(fitRide)
     const timer = setTimeout(fitRide, 120)
     return () => {
       cancelAnimationFrame(frame)
       clearTimeout(timer)
     }
-  }, [fitRide, historyActive])
+  }, [fitRide, historyActive, rideRoute.length])
 
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
@@ -561,7 +643,10 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         onDidFinishLoadingMap={() => {
           const styleReloadCamera = styleReloadCameraRef.current
           styleReloadCameraRef.current = null
-          const camera = styleReloadCamera ?? gpsCamera
+          const camera =
+            historyActive && historyPreview
+              ? getHistoryPreviewCamera(historyPreview)
+              : (styleReloadCamera ?? gpsCamera)
           cameraRef.current?.setCamera({
             ...camera,
             pitch: getPitchForZoom(camera.zoomLevel, perspectiveEnabled),

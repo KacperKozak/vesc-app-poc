@@ -91,6 +91,7 @@ export function CenterScreen({
         latestApproximateLocation={controller.latestApproximateLocation}
         rideGpsSamples={controller.sessionGpsSamples}
         rideMarkers={controller.sessionMarkers}
+        historyPreview={controller.historyPreview}
         historyActive={controller.historyActive}
         mapStyleKey={controller.mapStyleKey}
         rotationLocked={controller.rotationLocked}

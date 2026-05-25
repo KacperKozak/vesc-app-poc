@@ -7,6 +7,7 @@ import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -23,6 +24,7 @@ private const val FLUSH_DELAY_MS = 5_000L
 private const val MAX_PENDING_FRAMES = 1_000
 private const val DEFAULT_HISTORY_LIMIT = 100
 private const val DEFAULT_SAMPLE_LIMIT = 2_000
+private const val MAX_SAMPLE_LIMIT = 100_000
 
 data class TelemetryLocationCapture(
   val latitude: Double,
@@ -192,6 +194,27 @@ class TelemetryRepository private constructor(context: Context) {
     }
   }
 
+  suspend fun flushPending() = withContext(Dispatchers.IO) {
+    synchronized(lock) {
+      forceNextKeyframe = true
+    }
+    flushNow()
+  }
+
+  fun shutdownForDatabaseSwap() {
+    scope.cancel()
+    synchronized(lock) {
+      pending.clear()
+      pendingMarkers.clear()
+      flushScheduled = false
+      lastState = null
+      lastFrameAtMs = null
+      lastHistoryAtMs = null
+      lastKeyframeAtMs = null
+      forceNextKeyframe = true
+    }
+  }
+
   suspend fun getHistory(options: Map<String, Any?>): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
     val query = HistoryQueryOptions.from(options)
     val buckets = dao.getHistoryBuckets(
@@ -248,6 +271,12 @@ class TelemetryRepository private constructor(context: Context) {
         "faultCount" to bucket.faultCount,
         "distanceDeltaM" to distanceM,
         "gpsDistanceM" to bucket.gpsDistanceCm.takeIf { it > 0L }?.let { it / 100.0 },
+        "maxTempMosfet" to bucket.maxTempMosfetDeciC?.let { it / 10.0 },
+        "maxTempMotor" to bucket.maxTempMotorDeciC?.let { it / 10.0 },
+        "batteryUsedWh" to bucket.batteryUsedWhMilli / 1000.0,
+        "batteryRegenWh" to bucket.batteryRegenWhMilli / 1000.0,
+        "firstLatitude" to bucket.firstLatitudeE7?.let { it / 1e7 },
+        "firstLongitude" to bucket.firstLongitudeE7?.let { it / 1e7 },
         "boundaryBefore" to (marker?.type ?: "none"),
         "boundaryMessage" to marker?.message,
         "gapBeforeMs" to marker?.gapMs,
@@ -321,6 +350,40 @@ class TelemetryRepository private constructor(context: Context) {
     dao.deleteRange(query.fromMs, query.toMs, query.deviceId)
   }
 
+  suspend fun rebuildBuckets(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
+    val firstMs = dao.firstFrameAt() ?: return@withContext 0
+    val lastMs = dao.lastFrameAt() ?: return@withContext 0
+
+    dao.clearBuckets()
+
+    val chunkMs = 3_600_000L
+    val chunks = ((lastMs - firstMs) / chunkMs + 1).toInt()
+    var rebuiltBuckets = 0
+    onProgress(0, chunks)
+
+    for (i in 0 until chunks) {
+      val chunkFrom = firstMs + i * chunkMs
+      val chunkTo = minOf(chunkFrom + chunkMs - 1, lastMs)
+
+      val states = getSampleStates(chunkFrom, chunkTo, null, Int.MAX_VALUE)
+      if (states.isNotEmpty()) {
+        val buckets = buildTelemetryBuckets(
+          telemetryPoints = states.map { it.state.toBucketPoint() },
+          locationPoints = states.toBucketLocationPoints(),
+          movingSpeedThresholdCentiKmh = movingSpeedThresholdCentiKmh,
+        )
+        if (buckets.isNotEmpty()) {
+          dao.upsertBuckets(buckets)
+          rebuiltBuckets += buckets.size
+        }
+      }
+      onProgress(i + 1, chunks)
+    }
+
+    Log.i(TAG, "rebuildBuckets complete: $rebuiltBuckets buckets from $chunks chunks")
+    rebuiltBuckets
+  }
+
   suspend fun clearAll() = withContext(Dispatchers.IO) {
     dao.clearAll()
     synchronized(lock) {
@@ -380,6 +443,13 @@ class TelemetryRepository private constructor(context: Context) {
     fun get(context: Context): TelemetryRepository {
       return instance ?: synchronized(this) {
         instance ?: TelemetryRepository(context.applicationContext).also { instance = it }
+      }
+    }
+
+    fun resetForDatabaseSwap() {
+      synchronized(this) {
+        instance?.shutdownForDatabaseSwap()
+        instance = null
       }
     }
   }
@@ -442,7 +512,7 @@ private data class SampleQueryOptions(
         fromMs = options.requiredLong("fromMs"),
         toMs = options.requiredLong("toMs"),
         deviceId = options["deviceId"] as? String,
-        limit = (options.int("limit") ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, 10_000),
+        limit = (options.int("limit") ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, MAX_SAMPLE_LIMIT),
       )
   }
 }
@@ -590,6 +660,8 @@ internal data class FullTelemetryState(
     dutyPermille = dutyPermille,
     hasFault = hasFault,
     odometerCm = odometerCm,
+    tempMosfetDeciC = tempMosfetDeciC,
+    tempMotorDeciC = tempMotorDeciC,
   )
 
   companion object {

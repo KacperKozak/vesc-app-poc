@@ -39,6 +39,8 @@ internal data class HistoryGpsPoint(
       precise = true,
       distanceFromPreviousCm = distanceFromPreviousCm,
       gpsSpeedCentiMps = location.gpsSpeedCentiMps,
+      latitudeE7 = location.latitudeE7,
+      longitudeE7 = location.longitudeE7,
     )
   }
 }

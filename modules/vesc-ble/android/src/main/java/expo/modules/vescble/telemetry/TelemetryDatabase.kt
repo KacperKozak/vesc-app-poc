@@ -7,6 +7,9 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+internal const val TELEMETRY_DATABASE_NAME = "telemetry.db"
+internal const val TELEMETRY_DATABASE_VERSION = 14
+
 @Database(
   entities = [
     TelemetryFrameEntity::class,
@@ -19,7 +22,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     TuneHistoryEntryEntity::class,
     DiagnosticEventEntity::class,
   ],
-  version = 13,
+  version = TELEMETRY_DATABASE_VERSION,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -168,12 +171,21 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN max_temp_mosfet_deci_c INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN max_temp_motor_deci_c INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN first_latitude_e7 INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN first_longitude_e7 INTEGER")
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
           context.applicationContext,
           TelemetryDatabase::class.java,
-          "telemetry.db",
+          TELEMETRY_DATABASE_NAME,
         )
           .addMigrations(
             MIGRATION_3_4,
@@ -186,6 +198,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
+            MIGRATION_13_14,
           )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {
@@ -205,6 +218,13 @@ abstract class TelemetryDatabase : RoomDatabase() {
           })
           .build()
           .also { instance = it }
+      }
+    }
+
+    fun closeAndReset() {
+      synchronized(this) {
+        instance?.close()
+        instance = null
       }
     }
   }

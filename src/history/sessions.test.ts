@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 
-import type { TelemetryHistoryBlock } from 'vesc-ble'
+import type { TelemetryMinuteBucket } from 'vesc-ble'
 import { groupHistorySessions } from './sessions'
 
-function block(overrides: Partial<TelemetryHistoryBlock>): TelemetryHistoryBlock {
+function block(overrides: Partial<TelemetryMinuteBucket>): TelemetryMinuteBucket {
   const startAtMs = overrides.startAtMs ?? 0
   const endAtMs = overrides.endAtMs ?? startAtMs + 60_000
   return {
@@ -27,9 +27,15 @@ function block(overrides: Partial<TelemetryHistoryBlock>): TelemetryHistoryBlock
     faultCount: overrides.faultCount ?? 0,
     distanceDeltaM: overrides.distanceDeltaM !== undefined ? overrides.distanceDeltaM : 100,
     gpsDistanceM: overrides.gpsDistanceM !== undefined ? overrides.gpsDistanceM : 120,
+    maxTempMosfet: overrides.maxTempMosfet ?? null,
+    maxTempMotor: overrides.maxTempMotor ?? null,
+    firstLatitude: overrides.firstLatitude ?? null,
+    firstLongitude: overrides.firstLongitude ?? null,
     boundaryBefore: overrides.boundaryBefore ?? 'none',
     boundaryMessage: overrides.boundaryMessage ?? null,
     gapBeforeMs: overrides.gapBeforeMs ?? null,
+    batteryUsedWh: overrides.batteryUsedWh ?? 0,
+    batteryRegenWh: overrides.batteryRegenWh ?? 0,
   }
 }
 

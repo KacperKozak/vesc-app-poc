@@ -56,6 +56,7 @@ const config: ExpoConfig = {
       },
     ],
     '@rnmapbox/maps',
+    'expo-sharing',
   ],
   experiments: {
     typedRoutes: true,

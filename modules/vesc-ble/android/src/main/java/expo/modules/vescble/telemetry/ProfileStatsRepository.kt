@@ -60,6 +60,12 @@ class ProfileStatsRepository private constructor(context: Context) {
         instance ?: ProfileStatsRepository(context.applicationContext).also { instance = it }
       }
     }
+
+    fun resetForDatabaseSwap() {
+      synchronized(this) {
+        instance = null
+      }
+    }
   }
 }
 

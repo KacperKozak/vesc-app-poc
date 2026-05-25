@@ -7,7 +7,7 @@ import {
   deleteTelemetryRange,
   type HistoryGpsSample,
   type HistoryMarker,
-  type TelemetryHistoryBlock,
+  type TelemetryMinuteBucket,
   type TelemetrySample,
   type TelemetrySummary,
 } from 'vesc-ble'
@@ -15,10 +15,10 @@ import { groupHistorySessions, type HistorySession } from '@/history/sessions'
 import { useSettingsStore } from '@/store/settingsStore'
 
 interface HistoryState {
-  blocks: TelemetryHistoryBlock[]
+  blocks: TelemetryMinuteBucket[]
   sessions: HistorySession[]
-  liveBlocks: TelemetryHistoryBlock[]
-  selectedBlock: TelemetryHistoryBlock | null
+  liveBlocks: TelemetryMinuteBucket[]
+  selectedBlock: TelemetryMinuteBucket | null
   selectedSession: HistorySession | null
   samples: TelemetrySample[]
   gpsSamples: HistoryGpsSample[]
@@ -41,7 +41,7 @@ interface HistoryActions {
   loadInitial: () => Promise<void>
   loadMore: () => Promise<void>
   refreshLive: () => Promise<void>
-  selectBlock: (block: TelemetryHistoryBlock | null) => Promise<void>
+  selectBlock: (block: TelemetryMinuteBucket | null) => Promise<void>
   selectSession: (session: HistorySession | null) => Promise<void>
   refreshSummary: () => Promise<void>
   removeSelectedSession: () => Promise<void>
@@ -49,6 +49,8 @@ interface HistoryActions {
 }
 
 const PAGE_SIZE = 100
+const MIN_SESSION_SAMPLE_LIMIT = 10_000
+const PREVIEW_SAMPLE_LIMIT = 240
 let liveRefreshInFlight = false
 let liveRefreshVersion = 0
 let sessionLoadVersion = 0
@@ -216,24 +218,40 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
       return
     }
     set({
+      selectedSession: session,
       loadingSession: true,
       sessionTruncated: false,
       error: undefined,
     })
     try {
-      const range = await getHistoryRange({
+      const rangeOptions = {
         fromMs: session.startAtMs,
         toMs: session.endAtMs,
         ...(session.deviceId ? { deviceId: session.deviceId } : {}),
-        limit: 10_000,
+      }
+      if (session.centerLatitude == null || session.centerLongitude == null) {
+        void getHistoryRange({
+          ...rangeOptions,
+          limit: Math.min(PREVIEW_SAMPLE_LIMIT, Math.max(1, session.sampleCount + 1)),
+        }).then((previewRange) => {
+          if (version !== sessionLoadVersion || previewRange.gpsSamples.length === 0) return
+          if (get().sessionGpsSamples.length > 0) return
+          set({ sessionGpsSamples: previewRange.gpsSamples })
+        })
+      }
+      const limit = Math.max(MIN_SESSION_SAMPLE_LIMIT, session.sampleCount + 1)
+      const range = await getHistoryRange({
+        ...rangeOptions,
+        limit,
       })
       if (version !== sessionLoadVersion) return
       set({
-        selectedSession: session,
         sessionSamples: range.boardSamples,
         sessionGpsSamples: range.gpsSamples,
         sessionMarkers: range.markers,
-        sessionTruncated: range.boardSamples.length >= 10_000 || range.gpsSamples.length >= 10_000,
+        sessionTruncated:
+          range.boardSamples.length < session.sampleCount ||
+          range.gpsSamples.length < session.gpsPointCount,
       })
     } catch (err) {
       if (version === sessionLoadVersion) {

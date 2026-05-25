@@ -169,7 +169,7 @@ export interface TelemetryDeleteRangeOptions {
   deviceId?: string | null
 }
 
-export interface TelemetryHistoryBlock {
+export interface TelemetryMinuteBucket {
   id: string
   startAtMs: number
   endAtMs: number
@@ -190,6 +190,12 @@ export interface TelemetryHistoryBlock {
   faultCount: number
   distanceDeltaM: number | null
   gpsDistanceM: number | null
+  maxTempMosfet: number | null
+  maxTempMotor: number | null
+  batteryUsedWh: number
+  batteryRegenWh: number
+  firstLatitude: number | null
+  firstLongitude: number | null
   boundaryBefore:
     | 'none'
     | 'connected'
@@ -362,6 +368,17 @@ export interface LocalDiagnosticEvent {
   propertiesJson: string
 }
 
+export interface TelemetryRebuildProgressEvent {
+  current: number
+  total: number
+}
+
+export interface DatabaseBackupResult {
+  uri: string
+  name: string
+  sizeBytes: number
+}
+
 // ---------------------------------------------------------------------------
 // Typed emitter
 // ---------------------------------------------------------------------------
@@ -372,6 +389,7 @@ type VescBleEvents = {
   onLiveState: (event: LiveStateEvent) => void
   onTelemetry: (event: TelemetryEvent) => void
   onLocation: (event: LocationEvent) => void
+  onTelemetryRebuildProgress: (event: TelemetryRebuildProgressEvent) => void
 }
 
 interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
@@ -405,7 +423,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getDiagnosticStatus(): DiagnosticStatus
   getLiveState(): LiveStateEvent
   setSelectedBoard(boardId: string | null): void
-  getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryHistoryBlock[]>
+  getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryMinuteBucket[]>
   getTelemetrySamples(options: {
     fromMs: number
     toMs: number
@@ -422,6 +440,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getDiagnosticEvents(options: DiagnosticEventOptions): Promise<LocalDiagnosticEvent[]>
   clearDiagnosticEvents(): Promise<void>
   getDatabaseSizeBytes(): Promise<number>
+  backupDatabase(): Promise<DatabaseBackupResult>
+  restoreDatabase(uri: string): Promise<void>
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
   getTuneProfiles(boardId: string): Promise<TuneProfile[]>
   getTuneProfile(profileId: string): Promise<TuneProfile | null>
@@ -447,6 +467,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getTotalProfileStats(): Promise<ProfileStats>
   getMonthlyProfileStats(options: ProfileStatsMonth): Promise<ProfileStats>
   getProfileStatMonths(): Promise<ProfileStatsMonth[]>
+  rebuildTelemetryBuckets(): Promise<number>
   deleteTelemetryBefore(beforeMs: number): Promise<number>
   deleteTelemetryRange(options: TelemetryDeleteRangeOptions): Promise<number>
   clearTelemetryHistory(): Promise<void>
@@ -581,7 +602,7 @@ export function setSelectedBoard(boardId: string | null): void {
 
 export async function getTelemetryHistory(
   options: TelemetryHistoryOptions = {},
-): Promise<TelemetryHistoryBlock[]> {
+): Promise<TelemetryMinuteBucket[]> {
   return native.getTelemetryHistory(options)
 }
 
@@ -619,6 +640,14 @@ export async function clearDiagnosticEvents(): Promise<void> {
 
 export async function getDatabaseSizeBytes(): Promise<number> {
   return native.getDatabaseSizeBytes()
+}
+
+export async function backupDatabase(): Promise<DatabaseBackupResult> {
+  return native.backupDatabase()
+}
+
+export async function restoreDatabase(uri: string): Promise<void> {
+  return native.restoreDatabase(uri)
 }
 
 export async function getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot> {
@@ -689,6 +718,10 @@ export async function getMonthlyProfileStats(options: ProfileStatsMonth): Promis
 
 export async function getProfileStatMonths(): Promise<ProfileStatsMonth[]> {
   return native.getProfileStatMonths()
+}
+
+export async function rebuildTelemetryBuckets(): Promise<number> {
+  return native.rebuildTelemetryBuckets()
 }
 
 export async function deleteTelemetryBefore(beforeMs: number): Promise<number> {
@@ -764,4 +797,10 @@ export function addTelemetryListener(cb: (event: TelemetryEvent) => void): Event
 
 export function addLocationListener(cb: (event: LocationEvent) => void): EventSubscription {
   return emitter.addListener('onLocation', cb)
+}
+
+export function addTelemetryRebuildProgressListener(
+  cb: (event: TelemetryRebuildProgressEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onTelemetryRebuildProgress', cb)
 }
