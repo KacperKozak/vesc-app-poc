@@ -340,6 +340,8 @@ test('loads a small GPS preview when selected ride has no bucket coordinate', as
     batteryRegenWh: ride.batteryRegenWh,
     firstLatitude: null,
     firstLongitude: null,
+    centerLatitude: null,
+    centerLongitude: null,
     faultCount: ride.faultCount,
     id: `${ride.deviceId}:${ride.startAtMs}:${ride.endAtMs}`,
   })

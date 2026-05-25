@@ -232,12 +232,13 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         toMs: session.endAtMs,
         ...(session.deviceId ? { deviceId: session.deviceId } : {}),
       }
-      if (session.firstLatitude == null || session.firstLongitude == null) {
+      if (session.centerLatitude == null || session.centerLongitude == null) {
         void getHistoryRange({
           ...rangeOptions,
           limit: Math.min(PREVIEW_SAMPLE_LIMIT, Math.max(1, session.sampleCount + 1)),
         }).then((previewRange) => {
           if (version !== sessionLoadVersion || previewRange.gpsSamples.length === 0) return
+          if (get().sessionGpsSamples.length > 0) return
           set({ sessionGpsSamples: previewRange.gpsSamples })
         })
       }

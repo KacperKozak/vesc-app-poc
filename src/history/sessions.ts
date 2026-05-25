@@ -24,6 +24,8 @@ export interface HistorySession {
   batteryRegenWh: number
   firstLatitude: number | null
   firstLongitude: number | null
+  centerLatitude: number | null
+  centerLongitude: number | null
   faultCount: number
   boundaryBefore: TelemetryMinuteBucket['boundaryBefore']
 }
@@ -53,6 +55,9 @@ interface MutableSessionAggregate {
   batteryRegenWh: number
   firstLatitude: number | null
   firstLongitude: number | null
+  latitudeSum: number
+  longitudeSum: number
+  coordinateCount: number
   faultCount: number
 }
 
@@ -113,6 +118,9 @@ function createAggregate(block: TelemetryMinuteBucket): MutableSessionAggregate 
     batteryRegenWh: 0,
     firstLatitude: null,
     firstLongitude: null,
+    latitudeSum: 0,
+    longitudeSum: 0,
+    coordinateCount: 0,
     faultCount: 0,
   }
   mergeBlockIntoAggregate(aggregate, block)
@@ -168,6 +176,11 @@ function mergeBlockIntoAggregate(
     session.firstLatitude = block.firstLatitude
     session.firstLongitude = block.firstLongitude
   }
+  if (block.firstLatitude != null && block.firstLongitude != null) {
+    session.latitudeSum += block.firstLatitude
+    session.longitudeSum += block.firstLongitude
+    session.coordinateCount += 1
+  }
 }
 
 function finalizeSession(session: MutableSessionAggregate): HistorySession {
@@ -179,6 +192,10 @@ function finalizeSession(session: MutableSessionAggregate): HistorySession {
         : null
   const avgSpeedKmh =
     session.avgSpeedSampleCount > 0 ? session.avgSpeedSum / session.avgSpeedSampleCount : 0
+  const centerLatitude =
+    session.coordinateCount > 0 ? session.latitudeSum / session.coordinateCount : null
+  const centerLongitude =
+    session.coordinateCount > 0 ? session.longitudeSum / session.coordinateCount : null
 
   return {
     id: `${session.deviceId ?? 'unknown'}:${session.startAtMs}:${session.endAtMs}`,
@@ -201,6 +218,8 @@ function finalizeSession(session: MutableSessionAggregate): HistorySession {
     batteryRegenWh: session.batteryRegenWh,
     firstLatitude: session.firstLatitude,
     firstLongitude: session.firstLongitude,
+    centerLatitude,
+    centerLongitude,
     faultCount: session.faultCount,
     boundaryBefore: session.boundaryBefore,
   }

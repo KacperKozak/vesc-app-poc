@@ -134,16 +134,16 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
 
   const historyPreview = useMemo(() => {
     if (!selectedSession) return null
-    const firstGpsSample = sessionGpsSamples[0]
-    const latitude = selectedSession.firstLatitude ?? firstGpsSample?.latitude
-    const longitude = selectedSession.firstLongitude ?? firstGpsSample?.longitude
+    if (!loadingSession) return null
+    const latitude = selectedSession.centerLatitude ?? sessionGpsSamples[0]?.latitude
+    const longitude = selectedSession.centerLongitude ?? sessionGpsSamples[0]?.longitude
     if (latitude == null || longitude == null) return null
     return {
       key: selectedSession.id,
       latitude,
       longitude,
     }
-  }, [selectedSession, sessionGpsSamples])
+  }, [loadingSession, selectedSession, sessionGpsSamples])
 
   const exitMapFocus = useCallback(() => {
     enterTelemetry()

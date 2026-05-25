@@ -33,6 +33,8 @@ function session(id: string, startAtMs: number): HistorySession {
     batteryRegenWh: 0,
     firstLatitude: null,
     firstLongitude: null,
+    centerLatitude: null,
+    centerLongitude: null,
     boundaryBefore: 'none',
   }
 }
