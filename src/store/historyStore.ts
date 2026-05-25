@@ -219,9 +219,6 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
     }
     set({
       selectedSession: session,
-      sessionSamples: [],
-      sessionGpsSamples: [],
-      sessionMarkers: [],
       loadingSession: true,
       sessionTruncated: false,
       error: undefined,
