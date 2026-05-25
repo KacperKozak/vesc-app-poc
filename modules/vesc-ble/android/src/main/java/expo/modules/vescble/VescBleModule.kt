@@ -19,6 +19,9 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.ProfileStatsRepository
 import expo.modules.vescble.telemetry.TelemetryRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 private const val TAG = "VescBle"
@@ -65,6 +68,7 @@ class VescBleModule : Module() {
       "onLiveState",
       "onTelemetry",
       "onLocation",
+      "onTelemetryRebuildProgress",
     )
 
     OnStartObserving("onDevice") { startObserving("onDevice") }
@@ -77,6 +81,8 @@ class VescBleModule : Module() {
     OnStopObserving("onTelemetry") { stopObserving("onTelemetry") }
     OnStartObserving("onLocation") { startObserving("onLocation") }
     OnStopObserving("onLocation") { stopObserving("onLocation") }
+    OnStartObserving("onTelemetryRebuildProgress") { startObserving("onTelemetryRebuildProgress") }
+    OnStopObserving("onTelemetryRebuildProgress") { stopObserving("onTelemetryRebuildProgress") }
 
     OnActivityEntersForeground {
       frontendActive = true
@@ -238,6 +244,27 @@ class VescBleModule : Module() {
     }
     AsyncFunction("deleteTelemetryRange") Coroutine { options: Map<String, Any?> ->
       TelemetryRepository.get(context.applicationContext).deleteRange(options)
+    }
+    AsyncFunction("rebuildTelemetryBuckets") { promise: Promise ->
+      CoroutineScope(Dispatchers.IO).launch {
+        try {
+          val count = TelemetryRepository.get(context.applicationContext).rebuildBuckets { current, total ->
+            if (shouldEmitToFrontend("onTelemetryRebuildProgress")) {
+              mainHandler.post {
+                if (shouldEmitToFrontend("onTelemetryRebuildProgress")) {
+                  sendEvent(
+                    "onTelemetryRebuildProgress",
+                    mapOf("current" to current, "total" to total),
+                  )
+                }
+              }
+            }
+          }
+          promise.resolve(count)
+        } catch (e: Exception) {
+          promise.reject("ERR_REBUILD", e.message, e)
+        }
+      }
     }
     AsyncFunction("clearTelemetryHistory") {
       runBlocking { TelemetryRepository.get(context.applicationContext).clearAll() }

@@ -327,6 +327,40 @@ class TelemetryRepository private constructor(context: Context) {
     dao.deleteRange(query.fromMs, query.toMs, query.deviceId)
   }
 
+  suspend fun rebuildBuckets(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
+    val firstMs = dao.firstFrameAt() ?: return@withContext 0
+    val lastMs = dao.lastFrameAt() ?: return@withContext 0
+
+    dao.clearBuckets()
+
+    val chunkMs = 3_600_000L
+    val chunks = ((lastMs - firstMs) / chunkMs + 1).toInt()
+    var rebuiltBuckets = 0
+    onProgress(0, chunks)
+
+    for (i in 0 until chunks) {
+      val chunkFrom = firstMs + i * chunkMs
+      val chunkTo = minOf(chunkFrom + chunkMs - 1, lastMs)
+
+      val states = getSampleStates(chunkFrom, chunkTo, null, Int.MAX_VALUE)
+      if (states.isNotEmpty()) {
+        val buckets = buildTelemetryBuckets(
+          telemetryPoints = states.map { it.state.toBucketPoint() },
+          locationPoints = states.toBucketLocationPoints(),
+          movingSpeedThresholdCentiKmh = movingSpeedThresholdCentiKmh,
+        )
+        if (buckets.isNotEmpty()) {
+          dao.upsertBuckets(buckets)
+          rebuiltBuckets += buckets.size
+        }
+      }
+      onProgress(i + 1, chunks)
+    }
+
+    Log.i(TAG, "rebuildBuckets complete: $rebuiltBuckets buckets from $chunks chunks")
+    rebuiltBuckets
+  }
+
   suspend fun clearAll() = withContext(Dispatchers.IO) {
     dao.clearAll()
     synchronized(lock) {

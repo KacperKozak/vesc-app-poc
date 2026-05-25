@@ -368,6 +368,11 @@ export interface LocalDiagnosticEvent {
   propertiesJson: string
 }
 
+export interface TelemetryRebuildProgressEvent {
+  current: number
+  total: number
+}
+
 // ---------------------------------------------------------------------------
 // Typed emitter
 // ---------------------------------------------------------------------------
@@ -378,6 +383,7 @@ type VescBleEvents = {
   onLiveState: (event: LiveStateEvent) => void
   onTelemetry: (event: TelemetryEvent) => void
   onLocation: (event: LocationEvent) => void
+  onTelemetryRebuildProgress: (event: TelemetryRebuildProgressEvent) => void
 }
 
 interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
@@ -453,6 +459,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getTotalProfileStats(): Promise<ProfileStats>
   getMonthlyProfileStats(options: ProfileStatsMonth): Promise<ProfileStats>
   getProfileStatMonths(): Promise<ProfileStatsMonth[]>
+  rebuildTelemetryBuckets(): Promise<number>
   deleteTelemetryBefore(beforeMs: number): Promise<number>
   deleteTelemetryRange(options: TelemetryDeleteRangeOptions): Promise<number>
   clearTelemetryHistory(): Promise<void>
@@ -697,6 +704,10 @@ export async function getProfileStatMonths(): Promise<ProfileStatsMonth[]> {
   return native.getProfileStatMonths()
 }
 
+export async function rebuildTelemetryBuckets(): Promise<number> {
+  return native.rebuildTelemetryBuckets()
+}
+
 export async function deleteTelemetryBefore(beforeMs: number): Promise<number> {
   return native.deleteTelemetryBefore(beforeMs)
 }
@@ -770,4 +781,10 @@ export function addTelemetryListener(cb: (event: TelemetryEvent) => void): Event
 
 export function addLocationListener(cb: (event: LocationEvent) => void): EventSubscription {
   return emitter.addListener('onLocation', cb)
+}
+
+export function addTelemetryRebuildProgressListener(
+  cb: (event: TelemetryRebuildProgressEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onTelemetryRebuildProgress', cb)
 }
