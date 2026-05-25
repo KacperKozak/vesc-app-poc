@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 
-import type { TelemetryHistoryBlock } from 'vesc-ble'
+import type { TelemetryMinuteBucket } from 'vesc-ble'
 import { groupHistorySessions } from './sessions'
 
-function block(overrides: Partial<TelemetryHistoryBlock>): TelemetryHistoryBlock {
+function block(overrides: Partial<TelemetryMinuteBucket>): TelemetryMinuteBucket {
   const startAtMs = overrides.startAtMs ?? 0
   const endAtMs = overrides.endAtMs ?? startAtMs + 60_000
   return {

@@ -1,4 +1,4 @@
-import type { TelemetryHistoryBlock } from 'vesc-ble'
+import type { TelemetryMinuteBucket } from 'vesc-ble'
 
 const DEFAULT_GAP_MS = 10 * 60_000
 const SESSION_BREAK_BOUNDARIES = new Set(['disconnected', 'app_stop', 'error'])
@@ -18,13 +18,13 @@ export interface HistorySession {
   maxSpeedKmh: number
   avgSpeedKmh: number
   faultCount: number
-  boundaryBefore: TelemetryHistoryBlock['boundaryBefore']
+  boundaryBefore: TelemetryMinuteBucket['boundaryBefore']
 }
 
 interface MutableSessionAggregate {
   deviceId: string | null
   deviceName: string
-  boundaryBefore: TelemetryHistoryBlock['boundaryBefore']
+  boundaryBefore: TelemetryMinuteBucket['boundaryBefore']
   startAtMs: number
   endAtMs: number
   blockIds: string[]
@@ -43,7 +43,7 @@ interface MutableSessionAggregate {
 }
 
 export function groupHistorySessions(
-  blocks: TelemetryHistoryBlock[],
+  blocks: TelemetryMinuteBucket[],
   options?: { gapMs?: number },
 ): HistorySession[] {
   if (!blocks.length) return []
@@ -51,7 +51,7 @@ export function groupHistorySessions(
   const oldestFirst = [...blocks].reverse()
   const sessions: MutableSessionAggregate[] = []
   let current: MutableSessionAggregate | null = null
-  let previousBlock: TelemetryHistoryBlock | null = null
+  let previousBlock: TelemetryMinuteBucket | null = null
 
   for (const block of oldestFirst) {
     const breakByDevice = !current || current.deviceId !== block.deviceId
@@ -73,7 +73,7 @@ export function groupHistorySessions(
   return sessions.map(finalizeSession).sort((a, b) => b.startAtMs - a.startAtMs)
 }
 
-function createAggregate(block: TelemetryHistoryBlock): MutableSessionAggregate {
+function createAggregate(block: TelemetryMinuteBucket): MutableSessionAggregate {
   const aggregate: MutableSessionAggregate = {
     deviceId: block.deviceId,
     deviceName: block.deviceName,
@@ -100,7 +100,7 @@ function createAggregate(block: TelemetryHistoryBlock): MutableSessionAggregate 
 
 function mergeBlockIntoAggregate(
   session: MutableSessionAggregate,
-  block: TelemetryHistoryBlock,
+  block: TelemetryMinuteBucket,
 ): void {
   session.startAtMs = Math.min(session.startAtMs, block.startAtMs)
   session.endAtMs = Math.max(session.endAtMs, block.endAtMs)

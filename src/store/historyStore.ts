@@ -7,7 +7,7 @@ import {
   deleteTelemetryRange,
   type HistoryGpsSample,
   type HistoryMarker,
-  type TelemetryHistoryBlock,
+  type TelemetryMinuteBucket,
   type TelemetrySample,
   type TelemetrySummary,
 } from 'vesc-ble'
@@ -15,10 +15,10 @@ import { groupHistorySessions, type HistorySession } from '@/history/sessions'
 import { useSettingsStore } from '@/store/settingsStore'
 
 interface HistoryState {
-  blocks: TelemetryHistoryBlock[]
+  blocks: TelemetryMinuteBucket[]
   sessions: HistorySession[]
-  liveBlocks: TelemetryHistoryBlock[]
-  selectedBlock: TelemetryHistoryBlock | null
+  liveBlocks: TelemetryMinuteBucket[]
+  selectedBlock: TelemetryMinuteBucket | null
   selectedSession: HistorySession | null
   samples: TelemetrySample[]
   gpsSamples: HistoryGpsSample[]
@@ -41,7 +41,7 @@ interface HistoryActions {
   loadInitial: () => Promise<void>
   loadMore: () => Promise<void>
   refreshLive: () => Promise<void>
-  selectBlock: (block: TelemetryHistoryBlock | null) => Promise<void>
+  selectBlock: (block: TelemetryMinuteBucket | null) => Promise<void>
   selectSession: (session: HistorySession | null) => Promise<void>
   refreshSummary: () => Promise<void>
   removeSelectedSession: () => Promise<void>

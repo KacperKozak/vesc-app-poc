@@ -3,7 +3,7 @@ import { beforeEach, expect, mock, test } from 'bun:test'
 import type {
   HistoryGpsSample,
   HistoryMarker,
-  TelemetryHistoryBlock,
+  TelemetryMinuteBucket,
   TelemetrySample,
   TelemetrySummary,
 } from 'vesc-ble'
@@ -18,7 +18,7 @@ const summary: TelemetrySummary = {
   droppedPendingSamples: 0,
 }
 
-const getTelemetryHistory = mock(async () => [] as TelemetryHistoryBlock[])
+const getTelemetryHistory = mock(async () => [] as TelemetryMinuteBucket[])
 type HistoryRangeResult = {
   boardSamples: TelemetrySample[]
   gpsSamples: HistoryGpsSample[]
@@ -60,7 +60,7 @@ const vescBleMock = {
 mock.module('vesc-ble', () => vescBleMock)
 mock.module('../../modules/vesc-ble/src/index', () => vescBleMock)
 
-function block(overrides: Partial<TelemetryHistoryBlock>): TelemetryHistoryBlock {
+function block(overrides: Partial<TelemetryMinuteBucket>): TelemetryMinuteBucket {
   const startAtMs = overrides.startAtMs ?? 0
   const endAtMs = overrides.endAtMs ?? startAtMs + 60_000
   return {

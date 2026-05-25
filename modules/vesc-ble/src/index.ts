@@ -169,7 +169,7 @@ export interface TelemetryDeleteRangeOptions {
   deviceId?: string | null
 }
 
-export interface TelemetryHistoryBlock {
+export interface TelemetryMinuteBucket {
   id: string
   startAtMs: number
   endAtMs: number
@@ -405,7 +405,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getDiagnosticStatus(): DiagnosticStatus
   getLiveState(): LiveStateEvent
   setSelectedBoard(boardId: string | null): void
-  getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryHistoryBlock[]>
+  getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryMinuteBucket[]>
   getTelemetrySamples(options: {
     fromMs: number
     toMs: number
@@ -581,7 +581,7 @@ export function setSelectedBoard(boardId: string | null): void {
 
 export async function getTelemetryHistory(
   options: TelemetryHistoryOptions = {},
-): Promise<TelemetryHistoryBlock[]> {
+): Promise<TelemetryMinuteBucket[]> {
   return native.getTelemetryHistory(options)
 }
 

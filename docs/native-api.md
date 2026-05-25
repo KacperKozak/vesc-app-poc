@@ -93,13 +93,13 @@ Field omitted (null) when change < threshold from previous:
 
 | fn                                                    | returns                                                                    | notes                                                                                             |
 | ----------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `getTelemetryHistory(opts?)`                          | `TelemetryHistoryBlock[]`                                                  | 60s bucket aggregates. Pagination via `cursorBeforeMs`. Default limit 100, max 500                |
+| `getTelemetryHistory(opts?)`                          | `TelemetryMinuteBucket[]`                                                  | 60s bucket aggregates. Pagination via `cursorBeforeMs`. Default limit 100, max 500                |
 | `getTelemetrySamples({fromMs,toMs,deviceId?,limit?})` | `TelemetrySample[]`                                                        | Decoded from compressed frames. Reconstructs state from nearest keyframe. Default 2000, max 10000 |
 | `getHistoryRange({fromMs,toMs,deviceId?,limit?})`     | `{boardSamples, gpsSamples, markers}`                                      | Combined query: decoded samples + GPS points + session markers                                    |
 | `getTelemetrySummary()`                               | `{sampleCount, gpsPointCount, firstAtMs, lastAtMs, droppedPendingSamples}` | DB-wide stats                                                                                     |
 | `getDatabaseSizeBytes()`                              | number                                                                     | File size of telemetry.db                                                                         |
 
-### TelemetryHistoryBlock (bucket shape)
+### TelemetryMinuteBucket (bucket shape)
 
 ```ts
 {
