@@ -190,6 +190,12 @@ export interface TelemetryMinuteBucket {
   faultCount: number
   distanceDeltaM: number | null
   gpsDistanceM: number | null
+  maxTempMosfet: number | null
+  maxTempMotor: number | null
+  batteryUsedWh: number
+  batteryRegenWh: number
+  firstLatitude: number | null
+  firstLongitude: number | null
   boundaryBefore:
     | 'none'
     | 'connected'

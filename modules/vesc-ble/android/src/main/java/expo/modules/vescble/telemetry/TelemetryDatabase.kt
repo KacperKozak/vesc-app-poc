@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     TuneHistoryEntryEntity::class,
     DiagnosticEventEntity::class,
   ],
-  version = 13,
+  version = 14,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -168,6 +168,15 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN max_temp_mosfet_deci_c INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN max_temp_motor_deci_c INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN first_latitude_e7 INTEGER")
+        db.execSQL("ALTER TABLE telemetry_minute_buckets ADD COLUMN first_longitude_e7 INTEGER")
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -186,6 +195,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
+            MIGRATION_13_14,
           )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {

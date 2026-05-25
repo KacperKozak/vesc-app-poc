@@ -248,6 +248,12 @@ class TelemetryRepository private constructor(context: Context) {
         "faultCount" to bucket.faultCount,
         "distanceDeltaM" to distanceM,
         "gpsDistanceM" to bucket.gpsDistanceCm.takeIf { it > 0L }?.let { it / 100.0 },
+        "maxTempMosfet" to bucket.maxTempMosfetDeciC?.let { it / 10.0 },
+        "maxTempMotor" to bucket.maxTempMotorDeciC?.let { it / 10.0 },
+        "batteryUsedWh" to bucket.batteryUsedWhMilli / 1000.0,
+        "batteryRegenWh" to bucket.batteryRegenWhMilli / 1000.0,
+        "firstLatitude" to bucket.firstLatitudeE7?.let { it / 1e7 },
+        "firstLongitude" to bucket.firstLongitudeE7?.let { it / 1e7 },
         "boundaryBefore" to (marker?.type ?: "none"),
         "boundaryMessage" to marker?.message,
         "gapBeforeMs" to marker?.gapMs,
@@ -590,6 +596,8 @@ internal data class FullTelemetryState(
     dutyPermille = dutyPermille,
     hasFault = hasFault,
     odometerCm = odometerCm,
+    tempMosfetDeciC = tempMosfetDeciC,
+    tempMotorDeciC = tempMotorDeciC,
   )
 
   companion object {

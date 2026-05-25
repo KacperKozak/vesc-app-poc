@@ -26,6 +26,13 @@ function session(id: string, startAtMs: number): HistorySession {
     gpsPointCount: 20,
     preciseGpsPointCount: 18,
     faultCount: 0,
+    maxTempMosfet: null,
+    maxTempMotor: null,
+    maxDuty: 0.5,
+    batteryUsedWh: 0,
+    batteryRegenWh: 0,
+    firstLatitude: null,
+    firstLongitude: null,
     boundaryBefore: 'none',
   }
 }

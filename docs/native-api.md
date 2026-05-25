@@ -108,6 +108,8 @@ Field omitted (null) when change < threshold from previous:
   maxAbsSpeedKmh, maxGpsSpeedKmh?, avgSpeedKmh, avgSpeedSampleCount,
   minBatteryVoltage?, maxMotorCurrent, maxBatteryCurrent, maxDuty,
   faultCount, distanceDeltaM?, gpsDistanceM?,
+  maxTempMosfet?, maxTempMotor?,
+  firstLatitude?, firstLongitude?,
   boundaryBefore: 'none'|'connected'|'disconnected'|'error'|'gap'|'app_stop',
   boundaryMessage?, gapBeforeMs?
 }

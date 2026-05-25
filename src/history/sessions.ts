@@ -17,6 +17,13 @@ export interface HistorySession {
   distanceM: number | null
   maxSpeedKmh: number
   avgSpeedKmh: number
+  maxTempMosfet: number | null
+  maxTempMotor: number | null
+  maxDuty: number
+  batteryUsedWh: number
+  batteryRegenWh: number
+  firstLatitude: number | null
+  firstLongitude: number | null
   faultCount: number
   boundaryBefore: TelemetryMinuteBucket['boundaryBefore']
 }
@@ -39,6 +46,13 @@ interface MutableSessionAggregate {
   maxSpeedKmh: number
   avgSpeedSum: number
   avgSpeedSampleCount: number
+  maxTempMosfet: number | null
+  maxTempMotor: number | null
+  maxDuty: number
+  batteryUsedWh: number
+  batteryRegenWh: number
+  firstLatitude: number | null
+  firstLongitude: number | null
   faultCount: number
 }
 
@@ -92,6 +106,13 @@ function createAggregate(block: TelemetryMinuteBucket): MutableSessionAggregate 
     maxSpeedKmh: 0,
     avgSpeedSum: 0,
     avgSpeedSampleCount: 0,
+    maxTempMosfet: null,
+    maxTempMotor: null,
+    maxDuty: 0,
+    batteryUsedWh: 0,
+    batteryRegenWh: 0,
+    firstLatitude: null,
+    firstLongitude: null,
     faultCount: 0,
   }
   mergeBlockIntoAggregate(aggregate, block)
@@ -126,6 +147,27 @@ function mergeBlockIntoAggregate(
     session.avgSpeedSum += block.avgSpeedKmh * block.avgSpeedSampleCount
     session.avgSpeedSampleCount += block.avgSpeedSampleCount
   }
+
+  if (block.maxTempMosfet != null) {
+    session.maxTempMosfet =
+      session.maxTempMosfet != null
+        ? Math.max(session.maxTempMosfet, block.maxTempMosfet)
+        : block.maxTempMosfet
+  }
+  if (block.maxTempMotor != null) {
+    session.maxTempMotor =
+      session.maxTempMotor != null
+        ? Math.max(session.maxTempMotor, block.maxTempMotor)
+        : block.maxTempMotor
+  }
+  session.maxDuty = Math.max(session.maxDuty, block.maxDuty)
+  session.batteryUsedWh += block.batteryUsedWh ?? 0
+  session.batteryRegenWh += block.batteryRegenWh ?? 0
+
+  if (session.firstLatitude == null && block.firstLatitude != null) {
+    session.firstLatitude = block.firstLatitude
+    session.firstLongitude = block.firstLongitude
+  }
 }
 
 function finalizeSession(session: MutableSessionAggregate): HistorySession {
@@ -152,6 +194,13 @@ function finalizeSession(session: MutableSessionAggregate): HistorySession {
     distanceM,
     maxSpeedKmh: session.maxSpeedKmh,
     avgSpeedKmh,
+    maxTempMosfet: session.maxTempMosfet,
+    maxTempMotor: session.maxTempMotor,
+    maxDuty: session.maxDuty,
+    batteryUsedWh: session.batteryUsedWh,
+    batteryRegenWh: session.batteryRegenWh,
+    firstLatitude: session.firstLatitude,
+    firstLongitude: session.firstLongitude,
     faultCount: session.faultCount,
     boundaryBefore: session.boundaryBefore,
   }

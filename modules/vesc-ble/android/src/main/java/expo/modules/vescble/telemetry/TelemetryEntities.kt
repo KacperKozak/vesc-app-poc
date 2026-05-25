@@ -157,6 +157,14 @@ data class TelemetryMinuteBucketEntity(
   val gpsDistanceCm: Long,
   @ColumnInfo(name = "max_gps_speed_centi_mps")
   val maxGpsSpeedCentiMps: Int?,
+  @ColumnInfo(name = "max_temp_mosfet_deci_c")
+  val maxTempMosfetDeciC: Int? = null,
+  @ColumnInfo(name = "max_temp_motor_deci_c")
+  val maxTempMotorDeciC: Int? = null,
+  @ColumnInfo(name = "first_latitude_e7")
+  val firstLatitudeE7: Int? = null,
+  @ColumnInfo(name = "first_longitude_e7")
+  val firstLongitudeE7: Int? = null,
 )
 
 @Entity(

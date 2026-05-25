@@ -1,6 +1,16 @@
 import { useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { ClockCountdownIcon, GaugeIcon, RepeatIcon, RoadHorizonIcon } from 'phosphor-react-native'
+import {
+  BatteryChargingIcon,
+  BatteryMediumIcon,
+  ClockCountdownIcon,
+  GaugeIcon,
+  LightningIcon,
+  RepeatIcon,
+  RoadHorizonIcon,
+  ThermometerHotIcon,
+  ThermometerSimpleIcon,
+} from 'phosphor-react-native'
 import type { Icon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -22,11 +32,18 @@ interface StatItem {
 export function HistoryStatsBar({ session }: HistoryStatsBarProps) {
   const insets = useSafeAreaInsets()
   const stats = useMemo(() => sessionToStats(session), [session])
+  const row1 = stats.slice(0, 4)
+  const row2 = stats.slice(4)
 
   return (
     <View style={[styles.wrap, { top: Math.max(insets.top, 8) + 46 }]} pointerEvents="box-none">
       <View style={styles.compactRow}>
-        {stats.map((item) => (
+        {row1.map((item) => (
+          <CompactStat key={item.key} item={item} />
+        ))}
+      </View>
+      <View style={styles.compactRow}>
+        {row2.map((item) => (
           <CompactStat key={item.key} item={item} />
         ))}
       </View>
@@ -38,15 +55,13 @@ function CompactStat({ item }: { item: StatItem }) {
   const IconComponent = item.icon
   return (
     <View style={styles.compactCell}>
-      <IconComponent size={13} color={item.accent} weight="duotone" />
-      <View style={styles.compactText}>
-        <Text style={styles.compactValue} numberOfLines={1} adjustsFontSizeToFit>
-          {item.value}
-        </Text>
-        <Text style={styles.compactLabel} numberOfLines={1}>
-          {item.label}
-        </Text>
-      </View>
+      <IconComponent size={14} color={item.accent} weight="duotone" />
+      <Text style={styles.compactValue} numberOfLines={1} adjustsFontSizeToFit>
+        {item.value}
+      </Text>
+      <Text style={styles.compactLabel} numberOfLines={1}>
+        {item.label}
+      </Text>
     </View>
   )
 }
@@ -81,6 +96,41 @@ function sessionToStats(session: HistorySession): StatItem[] {
       icon: RepeatIcon,
       accent: '#14b8a6',
     },
+    {
+      key: 'mosfetTemp',
+      label: 'Ctrl max temp',
+      value: formatTemp(session.maxTempMosfet),
+      icon: ThermometerHotIcon,
+      accent: theme.error.color,
+    },
+    {
+      key: 'motorTemp',
+      label: 'Motor max temp',
+      value: formatTemp(session.maxTempMotor),
+      icon: ThermometerSimpleIcon,
+      accent: theme.highlight.color,
+    },
+    {
+      key: 'maxDuty',
+      label: 'Max duty',
+      value: formatDuty(session.maxDuty),
+      icon: LightningIcon,
+      accent: theme.bran.color,
+    },
+    {
+      key: 'batteryUsed',
+      label: 'Used',
+      value: formatWh(session.batteryUsedWh),
+      icon: BatteryMediumIcon,
+      accent: theme.warning.color,
+    },
+    {
+      key: 'batteryRegen',
+      label: 'Regen',
+      value: formatWh(session.batteryRegenWh),
+      icon: BatteryChargingIcon,
+      accent: theme.gps.color,
+    },
   ]
 }
 
@@ -102,6 +152,20 @@ function formatSpeed(valueKmh: number): string {
   return `${Math.round(valueKmh)} km/h`
 }
 
+function formatTemp(value: number | null): string {
+  if (value == null) return '-'
+  return `${Math.round(value)}°C`
+}
+
+function formatDuty(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
+function formatWh(value: number): string {
+  if (value < 1) return `${Math.round(value * 1000)} mWh`
+  return `${value.toFixed(1)} Wh`
+}
+
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
@@ -109,6 +173,7 @@ const styles = StyleSheet.create({
     right: 10,
     zIndex: 24,
     alignItems: 'center',
+    gap: 6,
   },
   compactRow: {
     width: '100%',
@@ -120,14 +185,8 @@ const styles = StyleSheet.create({
   compactCell: {
     flex: 1,
     minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-  },
-  compactText: {
-    flex: 1,
-    minWidth: 0,
+    gap: 4,
+    paddingHorizontal: 4,
   },
   compactValue: {
     color: '#f8fafc',

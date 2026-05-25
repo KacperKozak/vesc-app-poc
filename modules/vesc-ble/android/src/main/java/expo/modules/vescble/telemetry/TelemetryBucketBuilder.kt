@@ -20,6 +20,8 @@ internal data class BucketTelemetryPoint(
   val dutyPermille: Int,
   val hasFault: Boolean,
   val odometerCm: Long?,
+  val tempMosfetDeciC: Int? = null,
+  val tempMotorDeciC: Int? = null,
 )
 
 internal data class BucketLocationPoint(
@@ -29,6 +31,8 @@ internal data class BucketLocationPoint(
   val precise: Boolean,
   val distanceFromPreviousCm: Long?,
   val gpsSpeedCentiMps: Int?,
+  val latitudeE7: Int? = null,
+  val longitudeE7: Int? = null,
 )
 
 internal fun buildTelemetryBuckets(
@@ -83,6 +87,10 @@ private class MutableBucket(
   private var preciseGpsPointCount = 0
   private var gpsDistanceCm = 0L
   private var maxGpsSpeedCentiMps: Int? = null
+  private var maxTempMosfetDeciC: Int? = null
+  private var maxTempMotorDeciC: Int? = null
+  private var firstLatitudeE7: Int? = null
+  private var firstLongitudeE7: Int? = null
   private var lastEnergyPoint: BucketTelemetryPoint? = null
 
   fun add(point: BucketTelemetryPoint) {
@@ -105,6 +113,8 @@ private class MutableBucket(
     if (point.hasFault) faultCount++
     if (firstOdometerCm == null) firstOdometerCm = point.odometerCm
     if (point.odometerCm != null) lastOdometerCm = point.odometerCm
+    point.tempMosfetDeciC?.let { t -> maxTempMosfetDeciC = maxOf(maxTempMosfetDeciC ?: t, t) }
+    point.tempMotorDeciC?.let { t -> maxTempMotorDeciC = maxOf(maxTempMotorDeciC ?: t, t) }
 
     lastEnergyPoint?.let { previous ->
       val dtMs = point.capturedAtMs - previous.capturedAtMs
@@ -128,6 +138,10 @@ private class MutableBucket(
     if (point.deviceName != null) deviceName = point.deviceName
     firstSampleAtMs = minOf(firstSampleAtMs, point.capturedAtMs)
     lastSampleAtMs = maxOf(lastSampleAtMs, point.capturedAtMs)
+    if (firstLatitudeE7 == null && point.latitudeE7 != null) {
+      firstLatitudeE7 = point.latitudeE7
+      firstLongitudeE7 = point.longitudeE7
+    }
     gpsDistanceCm += point.distanceFromPreviousCm ?: 0L
     maxGpsSpeedCentiMps = when {
       maxGpsSpeedCentiMps == null -> point.gpsSpeedCentiMps
@@ -160,5 +174,9 @@ private class MutableBucket(
     preciseGpsPointCount = preciseGpsPointCount,
     gpsDistanceCm = gpsDistanceCm,
     maxGpsSpeedCentiMps = maxGpsSpeedCentiMps,
+    maxTempMosfetDeciC = maxTempMosfetDeciC,
+    maxTempMotorDeciC = maxTempMotorDeciC,
+    firstLatitudeE7 = firstLatitudeE7,
+    firstLongitudeE7 = firstLongitudeE7,
   )
 }

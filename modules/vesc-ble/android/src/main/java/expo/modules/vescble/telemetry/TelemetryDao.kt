@@ -396,6 +396,26 @@ private fun TelemetryMinuteBucketEntity.merge(next: TelemetryMinuteBucketEntity)
       next.maxGpsSpeedCentiMps == null -> maxGpsSpeedCentiMps
       else -> maxOf(maxGpsSpeedCentiMps, next.maxGpsSpeedCentiMps)
     },
+    maxTempMosfetDeciC = when {
+      maxTempMosfetDeciC == null -> next.maxTempMosfetDeciC
+      next.maxTempMosfetDeciC == null -> maxTempMosfetDeciC
+      else -> maxOf(maxTempMosfetDeciC, next.maxTempMosfetDeciC)
+    },
+    maxTempMotorDeciC = when {
+      maxTempMotorDeciC == null -> next.maxTempMotorDeciC
+      next.maxTempMotorDeciC == null -> maxTempMotorDeciC
+      else -> maxOf(maxTempMotorDeciC, next.maxTempMotorDeciC)
+    },
+    firstLatitudeE7 = when {
+      firstLatitudeE7 != null && next.firstSampleAtMs >= firstSampleAtMs -> firstLatitudeE7
+      next.firstLatitudeE7 != null -> next.firstLatitudeE7
+      else -> firstLatitudeE7
+    },
+    firstLongitudeE7 = when {
+      firstLongitudeE7 != null && next.firstSampleAtMs >= firstSampleAtMs -> firstLongitudeE7
+      next.firstLongitudeE7 != null -> next.firstLongitudeE7
+      else -> firstLongitudeE7
+    },
   )
 }
 

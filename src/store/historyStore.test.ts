@@ -84,9 +84,15 @@ function block(overrides: Partial<TelemetryMinuteBucket>): TelemetryMinuteBucket
     faultCount: overrides.faultCount ?? 0,
     distanceDeltaM: overrides.distanceDeltaM !== undefined ? overrides.distanceDeltaM : 100,
     gpsDistanceM: overrides.gpsDistanceM !== undefined ? overrides.gpsDistanceM : 120,
+    maxTempMosfet: overrides.maxTempMosfet ?? null,
+    maxTempMotor: overrides.maxTempMotor ?? null,
+    firstLatitude: overrides.firstLatitude ?? null,
+    firstLongitude: overrides.firstLongitude ?? null,
     boundaryBefore: overrides.boundaryBefore ?? 'none',
     boundaryMessage: overrides.boundaryMessage ?? null,
     gapBeforeMs: overrides.gapBeforeMs ?? null,
+    batteryUsedWh: overrides.batteryUsedWh ?? 0,
+    batteryRegenWh: overrides.batteryRegenWh ?? 0,
   }
 }
 
