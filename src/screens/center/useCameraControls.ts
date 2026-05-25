@@ -11,10 +11,14 @@ const HISTORY_PREVIEW_ZOOM = 11.8
 const HISTORY_PREVIEW_BOTTOM_PADDING = 300
 const HISTORY_PREVIEW_SIDE_PADDING = 72
 const HISTORY_PREVIEW_TOP_PADDING = 120
+const HISTORY_FIT_PADDING: [number, number, number, number] = [
+  HISTORY_PREVIEW_TOP_PADDING,
+  HISTORY_PREVIEW_SIDE_PADDING,
+  HISTORY_PREVIEW_BOTTOM_PADDING,
+  HISTORY_PREVIEW_SIDE_PADDING,
+]
 const HISTORY_DYNAMIC_FULL_DISTANCE_M = 80_000
-const HISTORY_DYNAMIC_MAX_EXTRA_PADDING = 220
 const HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS = 450
-const HISTORY_DYNAMIC_MAX_ZOOM_OUT = 2.4
 
 export interface CameraSnapshot {
   centerCoordinate: [number, number]
@@ -100,21 +104,6 @@ function getHistoryPreviewBounds(preview: HistoryPreviewTarget) {
   }
 }
 
-function getHistoryPreviewPlan(jumpDistanceM: number) {
-  const progress = clamp(jumpDistanceM / HISTORY_DYNAMIC_FULL_DISTANCE_M, 0, 1)
-  const extraPadding = HISTORY_DYNAMIC_MAX_EXTRA_PADDING * progress
-  return {
-    duration: MAP_DEFAULTS.animationDuration + HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS * progress,
-    progress,
-    padding: [
-      HISTORY_PREVIEW_TOP_PADDING + extraPadding * 0.5,
-      HISTORY_PREVIEW_SIDE_PADDING + extraPadding,
-      HISTORY_PREVIEW_BOTTOM_PADDING + extraPadding,
-      HISTORY_PREVIEW_SIDE_PADDING + extraPadding,
-    ] as [number, number, number, number],
-  }
-}
-
 interface GpsFix {
   latitude: number
   longitude: number
@@ -151,6 +140,7 @@ export function useCameraControls({
   const currentCameraRef = useRef<CameraSnapshot | null>(null)
   const historyPreviewTargetRef = useRef<HistoryPreviewTarget | null>(null)
   const lastCenteredAtRef = useRef<number | null>(null)
+  const routeFitActiveRef = useRef(false)
   const [followGps, setFollowGps] = useState(true)
 
   const gpsCamera = useMemo(() => {
@@ -180,10 +170,10 @@ export function useCameraControls({
       heading: 0,
       pitch: getPitchForZoom(HISTORY_PREVIEW_ZOOM, perspectiveEnabled),
       padding: {
+        paddingTop: HISTORY_PREVIEW_TOP_PADDING,
+        paddingRight: HISTORY_PREVIEW_SIDE_PADDING,
         paddingBottom: HISTORY_PREVIEW_BOTTOM_PADDING,
-        paddingTop: 0,
-        paddingLeft: 0,
-        paddingRight: 0,
+        paddingLeft: HISTORY_PREVIEW_SIDE_PADDING,
       },
       animationDuration: MAP_DEFAULTS.animationDuration,
       animationMode: 'easeTo' as const,
@@ -214,7 +204,12 @@ export function useCameraControls({
   const fitRide = useCallback(() => {
     if (rideRoute.length < 2) return
     const bounds = getBounds(rideRoute)
-    cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [90, 40, 120, 40], 700)
+    cameraRef.current?.fitBounds(
+      bounds.ne,
+      bounds.sw,
+      HISTORY_FIT_PADDING,
+      MAP_DEFAULTS.animationDuration,
+    )
   }, [rideRoute])
 
   const previewHistorySession = useCallback(
@@ -228,15 +223,16 @@ export function useCameraControls({
             preview,
           )
         : 0
-      const plan = getHistoryPreviewPlan(jumpDistanceM)
+      const progress = clamp(jumpDistanceM / HISTORY_DYNAMIC_FULL_DISTANCE_M, 0, 1)
+      const duration =
+        MAP_DEFAULTS.animationDuration + HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS * progress
       const bounds = getHistoryPreviewBounds(preview)
       if (bounds) {
-        cameraRef.current?.fitBounds(bounds.ne, bounds.sw, plan.padding, plan.duration)
+        cameraRef.current?.fitBounds(bounds.ne, bounds.sw, HISTORY_FIT_PADDING, duration)
       } else {
         cameraRef.current?.setCamera({
           ...getHistoryPreviewCamera(preview),
-          zoomLevel: HISTORY_PREVIEW_ZOOM - HISTORY_DYNAMIC_MAX_ZOOM_OUT * plan.progress,
-          animationDuration: plan.duration,
+          animationDuration: duration,
         })
       }
       onHeadingChange(0)
@@ -369,7 +365,9 @@ export function useCameraControls({
 
   useEffect(() => {
     if (!historyActive || !historyPreview) return
+    routeFitActiveRef.current = false
     const frame = requestAnimationFrame(() => {
+      if (routeFitActiveRef.current) return
       previewHistorySession(historyPreview)
     })
     return () => cancelAnimationFrame(frame)
@@ -377,12 +375,12 @@ export function useCameraControls({
 
   useEffect(() => {
     if (!historyActive || rideRoute.length < 2) return
+    routeFitActiveRef.current = true
     historyPreviewTargetRef.current = null
     const frame = requestAnimationFrame(fitRide)
-    const timer = setTimeout(fitRide, 120)
     return () => {
       cancelAnimationFrame(frame)
-      clearTimeout(timer)
+      routeFitActiveRef.current = false
     }
   }, [fitRide, historyActive, rideRoute.length])
 

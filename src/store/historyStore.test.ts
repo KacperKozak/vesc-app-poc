@@ -175,7 +175,14 @@ test('selects ride immediately while loading its full route', async () => {
   expect(useHistoryStore.getState().selectedSession?.id).toBe(
     useHistoryStore.getState().sessions[1].id,
   )
-  expect(useHistoryStore.getState().sessionSamples).toEqual([])
+  expect(useHistoryStore.getState().sessionSamples).toEqual([
+    expect.objectContaining({
+      capturedAtMs: next.startAtMs,
+      deviceId: next.deviceId,
+      latitude: next.firstLatitude,
+      longitude: next.firstLongitude,
+    }),
+  ])
   expect(getHistoryRange).toHaveBeenLastCalledWith({
     fromMs: next.startAtMs,
     toMs: next.endAtMs,

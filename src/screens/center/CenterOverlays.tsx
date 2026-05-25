@@ -327,7 +327,6 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             endAtMs={history.selectedSession.endAtMs}
             deviceName={history.selectedSession.deviceName}
             samples={history.sessionSamples}
-            loading={history.loadingSession}
             canPrevious={history.canPreviousRide}
             canNext={!!history.nextRide}
             onPrevious={() => {
