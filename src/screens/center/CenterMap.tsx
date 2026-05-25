@@ -51,7 +51,7 @@ Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
   recenterLive: (options?: { resetPadding?: boolean }) => void
-  previewHistoryLoading: () => void
+  previewHistorySession: (coordinate: { latitude: number; longitude: number }) => void
   beginPreviewPan: () => void
   previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
   beginPreviewZoom: () => void
@@ -80,6 +80,8 @@ const MERCATOR_TILE_SIZE = 512
 const MAX_MERCATOR_LATITUDE = 85.05112878
 const MIN_ZOOM = 0
 const RADAR_MAX_ZOOM = 10
+const HISTORY_PREVIEW_ZOOM = 12.5
+const HISTORY_PREVIEW_BOTTOM_PADDING = 220
 
 const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
   app_stop: 'Recording stopped',
@@ -215,6 +217,11 @@ interface CenterMapProps {
   onClearTarget: () => void
   weatherActive: boolean
   seekPosition: HistoryGpsSample | null
+  historyPreview: {
+    key: string
+    latitude: number
+    longitude: number
+  } | null
 }
 
 export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function CenterMap(
@@ -234,6 +241,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     weatherActive,
     onClearTarget,
     seekPosition,
+    historyPreview,
   },
   ref,
 ) {
@@ -241,6 +249,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const previewPanBaseRef = useRef<CameraSnapshot | null>(null)
   const previewZoomBaseRef = useRef<CameraSnapshot | null>(null)
   const currentCameraRef = useRef<CameraSnapshot | null>(null)
+  const historyPreviewTargetRef = useRef<{ latitude: number; longitude: number } | null>(null)
   const styleReloadCameraRef = useRef<CameraSnapshot | null>(null)
   const previousMapStyleKeyRef = useRef(mapStyleKey)
   const lastCenteredAtRef = useRef<number | null>(null)
@@ -358,6 +367,24 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     [rideRoute],
   )
 
+  const getHistoryPreviewCamera = useCallback(
+    (coordinate: { latitude: number; longitude: number }) => ({
+      centerCoordinate: [coordinate.longitude, coordinate.latitude] as [number, number],
+      zoomLevel: HISTORY_PREVIEW_ZOOM,
+      heading: 0,
+      pitch: getPitchForZoom(HISTORY_PREVIEW_ZOOM, perspectiveEnabled),
+      padding: {
+        paddingBottom: HISTORY_PREVIEW_BOTTOM_PADDING,
+        paddingTop: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+      },
+      animationDuration: MAP_DEFAULTS.animationDuration,
+      animationMode: 'easeTo' as const,
+    }),
+    [perspectiveEnabled],
+  )
+
   const recenterLive = useCallback(
     (options?: { resetPadding?: boolean }) => {
       setFollowGps(true)
@@ -384,19 +411,15 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     cameraRef.current?.fitBounds(bounds.ne, bounds.sw, [90, 40, 120, 40], 700)
   }, [rideRoute])
 
-  const previewHistoryLoading = useCallback(() => {
-    setFollowGps(false)
-    cameraRef.current?.setCamera({
-      ...gpsCamera,
-      zoomLevel: Math.max(MAP_DEFAULTS.fallbackZoom, gpsCamera.zoomLevel - 1.2),
-      pitch: getPitchForZoom(
-        Math.max(MAP_DEFAULTS.fallbackZoom, gpsCamera.zoomLevel - 1.2),
-        perspectiveEnabled,
-      ),
-      animationDuration: MAP_DEFAULTS.animationDuration,
-      animationMode: 'easeTo',
-    })
-  }, [gpsCamera, perspectiveEnabled])
+  const previewHistorySession = useCallback(
+    (coordinate: { latitude: number; longitude: number }) => {
+      historyPreviewTargetRef.current = coordinate
+      setFollowGps(false)
+      cameraRef.current?.setCamera(getHistoryPreviewCamera(coordinate))
+      onHeadingChange(0)
+    },
+    [getHistoryPreviewCamera, onHeadingChange],
+  )
 
   const restorePreviewPan = useCallback(() => {
     setFollowGps(true)
@@ -418,7 +441,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     ref,
     () => ({
       recenterLive,
-      previewHistoryLoading,
+      previewHistorySession,
       beginPreviewPan() {
         previewPanBaseRef.current = currentCameraRef.current ?? {
           ...gpsCamera,
@@ -480,6 +503,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         })
       },
       setPadding(bottom: number) {
+        const historyTarget = historyPreviewTargetRef.current
+        if (historyTarget) {
+          cameraRef.current?.setCamera({
+            ...getHistoryPreviewCamera(historyTarget),
+            padding: { paddingBottom: bottom, paddingTop: 0, paddingLeft: 0, paddingRight: 0 },
+          })
+          return
+        }
         cameraRef.current?.setCamera({
           padding: { paddingBottom: bottom, paddingTop: 0, paddingLeft: 0, paddingRight: 0 },
           animationDuration: bottom === 0 ? 0 : 300,
@@ -503,7 +534,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       onHeadingChange,
       onPerspectiveChange,
       perspectiveEnabled,
-      previewHistoryLoading,
+      previewHistorySession,
       recenterLive,
       restorePreviewPan,
     ],
@@ -511,6 +542,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
 
   useEffect(() => {
     if (!cameraFix || !followGps || historyActive) return
+    historyPreviewTargetRef.current = null
     if (lastCenteredAtRef.current === cameraFix.timestamp) return
     lastCenteredAtRef.current = cameraFix.timestamp
     cameraRef.current?.setCamera({
@@ -522,14 +554,20 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   }, [cameraFix, followGps, gpsCamera, historyActive, perspectiveEnabled])
 
   useEffect(() => {
-    if (!historyActive) return
+    if (!historyActive || !historyPreview) return
+    previewHistorySession(historyPreview)
+  }, [historyActive, historyPreview, previewHistorySession])
+
+  useEffect(() => {
+    if (!historyActive || rideRoute.length < 2) return
+    historyPreviewTargetRef.current = null
     const frame = requestAnimationFrame(fitRide)
     const timer = setTimeout(fitRide, 120)
     return () => {
       cancelAnimationFrame(frame)
       clearTimeout(timer)
     }
-  }, [fitRide, historyActive])
+  }, [fitRide, historyActive, rideRoute.length])
 
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
@@ -561,7 +599,10 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         onDidFinishLoadingMap={() => {
           const styleReloadCamera = styleReloadCameraRef.current
           styleReloadCameraRef.current = null
-          const camera = styleReloadCamera ?? gpsCamera
+          const camera =
+            historyActive && historyPreview
+              ? getHistoryPreviewCamera(historyPreview)
+              : (styleReloadCamera ?? gpsCamera)
           cameraRef.current?.setCamera({
             ...camera,
             pitch: getPitchForZoom(camera.zoomLevel, perspectiveEnabled),

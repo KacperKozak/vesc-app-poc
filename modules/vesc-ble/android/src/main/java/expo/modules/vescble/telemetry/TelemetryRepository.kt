@@ -24,6 +24,7 @@ private const val FLUSH_DELAY_MS = 5_000L
 private const val MAX_PENDING_FRAMES = 1_000
 private const val DEFAULT_HISTORY_LIMIT = 100
 private const val DEFAULT_SAMPLE_LIMIT = 2_000
+private const val MAX_SAMPLE_LIMIT = 100_000
 
 data class TelemetryLocationCapture(
   val latitude: Double,
@@ -511,7 +512,7 @@ private data class SampleQueryOptions(
         fromMs = options.requiredLong("fromMs"),
         toMs = options.requiredLong("toMs"),
         deviceId = options["deviceId"] as? String,
-        limit = (options.int("limit") ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, 10_000),
+        limit = (options.int("limit") ?: DEFAULT_SAMPLE_LIMIT).coerceIn(1, MAX_SAMPLE_LIMIT),
       )
   }
 }

@@ -132,6 +132,19 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
   const nextRide = getNextRideSession(sessions, selectedSession)
   const canPreviousRide = !!previousRide || historyHasMore
 
+  const historyPreview = useMemo(() => {
+    if (!selectedSession) return null
+    const firstGpsSample = sessionGpsSamples[0]
+    const latitude = selectedSession.firstLatitude ?? firstGpsSample?.latitude
+    const longitude = selectedSession.firstLongitude ?? firstGpsSample?.longitude
+    if (latitude == null || longitude == null) return null
+    return {
+      key: selectedSession.id,
+      latitude,
+      longitude,
+    }
+  }, [selectedSession, sessionGpsSamples])
+
   const exitMapFocus = useCallback(() => {
     enterTelemetry()
     mapRef.current?.recenterLive()
@@ -170,7 +183,6 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
 
   const enterHistoryMode = useCallback(async () => {
     enterHistory()
-    mapRef.current?.previewHistoryLoading()
     await loadInitial()
     await loadOlderHistoryPages()
     if (useCenterScreenStore.getState().mode !== 'history') return
@@ -178,7 +190,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     if (latest) {
       await selectSession(latest)
     }
-  }, [enterHistory, loadInitial, loadOlderHistoryPages, mapRef, selectSession])
+  }, [enterHistory, loadInitial, loadOlderHistoryPages, selectSession])
 
   const selectPreviousRide = useCallback(async () => {
     let previous = getPreviousRideSession(
@@ -277,6 +289,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     sessionSamples,
     sessionGpsSamples,
     sessionMarkers,
+    historyPreview,
     previousRide,
     nextRide,
     canPreviousRide,

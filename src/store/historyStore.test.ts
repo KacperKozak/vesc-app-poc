@@ -196,15 +196,22 @@ test('removes selected session from history and selects next ride', async () => 
   expect(useHistoryStore.getState().sessionMarkers).toEqual([])
 })
 
-test('keeps current ride data visible while selecting another ride', async () => {
+test('selects ride immediately while loading its full route', async () => {
   const current = block({
     id: 'current',
     startAtMs: 2_000_000,
     endAtMs: 2_060_000,
   })
-  const next = block({ id: 'next', startAtMs: 1_000_000, endAtMs: 1_060_000 })
+  const next = block({
+    id: 'next',
+    startAtMs: 1_000_000,
+    endAtMs: 1_060_000,
+    sampleCount: 12_500,
+    gpsPointCount: 4,
+    firstLatitude: 51,
+    firstLongitude: 17,
+  })
   const currentSample = sample({ id: 10, capturedAtMs: current.startAtMs })
-  const nextSample = sample({ id: 20, capturedAtMs: next.startAtMs })
   getTelemetryHistory.mockResolvedValueOnce([current, next])
   getHistoryRange.mockResolvedValueOnce({
     boardSamples: [currentSample],
@@ -231,18 +238,132 @@ test('keeps current ride data visible while selecting another ride', async () =>
 
   expect(useHistoryStore.getState().loadingSession).toBe(true)
   expect(useHistoryStore.getState().selectedSession?.id).toBe(
-    useHistoryStore.getState().sessions[0].id,
+    useHistoryStore.getState().sessions[1].id,
   )
-  expect(useHistoryStore.getState().sessionSamples).toEqual([currentSample])
+  expect(useHistoryStore.getState().sessionSamples).toEqual([])
+  expect(getHistoryRange).toHaveBeenLastCalledWith({
+    fromMs: next.startAtMs,
+    toMs: next.endAtMs,
+    deviceId: next.deviceId,
+    limit: next.sampleCount + 1,
+  })
 
-  resolveNextRange({ boardSamples: [nextSample], gpsSamples: [], markers: [] })
+  resolveNextRange({
+    boardSamples: Array.from({ length: next.sampleCount }, (_, index) =>
+      sample({ id: index + 20, capturedAtMs: next.startAtMs + index }),
+    ),
+    gpsSamples: Array.from({ length: next.gpsPointCount }, (_, index) => ({
+      id: index + 1,
+      capturedAtMs: next.startAtMs + index,
+      deviceId: next.deviceId,
+      deviceName: next.deviceName,
+      latitude: 51 + index * 0.001,
+      longitude: 17 + index * 0.001,
+      speedMps: null,
+      bearingDeg: null,
+      accuracyM: null,
+      altitudeM: null,
+      timestamp: next.startAtMs + index,
+      distanceFromPreviousM: null,
+      precise: true,
+    })),
+    markers: [],
+  })
   await selectNext
 
   expect(useHistoryStore.getState().loadingSession).toBe(false)
   expect(useHistoryStore.getState().selectedSession?.id).toBe(
     useHistoryStore.getState().sessions[1].id,
   )
-  expect(useHistoryStore.getState().sessionSamples).toEqual([nextSample])
+  expect(useHistoryStore.getState().sessionSamples).toHaveLength(next.sampleCount)
+  expect(useHistoryStore.getState().sessionTruncated).toBe(false)
+})
+
+test('loads a small GPS preview when selected ride has no bucket coordinate', async () => {
+  const ride = block({
+    id: 'ride',
+    startAtMs: 1_000_000,
+    endAtMs: 1_060_000,
+    sampleCount: 500,
+    gpsPointCount: 2,
+    firstLatitude: null,
+    firstLongitude: null,
+  })
+  const previewGps: HistoryGpsSample = {
+    id: 1,
+    capturedAtMs: ride.startAtMs,
+    deviceId: ride.deviceId,
+    deviceName: ride.deviceName,
+    latitude: 51,
+    longitude: 17,
+    speedMps: null,
+    bearingDeg: null,
+    accuracyM: null,
+    altitudeM: null,
+    timestamp: ride.startAtMs,
+    distanceFromPreviousM: null,
+    precise: true,
+  }
+  let resolveFullRange: (value: HistoryRangeResult) => void = () => {}
+  getHistoryRange.mockResolvedValueOnce({
+    boardSamples: [],
+    gpsSamples: [previewGps],
+    markers: [],
+  })
+  getHistoryRange.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveFullRange = resolve
+      }),
+  )
+
+  const { useHistoryStore } = await import('./historyStore')
+
+  const select = useHistoryStore.getState().selectSession({
+    deviceId: ride.deviceId,
+    deviceName: ride.deviceName,
+    boundaryBefore: ride.boundaryBefore,
+    startAtMs: ride.startAtMs,
+    endAtMs: ride.endAtMs,
+    blockIds: [ride.id],
+    blockCount: 1,
+    sampleCount: ride.sampleCount,
+    gpsPointCount: ride.gpsPointCount,
+    preciseGpsPointCount: ride.preciseGpsPointCount,
+    distanceM: ride.distanceDeltaM,
+    maxSpeedKmh: ride.maxAbsSpeedKmh,
+    avgSpeedKmh: ride.avgSpeedKmh,
+    maxTempMosfet: ride.maxTempMosfet,
+    maxTempMotor: ride.maxTempMotor,
+    maxDuty: ride.maxDuty,
+    batteryUsedWh: ride.batteryUsedWh,
+    batteryRegenWh: ride.batteryRegenWh,
+    firstLatitude: null,
+    firstLongitude: null,
+    faultCount: ride.faultCount,
+    id: `${ride.deviceId}:${ride.startAtMs}:${ride.endAtMs}`,
+  })
+  await Promise.resolve()
+
+  expect(getHistoryRange).toHaveBeenNthCalledWith(1, {
+    fromMs: ride.startAtMs,
+    toMs: ride.endAtMs,
+    deviceId: ride.deviceId,
+    limit: 240,
+  })
+  expect(useHistoryStore.getState().sessionGpsSamples).toEqual([previewGps])
+
+  resolveFullRange({
+    boardSamples: Array.from({ length: ride.sampleCount }, (_, index) =>
+      sample({ id: index + 1, capturedAtMs: ride.startAtMs + index }),
+    ),
+    gpsSamples: [previewGps, { ...previewGps, id: 2, capturedAtMs: ride.startAtMs + 1 }],
+    markers: [],
+  })
+  await select
+
+  expect(useHistoryStore.getState().loadingSession).toBe(false)
+  expect(useHistoryStore.getState().sessionTruncated).toBe(false)
 })
 
 test('loads older history pages and merges sessions', async () => {
