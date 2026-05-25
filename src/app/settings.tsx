@@ -10,7 +10,8 @@ import {
   GaugeIcon,
   CodeIcon,
   DatabaseIcon,
-  ArrowsClockwiseIcon,
+  CheckCircleIcon,
+  ClockCounterClockwiseIcon,
   TagIcon,
   AndroidLogoIcon,
   AppleLogoIcon,
@@ -94,9 +95,9 @@ export default function SettingsScreen() {
     setRebuildResult(null)
     setRebuildProgress(null)
     try {
-      const count = await rebuildTelemetryBuckets()
+      await rebuildTelemetryBuckets()
       setRebuildState('done')
-      setRebuildResult(`Rebuilt ${count} buckets`)
+      setRebuildResult(null)
       setRebuildProgress(null)
     } catch (e: any) {
       setRebuildState('error')
@@ -105,14 +106,17 @@ export default function SettingsScreen() {
     }
   }, [])
 
-  const rebuildProgressLabel =
-    rebuildState === 'running' && rebuildProgress
-      ? `Rebuilding ${rebuildProgress.current}/${rebuildProgress.total}`
-      : rebuildResult
+  const rebuildHint =
+    rebuildState === 'error' && rebuildResult
+      ? rebuildResult
+      : 'Refresh historical data with newest algorithms'
   const rebuildProgressValue =
     rebuildProgress && rebuildProgress.total > 0
       ? Math.min(1, rebuildProgress.current / rebuildProgress.total)
       : 0
+  const rebuildProgressLabel = rebuildProgress
+    ? `${rebuildProgress.current}/${rebuildProgress.total}`
+    : null
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -169,35 +173,48 @@ export default function SettingsScreen() {
             }
           />
           <SettingsRow
-            icon={ArrowsClockwiseIcon}
-            iconColor={theme.warning.color}
-            label="Rebuild history buckets"
-            hint={rebuildProgressLabel ?? 'Reprocess all raw frames into minute buckets'}
+            icon={ClockCounterClockwiseIcon}
+            label="Rebuild history"
+            hint={rebuildHint}
             right={
               <Pressable
                 style={[
                   styles.rebuildButton,
                   rebuildState === 'running' && styles.rebuildButtonDisabled,
+                  rebuildState === 'done' && styles.rebuildButtonDone,
                 ]}
                 onPress={handleRebuildBuckets}
                 disabled={rebuildState === 'running'}
               >
+                {rebuildState === 'done' && (
+                  <CheckCircleIcon size={13} color="#bbf7d0" weight="fill" />
+                )}
                 <Text style={styles.rebuildButtonText}>
-                  {rebuildState === 'running' ? 'Rebuilding...' : 'Rebuild'}
+                  {rebuildState === 'running'
+                    ? 'Rebuilding...'
+                    : rebuildState === 'done'
+                      ? 'Done'
+                      : 'Rebuild'}
                 </Text>
               </Pressable>
             }
-          />
-          {rebuildState === 'running' && (
-            <View style={styles.rebuildProgressTrack}>
-              <View
-                style={[
-                  styles.rebuildProgressFill,
-                  { width: `${Math.round(rebuildProgressValue * 100)}%` },
-                ]}
-              />
-            </View>
-          )}
+          >
+            {rebuildState === 'running' && (
+              <View style={styles.rebuildProgress}>
+                <View style={styles.rebuildProgressTrack}>
+                  <View
+                    style={[
+                      styles.rebuildProgressFill,
+                      { width: `${Math.round(rebuildProgressValue * 100)}%` },
+                    ]}
+                  />
+                </View>
+                {rebuildProgressLabel ? (
+                  <Text style={styles.rebuildProgressText}>{rebuildProgressLabel}</Text>
+                ) : null}
+              </View>
+            )}
+          </SettingsRow>
         </SettingsCard>
 
         <SettingsSectionTitle>Connection</SettingsSectionTitle>
@@ -285,21 +302,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   rebuildButtonDisabled: {
     opacity: 0.5,
   },
+  rebuildButtonDone: {
+    borderColor: '#166534',
+    backgroundColor: '#052e16',
+  },
   rebuildButtonText: {
     color: '#cbd5e1',
     fontSize: 12,
     fontWeight: '700',
   },
-  rebuildProgressTrack: {
-    height: 3,
+  rebuildProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginHorizontal: 14,
     marginBottom: 12,
+  },
+  rebuildProgressTrack: {
+    flex: 1,
+    height: 3,
     backgroundColor: '#0f172a',
     borderRadius: 999,
     overflow: 'hidden',
@@ -307,5 +337,12 @@ const styles = StyleSheet.create({
   rebuildProgressFill: {
     height: '100%',
     backgroundColor: theme.warning.color,
+  },
+  rebuildProgressText: {
+    minWidth: 44,
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'right',
   },
 })

@@ -11,6 +11,7 @@ export type SettingsRowProps = {
   hint?: string
   onPress?: () => void
   right?: ReactNode
+  children?: ReactNode
 }
 
 export function SettingsRow({
@@ -21,11 +22,12 @@ export function SettingsRow({
   hint,
   onPress,
   right,
+  children,
 }: SettingsRowProps) {
   const showChevron = onPress && !right
 
   const content = (
-    <>
+    <View style={styles.row}>
       <View style={styles.icon}>
         <IconComponent size={20} color={iconColor} weight={iconWeight} />
       </View>
@@ -35,21 +37,30 @@ export function SettingsRow({
       </View>
       {right}
       {showChevron ? <CaretRightIcon size={18} color="#64748b" weight="bold" /> : null}
-    </>
+    </View>
   )
 
   if (onPress) {
     return (
-      <Pressable style={styles.row} onPress={onPress}>
+      <Pressable style={styles.container} onPress={onPress}>
         {content}
+        {children}
       </Pressable>
     )
   }
 
-  return <View style={styles.row}>{content}</View>
+  return (
+    <View style={styles.container}>
+      {content}
+      {children}
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
