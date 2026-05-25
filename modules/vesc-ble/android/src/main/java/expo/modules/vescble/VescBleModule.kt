@@ -17,8 +17,10 @@ import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.vescble.telemetry.AppDataRepository
+import expo.modules.vescble.telemetry.DatabaseBackupManager
 import expo.modules.vescble.telemetry.ProfileStatsRepository
 import expo.modules.vescble.telemetry.TelemetryRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -189,6 +191,19 @@ class VescBleModule : Module() {
       val dbFile = context.applicationContext.getDatabasePath("telemetry.db")
       if (dbFile.exists()) dbFile.length() else 0L
     }
+    AsyncFunction("backupDatabase") { promise: Promise ->
+      CoroutineScope(Dispatchers.IO).launch {
+        try {
+          promise.resolve(DatabaseBackupManager.createBackup(context.applicationContext))
+        } catch (e: Exception) {
+          promise.reject("ERR_BACKUP_DATABASE", e.message, e)
+        }
+      }
+    }
+    AsyncFunction("restoreDatabase") Coroutine { uri: String ->
+      stopNativeWorkForDatabaseRestore()
+      DatabaseBackupManager.restoreBackup(context.applicationContext, uri)
+    }
     AsyncFunction("getRefloatConfigSnapshot") { promise: Promise ->
       VescForegroundService.getRefloatConfigSnapshot(
         onSuccess = { snapshot -> promise.resolve(snapshot) },
@@ -322,6 +337,16 @@ class VescBleModule : Module() {
         "error" to null,
       ),
     )
+  }
+
+  private suspend fun stopNativeWorkForDatabaseRestore() {
+    stopScanInternal()
+    val stopped = CompletableDeferred<Unit>()
+    VescForegroundService.stopBoardSession(context.applicationContext) {
+      stopped.complete(Unit)
+    }
+    stopped.await()
+    VescForegroundService.stopGpsMonitoring(context.applicationContext)
   }
 
   private fun startScan(resetRetries: Boolean = true) {

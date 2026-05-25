@@ -56,7 +56,7 @@ public class VescBleModule: Module {
   public func definition() -> ModuleDefinition {
     Name("VescBle")
 
-    Events("onDevice", "onError", "onLiveState", "onTelemetry", "onLocation")
+    Events("onDevice", "onError", "onLiveState", "onTelemetry", "onLocation", "onTelemetryRebuildProgress")
 
     OnDestroy {
       self.scanTimer?.invalidate()
@@ -189,6 +189,14 @@ public class VescBleModule: Module {
 
     AsyncFunction("getDatabaseSizeBytes") { () -> Int in
       return 0
+    }
+
+    AsyncFunction("backupDatabase") { (promise: Promise) in
+      promise.reject("UNSUPPORTED_PLATFORM", "Database backup is Android-only until iOS storage is implemented")
+    }
+
+    AsyncFunction("restoreDatabase") { (_: String, promise: Promise) in
+      promise.reject("UNSUPPORTED_PLATFORM", "Database restore is Android-only until iOS storage is implemented")
     }
 
     AsyncFunction("getRefloatConfigSnapshot") { (promise: Promise) in

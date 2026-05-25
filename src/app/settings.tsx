@@ -3,6 +3,8 @@ import { View, Text, Switch, StyleSheet, ScrollView, Platform, Pressable } from 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import Constants from 'expo-constants'
+import * as DocumentPicker from 'expo-document-picker'
+import * as Sharing from 'expo-sharing'
 import {
   ClockCountdownIcon,
   BluetoothConnectedIcon,
@@ -15,21 +17,28 @@ import {
   TagIcon,
   AndroidLogoIcon,
   AppleLogoIcon,
+  DownloadSimpleIcon,
+  UploadSimpleIcon,
 } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 import {
   addTelemetryRebuildProgressListener,
+  backupDatabase,
   getDatabaseSizeBytes,
   rebuildTelemetryBuckets,
+  restoreDatabase,
 } from 'vesc-ble'
 
 import { routes } from '@/navigation/routes'
 import { useSettingsStore } from '@/store/settingsStore'
+import { useHistoryStore } from '@/store/historyStore'
 import { theme } from '@/constants/theme'
 import { SettingsCard } from '@/components/settings/SettingsCard'
 import { SettingsRow } from '@/components/settings/SettingsRow'
 import { SettingsSectionTitle } from '@/components/settings/SettingsSectionTitle'
 import { Stepper } from '@/components/settings/Stepper'
+import { Button } from '@/components/Button'
+import { ConfirmModal } from '@/components/ConfirmModal'
 
 const appVersion = Constants.expoConfig?.version ?? '–'
 
@@ -53,15 +62,24 @@ export default function SettingsScreen() {
   const [dbSize, setDbSize] = useState<number | null>(null)
   const [rebuildState, setRebuildState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [rebuildResult, setRebuildResult] = useState<string | null>(null)
+  const [backupState, setBackupState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [backupResult, setBackupResult] = useState<string | null>(null)
+  const [restoreState, setRestoreState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [restoreResult, setRestoreResult] = useState<string | null>(null)
+  const [restoreConfirmVisible, setRestoreConfirmVisible] = useState(false)
   const [rebuildProgress, setRebuildProgress] = useState<{ current: number; total: number } | null>(
     null,
   )
 
-  useEffect(() => {
+  const refreshDatabaseSize = useCallback(() => {
     getDatabaseSizeBytes()
       .then(setDbSize)
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    refreshDatabaseSize()
+  }, [refreshDatabaseSize])
 
   useEffect(() => {
     const subscription = addTelemetryRebuildProgressListener((event) => {
@@ -106,6 +124,54 @@ export default function SettingsScreen() {
     }
   }, [])
 
+  const handleBackupDatabase = useCallback(async () => {
+    setBackupState('running')
+    setBackupResult(null)
+    try {
+      const backup = await backupDatabase()
+      await Sharing.shareAsync(backup.uri, {
+        mimeType: 'application/zip',
+        dialogTitle: 'Save or send database backup',
+        UTI: 'com.pkware.zip-archive',
+      })
+      setBackupState('done')
+      setBackupResult(`${backup.name} (${formatBytes(backup.sizeBytes)})`)
+      refreshDatabaseSize()
+    } catch (e: any) {
+      setBackupState('error')
+      setBackupResult(e?.message ?? 'Backup failed')
+    }
+  }, [refreshDatabaseSize])
+
+  const handleRestoreDatabase = useCallback(async () => {
+    setRestoreConfirmVisible(false)
+    setRestoreState('running')
+    setRestoreResult(null)
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/zip', 'application/x-zip-compressed'],
+        copyToCacheDirectory: true,
+      })
+      if (result.canceled) {
+        setRestoreState('idle')
+        return
+      }
+      const uri = result.assets[0]?.uri
+      if (!uri) throw new Error('No backup file selected')
+      await restoreDatabase(uri)
+      await Promise.all([
+        useSettingsStore.getState().load(),
+        useHistoryStore.getState().loadInitial(),
+      ])
+      setRestoreState('done')
+      setRestoreResult('Database restored')
+      refreshDatabaseSize()
+    } catch (e: any) {
+      setRestoreState('error')
+      setRestoreResult(e?.message ?? 'Restore failed')
+    }
+  }, [refreshDatabaseSize])
+
   const rebuildHint =
     rebuildState === 'error' && rebuildResult
       ? rebuildResult
@@ -117,6 +183,18 @@ export default function SettingsScreen() {
   const rebuildProgressLabel = rebuildProgress
     ? `${rebuildProgress.current}/${rebuildProgress.total}`
     : null
+  const backupHint =
+    backupState === 'error' && backupResult
+      ? backupResult
+      : backupState === 'done' && backupResult
+        ? backupResult
+        : 'Create a shareable zip for debugging'
+  const restoreHint =
+    restoreState === 'error' && restoreResult
+      ? restoreResult
+      : restoreState === 'done' && restoreResult
+        ? restoreResult
+        : 'Replace current database from backup zip'
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -169,6 +247,43 @@ export default function SettingsScreen() {
                 value={`${movingSpeedThresholdKmh} km/h`}
                 onDecrement={decrementMovingSpeedThreshold}
                 onIncrement={incrementMovingSpeedThreshold}
+              />
+            }
+          />
+        </SettingsCard>
+
+        <SettingsSectionTitle>Database</SettingsSectionTitle>
+
+        <SettingsCard>
+          <SettingsRow
+            icon={DownloadSimpleIcon}
+            iconColor={theme.gps.color}
+            label="Back up database"
+            hint={backupHint}
+            right={
+              <Button
+                label={backupState === 'running' ? 'Exporting...' : 'Export'}
+                size="sm"
+                variant="secondary"
+                loading={backupState === 'running'}
+                disabled={restoreState === 'running' || rebuildState === 'running'}
+                onPress={handleBackupDatabase}
+              />
+            }
+          />
+          <SettingsRow
+            icon={UploadSimpleIcon}
+            iconColor={theme.warning.color}
+            label="Restore database"
+            hint={restoreHint}
+            right={
+              <Button
+                label={restoreState === 'running' ? 'Restoring...' : 'Restore'}
+                size="sm"
+                variant="destructive"
+                loading={restoreState === 'running'}
+                disabled={backupState === 'running' || rebuildState === 'running'}
+                onPress={() => setRestoreConfirmVisible(true)}
               />
             }
           />
@@ -260,6 +375,15 @@ export default function SettingsScreen() {
           />
         </SettingsCard>
       </ScrollView>
+      <ConfirmModal
+        visible={restoreConfirmVisible}
+        title="Restore database"
+        message="Current database will be replaced by selected backup. App keeps a temporary rollback copy during restore and restores old database if restore fails."
+        confirmLabel="Choose backup"
+        destructive
+        onConfirm={() => void handleRestoreDatabase()}
+        onCancel={() => setRestoreConfirmVisible(false)}
+      />
     </SafeAreaView>
   )
 }

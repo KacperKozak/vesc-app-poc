@@ -7,6 +7,9 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+internal const val TELEMETRY_DATABASE_NAME = "telemetry.db"
+internal const val TELEMETRY_DATABASE_VERSION = 14
+
 @Database(
   entities = [
     TelemetryFrameEntity::class,
@@ -19,7 +22,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     TuneHistoryEntryEntity::class,
     DiagnosticEventEntity::class,
   ],
-  version = 14,
+  version = TELEMETRY_DATABASE_VERSION,
   exportSchema = false,
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -182,7 +185,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
         instance ?: Room.databaseBuilder(
           context.applicationContext,
           TelemetryDatabase::class.java,
-          "telemetry.db",
+          TELEMETRY_DATABASE_NAME,
         )
           .addMigrations(
             MIGRATION_3_4,
@@ -215,6 +218,13 @@ abstract class TelemetryDatabase : RoomDatabase() {
           })
           .build()
           .also { instance = it }
+      }
+    }
+
+    fun closeAndReset() {
+      synchronized(this) {
+        instance?.close()
+        instance = null
       }
     }
   }

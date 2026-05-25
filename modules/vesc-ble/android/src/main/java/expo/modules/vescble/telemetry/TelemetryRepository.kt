@@ -7,6 +7,7 @@ import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -189,6 +190,27 @@ class TelemetryRepository private constructor(context: Context) {
         forceNextKeyframe = true
       }
       flushNow()
+    }
+  }
+
+  suspend fun flushPending() = withContext(Dispatchers.IO) {
+    synchronized(lock) {
+      forceNextKeyframe = true
+    }
+    flushNow()
+  }
+
+  fun shutdownForDatabaseSwap() {
+    scope.cancel()
+    synchronized(lock) {
+      pending.clear()
+      pendingMarkers.clear()
+      flushScheduled = false
+      lastState = null
+      lastFrameAtMs = null
+      lastHistoryAtMs = null
+      lastKeyframeAtMs = null
+      forceNextKeyframe = true
     }
   }
 
@@ -420,6 +442,13 @@ class TelemetryRepository private constructor(context: Context) {
     fun get(context: Context): TelemetryRepository {
       return instance ?: synchronized(this) {
         instance ?: TelemetryRepository(context.applicationContext).also { instance = it }
+      }
+    }
+
+    fun resetForDatabaseSwap() {
+      synchronized(this) {
+        instance?.shutdownForDatabaseSwap()
+        instance = null
       }
     }
   }

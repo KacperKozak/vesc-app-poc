@@ -373,6 +373,12 @@ export interface TelemetryRebuildProgressEvent {
   total: number
 }
 
+export interface DatabaseBackupResult {
+  uri: string
+  name: string
+  sizeBytes: number
+}
+
 // ---------------------------------------------------------------------------
 // Typed emitter
 // ---------------------------------------------------------------------------
@@ -434,6 +440,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getDiagnosticEvents(options: DiagnosticEventOptions): Promise<LocalDiagnosticEvent[]>
   clearDiagnosticEvents(): Promise<void>
   getDatabaseSizeBytes(): Promise<number>
+  backupDatabase(): Promise<DatabaseBackupResult>
+  restoreDatabase(uri: string): Promise<void>
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
   getTuneProfiles(boardId: string): Promise<TuneProfile[]>
   getTuneProfile(profileId: string): Promise<TuneProfile | null>
@@ -632,6 +640,14 @@ export async function clearDiagnosticEvents(): Promise<void> {
 
 export async function getDatabaseSizeBytes(): Promise<number> {
   return native.getDatabaseSizeBytes()
+}
+
+export async function backupDatabase(): Promise<DatabaseBackupResult> {
+  return native.backupDatabase()
+}
+
+export async function restoreDatabase(uri: string): Promise<void> {
+  return native.restoreDatabase(uri)
 }
 
 export async function getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot> {
