@@ -41,13 +41,7 @@ type ActionPill = {
 type StatusPill = SpinnerPill | ActionPill
 
 function canToggleRecording(status: string): boolean {
-  return (
-    status === 'connected' ||
-    status === 'stale' ||
-    status === 'reconnecting' ||
-    status === 'rescanning' ||
-    status === 'waiting_for_telemetry'
-  )
+  return status === 'connected'
 }
 
 function getStatusPill(
