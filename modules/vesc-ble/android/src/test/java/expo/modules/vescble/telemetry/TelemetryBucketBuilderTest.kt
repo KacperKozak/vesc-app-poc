@@ -145,7 +145,7 @@ class TelemetryBucketBuilderTest {
   }
 
   @Test
-  fun tracksMovingSpeedSamplesAtOrAboveConfiguredThreshold() {
+  fun tracksMovingSpeedSamplesUsingExclusionFlag() {
     val bucket = buildTelemetryBuckets(
       telemetryPoints = listOf(
         BucketTelemetryPoint(
@@ -159,6 +159,7 @@ class TelemetryBucketBuilderTest {
           dutyPermille = 0,
           hasFault = false,
           odometerCm = null,
+          excludedFromAvgSpeed = true,
         ),
         BucketTelemetryPoint(
           capturedAtMs = 1_000L,
@@ -171,6 +172,7 @@ class TelemetryBucketBuilderTest {
           dutyPermille = 0,
           hasFault = false,
           odometerCm = null,
+          excludedFromAvgSpeed = false,
         ),
         BucketTelemetryPoint(
           capturedAtMs = 2_000L,
@@ -183,10 +185,10 @@ class TelemetryBucketBuilderTest {
           dutyPermille = 0,
           hasFault = false,
           odometerCm = null,
+          excludedFromAvgSpeed = false,
         ),
       ),
       locationPoints = emptyList(),
-      movingSpeedThresholdCentiKmh = 500,
     ).single()
 
     assertEquals(2, bucket.movingSpeedSampleCount)

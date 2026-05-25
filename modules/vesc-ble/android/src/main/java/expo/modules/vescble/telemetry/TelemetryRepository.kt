@@ -355,6 +355,7 @@ class TelemetryRepository private constructor(context: Context) {
     val lastMs = dao.lastFrameAt() ?: return@withContext 0
 
     dao.clearBuckets()
+    dao.clearExclusions()
 
     val chunkMs = 3_600_000L
     val chunks = ((lastMs - firstMs) / chunkMs + 1).toInt()
@@ -367,10 +368,17 @@ class TelemetryRepository private constructor(context: Context) {
 
       val states = getSampleStates(chunkFrom, chunkTo, null, Int.MAX_VALUE)
       if (states.isNotEmpty()) {
+        val telemetryPoints = states.map { it.state.toBucketPoint() }
+        val sanitization = sanitizeTelemetrySamples(telemetryPoints, movingSpeedThresholdCentiKmh)
+        val sanitizedPoints = telemetryPoints.mapIndexed { index, point ->
+          point.copy(excludedFromAvgSpeed = sanitization.samples[index].excludedFromAvgSpeed)
+        }
+        if (sanitization.exclusions.isNotEmpty()) {
+          dao.insertExclusions(sanitization.exclusions)
+        }
         val buckets = buildTelemetryBuckets(
-          telemetryPoints = states.map { it.state.toBucketPoint() },
+          telemetryPoints = sanitizedPoints,
           locationPoints = states.toBucketLocationPoints(),
-          movingSpeedThresholdCentiKmh = movingSpeedThresholdCentiKmh,
         )
         if (buckets.isNotEmpty()) {
           dao.upsertBuckets(buckets)
@@ -422,14 +430,19 @@ class TelemetryRepository private constructor(context: Context) {
     }
 
     try {
+      val telemetryPoints = frames.map { it.state.toBucketPoint() }
+      val sanitization = sanitizeTelemetrySamples(telemetryPoints, movingSpeedThresholdCentiKmh)
+      val sanitizedPoints = telemetryPoints.mapIndexed { index, point ->
+        point.copy(excludedFromAvgSpeed = sanitization.samples[index].excludedFromAvgSpeed)
+      }
       dao.insertBatch(
         frames = frames.map { it.frame },
         buckets = buildTelemetryBuckets(
-          telemetryPoints = frames.map { it.state.toBucketPoint() },
+          telemetryPoints = sanitizedPoints,
           locationPoints = frames.map { HistoryTelemetryState(it.frame.id, it.state) }.toBucketLocationPoints(),
-          movingSpeedThresholdCentiKmh = movingSpeedThresholdCentiKmh,
         ),
         markers = markers,
+        exclusions = sanitization.exclusions,
       )
     } catch (e: Exception) {
       Log.w(TAG, "Telemetry flush failed: ${e.message}")

@@ -8,13 +8,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 internal const val TELEMETRY_DATABASE_NAME = "telemetry.db"
-internal const val TELEMETRY_DATABASE_VERSION = 14
+internal const val TELEMETRY_DATABASE_VERSION = 15
 
 @Database(
   entities = [
     TelemetryFrameEntity::class,
     TelemetryMinuteBucketEntity::class,
     TelemetryMarkerEntity::class,
+    MetricExclusionEntity::class,
     BoardEntity::class,
     AlertRuleEntity::class,
     AppSettingEntity::class,
@@ -180,6 +181,29 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_14_15 = object : Migration(14, 15) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS metric_exclusions (
+            captured_at_ms INTEGER NOT NULL,
+            device_id TEXT NOT NULL,
+            metric TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            PRIMARY KEY(captured_at_ms, device_id, metric)
+          )
+          """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_metric_exclusions_captured_at_ms ON metric_exclusions(captured_at_ms)")
+        db.execSQL(
+          """
+          CREATE INDEX IF NOT EXISTS index_metric_exclusions_device_id_captured_at_ms
+          ON metric_exclusions(device_id, captured_at_ms)
+          """.trimIndent(),
+        )
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -199,6 +223,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
+            MIGRATION_14_15,
           )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {
