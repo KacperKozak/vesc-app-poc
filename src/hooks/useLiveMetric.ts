@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { TelemetryEvent } from 'vesc-ble'
 
 import { useBleStore } from '@/store/bleStore'
+import type { ExcludedRange } from '@/components/charts/chartMath'
 import { liveTelemetryRuntime } from '@/telemetry/liveTelemetryRuntime'
 
 export interface LiveMetricPoint {
@@ -72,4 +73,31 @@ function getOrProject(version: number, pick: TelemetrySelector): LiveMetricPoint
 export function useLiveMetric(pick: TelemetrySelector): LiveMetricPoint[] {
   const version = useBleStore((s) => s.metricVersion)
   return useMemo(() => getOrProject(version, pick), [version, pick])
+}
+
+function buildLiveExcludedRanges(
+  telemetry: TelemetryEvent[],
+  metricKeys: string[],
+  mergeGapMs = 2000,
+): ExcludedRange[] {
+  const ranges: ExcludedRange[] = []
+  for (const s of telemetry) {
+    if (!metricKeys.some((k) => s.metricExclusions?.[k])) continue
+    const last = ranges.at(-1)
+    if (last && s.lastPacketAt - last.endMs <= mergeGapMs) {
+      last.endMs = s.lastPacketAt
+    } else {
+      ranges.push({ startMs: s.lastPacketAt, endMs: s.lastPacketAt })
+    }
+  }
+  return ranges
+}
+
+export function useLiveExcludedRanges(...metricKeys: string[]): ExcludedRange[] {
+  const version = useBleStore((s) => s.metricVersion)
+  const keysKey = metricKeys.join('\0')
+  return useMemo(() => {
+    const telemetry = liveTelemetryRuntime.getTelemetry()
+    return buildLiveExcludedRanges(telemetry, keysKey.split('\0'))
+  }, [version, keysKey])
 }

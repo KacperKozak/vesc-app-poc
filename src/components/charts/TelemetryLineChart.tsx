@@ -5,9 +5,16 @@ import Svg, {
   Circle as SvgCircle,
   Line as SvgLine,
   Polyline as SvgPolyline,
+  Rect as SvgRect,
 } from 'react-native-svg'
 
-import { findNearestChartPointAtX, getChartPosition, type TelemetryChartPoint } from './chartMath'
+import {
+  findNearestChartPointAtX,
+  getChartPosition,
+  getXPosition,
+  type ExcludedRange,
+  type TelemetryChartPoint,
+} from './chartMath'
 
 const DEFAULT_HEIGHT = 54
 const Y_AXIS_WIDTH = 34
@@ -44,6 +51,7 @@ interface TelemetryLineChartProps {
   onGestureStart?: () => void
   formatValue?: (value: number) => string
   windowMs?: number
+  excludedRanges?: ExcludedRange[]
 }
 
 export function TelemetryLineChart({
@@ -59,6 +67,7 @@ export function TelemetryLineChart({
   onGestureStart,
   formatValue,
   windowMs,
+  excludedRanges,
 }: TelemetryLineChartProps) {
   'use no memo'
   const [chartWidth, setChartWidth] = useState(0)
@@ -194,6 +203,23 @@ export function TelemetryLineChart({
               stroke="#1e293b"
               strokeWidth={0.5}
             />
+
+            {excludedRanges?.map((range) => {
+              const x1 = getXPosition(points, range.startMs, chartWidth, windowMs)
+              const x2 = getXPosition(points, range.endMs, chartWidth, windowMs)
+              if (x1 == null || x2 == null) return null
+              const bandWidth = Math.max(x2 - x1, 2)
+              return (
+                <SvgRect
+                  key={range.startMs}
+                  x={x1}
+                  y={0}
+                  width={bandWidth}
+                  height={height}
+                  fill="rgba(148, 163, 184, 0.1)"
+                />
+              )
+            })}
 
             <SvgPolyline
               points={polylinePoints}

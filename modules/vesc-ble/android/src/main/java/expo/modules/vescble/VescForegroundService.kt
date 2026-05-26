@@ -20,6 +20,7 @@ import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.BucketTelemetryPoint
 import expo.modules.vescble.telemetry.FullTelemetryState
+import expo.modules.vescble.telemetry.METRIC_AVG_SPEED
 import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
 import expo.modules.vescble.telemetry.METRIC_MAX_SPEED
 import expo.modules.vescble.telemetry.SanitizedSample
@@ -1903,6 +1904,7 @@ class VescForegroundService : Service() {
 
     private fun SanitizedSample.toLiveMetricExclusions(): Map<String, Boolean> =
         buildMap {
+            if (excludedFromAvgSpeed) put(METRIC_AVG_SPEED, true)
             if (excludedFromMaxSpeed) put(METRIC_MAX_SPEED, true)
             if (excludedFromMaxDuty) put(METRIC_MAX_DUTY, true)
         }
