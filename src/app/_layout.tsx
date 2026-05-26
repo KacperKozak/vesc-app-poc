@@ -42,6 +42,10 @@ export default function RootLayout() {
             name={stackScreens.settingsSoundPlayground}
             options={{ title: 'Sound Playground' }}
           />
+          <Stack.Screen
+            name={stackScreens.settingsPrivacyZones}
+            options={{ title: 'Privacy Zones' }}
+          />
           <Stack.Screen name={stackScreens.tune} options={{ title: 'Tune' }} />
           <Stack.Screen name={stackScreens.tuneHistory} options={{ title: 'Tune History' }} />
           <Stack.Screen name={stackScreens.addBoardScan} options={{ title: 'Add Board' }} />

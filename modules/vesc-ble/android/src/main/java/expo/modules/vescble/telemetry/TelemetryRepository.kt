@@ -82,6 +82,8 @@ class TelemetryRepository private constructor(context: Context) {
   private var forceNextKeyframe = true
   private var droppedPendingFrames = 0L
   private var metricSanitizerConfig = MetricSanitizerConfig()
+  @Volatile
+  private var enabledPrivacyZones: List<PrivacyZoneEntity> = emptyList()
 
   fun setMovingSpeedThresholdKmh(value: Double) {
     metricSanitizerConfig = metricSanitizerConfig.copy(
@@ -103,6 +105,10 @@ class TelemetryRepository private constructor(context: Context) {
 
   fun applySettings(settings: AppSettings) {
     metricSanitizerConfig = settings.toMetricSanitizerConfig()
+  }
+
+  fun reloadPrivacyZones(zones: List<PrivacyZoneEntity>) {
+    enabledPrivacyZones = zones
   }
 
   fun recordMarker(
@@ -451,7 +457,14 @@ class TelemetryRepository private constructor(context: Context) {
     }
 
     try {
-      val telemetryPoints = frames.map { it.state.toBucketPoint() }
+      val zones = enabledPrivacyZones
+      val filtered = if (zones.isEmpty()) frames else frames.filter { pending ->
+        val loc = pending.state.location ?: return@filter true
+        !isInsideAnyPrivacyZone(loc.latitudeE7, loc.longitudeE7, zones)
+      }
+      if (filtered.isEmpty() && markers.isEmpty()) return
+
+      val telemetryPoints = filtered.map { it.state.toBucketPoint() }
       val sanitization = sanitizeTelemetrySamples(telemetryPoints, metricSanitizerConfig)
       val sanitizedPoints = telemetryPoints.mapIndexed { index, point ->
         point.copy(
@@ -461,10 +474,10 @@ class TelemetryRepository private constructor(context: Context) {
         )
       }
       dao.insertBatch(
-        frames = frames.map { it.frame },
+        frames = filtered.map { it.frame },
         buckets = buildTelemetryBuckets(
           telemetryPoints = sanitizedPoints,
-          locationPoints = frames.map { HistoryTelemetryState(it.frame.id, it.state) }.toBucketLocationPoints(),
+          locationPoints = filtered.map { HistoryTelemetryState(it.frame.id, it.state) }.toBucketLocationPoints(),
         ),
         markers = markers,
         exclusions = sanitization.exclusions,

@@ -18,6 +18,7 @@ import {
   UploadSimpleIcon,
   ArrowsOutLineHorizontalIcon,
   ProhibitIcon,
+  MapPinIcon,
 } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -139,6 +140,18 @@ export default function SettingsScreen() {
                 thumbColor={autoRecording ? '#3b82f6' : '#64748b'}
               />
             }
+          />
+        </SettingsCard>
+
+        <SettingsSectionTitle>Recording</SettingsSectionTitle>
+
+        <SettingsCard>
+          <SettingsRow
+            icon={MapPinIcon}
+            iconColor={theme.gps.color}
+            label="Privacy zones"
+            hint="Skip recording near saved places"
+            onPress={() => router.push(routes.settingsPrivacyZones)}
           />
         </SettingsCard>
 

@@ -1746,6 +1746,14 @@ class VescForegroundService : Service() {
         val resolvedSettings = settings ?: AppSettings()
         applyTelemetrySettings(resolvedSettings)
         store.applySettings(resolvedSettings)
+        val zones = try {
+            kotlinx.coroutines.runBlocking {
+                AppDataRepository.get(applicationContext).getEnabledPrivacyZoneEntities()
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        store.reloadPrivacyZones(zones)
         return store
     }
 

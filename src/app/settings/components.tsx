@@ -9,6 +9,8 @@ import {
   UserIcon,
   WifiHighIcon,
 } from 'phosphor-react-native'
+import { buildZonePills, ZonePills } from '@/components/privacy-zones/ZonePills'
+import type { PrivacyZone } from '@/store/privacyZoneStore'
 import { useCallback, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
@@ -558,6 +560,37 @@ function SettingsComponentsShowcase() {
   )
 }
 
+const SHOWCASE_ZONES: PrivacyZone[] = [
+  {
+    id: 'home',
+    preset: 'home',
+    name: 'Home',
+    enabled: true,
+    centerLatitude: 52.23,
+    centerLongitude: 21.01,
+    radiusMeters: 200,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+]
+
+function ZonePillsShowcase() {
+  const [selectedId, setSelectedId] = useState('home')
+  const pills = buildZonePills(SHOWCASE_ZONES)
+  return (
+    <ShowcaseCard name="ZonePills">
+      <ZonePills
+        pills={pills}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onAdd={() => undefined}
+        onRename={() => undefined}
+        onDelete={() => undefined}
+      />
+    </ShowcaseCard>
+  )
+}
+
 // ─── Main screen ───────────────────────────────────────────────────────
 
 export default function ComponentsScreen() {
@@ -578,6 +611,7 @@ export default function ComponentsScreen() {
         <BannerShowcase />
         <ConfirmModalShowcase />
         <InfoModalShowcase />
+        <ZonePillsShowcase />
       </ScrollView>
     </SafeAreaView>
   )

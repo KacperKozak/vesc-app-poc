@@ -22,6 +22,7 @@ export const routes = {
   controlImu: '/control/imu',
   settingsSoundPlayground: '/settings/soundPlayground' as Href,
   settingsDiagnosticEvents: '/settings/eventLog' as Href,
+  settingsPrivacyZones: '/settings/privacy-zones' as Href,
 } as const
 
 export const stackScreens = {
@@ -38,4 +39,5 @@ export const stackScreens = {
   addBoardScan: 'addBoard/scan',
   addBoardDetails: 'addBoard/details',
   settingsSoundPlayground: 'settings/soundPlayground',
+  settingsPrivacyZones: 'settings/privacy-zones',
 } as const
