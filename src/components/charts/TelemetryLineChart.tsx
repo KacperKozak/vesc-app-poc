@@ -12,6 +12,7 @@ import {
   findNearestChartPointAtX,
   getChartPosition,
   getXPosition,
+  splitChartLineSegments,
   type ExcludedRange,
   type TelemetryChartPoint,
 } from './chartMath'
@@ -101,15 +102,13 @@ export function TelemetryLineChart({
     return getChartPosition(points, currentPoint, range, chartWidth, height, windowMs)
   }, [chartWidth, currentPoint, height, points, range, windowMs])
 
-  const polylinePoints = useMemo(
+  const polylineSegments = useMemo(
     () =>
       chartWidth > 0
-        ? points
-            .map((point) => getChartPosition(points, point, range, chartWidth, height, windowMs))
-            .filter((point): point is { x: number; y: number } => point != null)
-            .map((point) => `${point.x},${point.y}`)
-            .join(' ')
-        : '',
+        ? splitChartLineSegments(points, range, chartWidth, height, windowMs)
+            .map((segment) => segment.map((point) => `${point.x},${point.y}`).join(' '))
+            .filter((segment) => segment.length > 0)
+        : [],
     [chartWidth, height, points, range, windowMs],
   )
 
@@ -230,14 +229,17 @@ export function TelemetryLineChart({
               )
             })}
 
-            <SvgPolyline
-              points={polylinePoints}
-              fill="none"
-              stroke={color}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {polylineSegments.map((segment, index) => (
+              <SvgPolyline
+                key={`segment-${index}`}
+                points={segment}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
 
             {markerPosition && isDragging && (
               <SvgLine

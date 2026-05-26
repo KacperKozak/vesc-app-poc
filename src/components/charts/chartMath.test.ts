@@ -4,6 +4,7 @@ import {
   computeAutoRange,
   findNearestChartPointAtX,
   getChartPosition,
+  splitChartLineSegments,
   type TelemetryChartPoint,
   toExcludedRanges,
 } from './chartMath'
@@ -96,4 +97,26 @@ test('toExcludedRanges does not merge nearby ranges with different reasons', () 
     { startMs: 1_000, endMs: 2_000, reason: 'low_speed' },
     { startMs: 2_200, endMs: 3_000, reason: 'free_spin' },
   ])
+})
+
+test('splitChartLineSegments keeps continuous data in one segment', () => {
+  const range = { y: { min: 0, max: 40 } }
+  const segments = splitChartLineSegments(points, range, 100, 50)
+  expect(segments).toHaveLength(1)
+  expect(segments[0]).toHaveLength(3)
+})
+
+test('splitChartLineSegments breaks line on large telemetry gap', () => {
+  const gapPoints: TelemetryChartPoint[] = [
+    { date: new Date(base + 0), value: 10 },
+    { date: new Date(base + 1_000), value: 12 },
+    { date: new Date(base + 2_000), value: 14 },
+    { date: new Date(base + 10_000), value: 20 },
+    { date: new Date(base + 11_000), value: 22 },
+  ]
+  const range = { y: { min: 0, max: 30 } }
+  const segments = splitChartLineSegments(gapPoints, range, 100, 50)
+  expect(segments).toHaveLength(2)
+  expect(segments[0]).toHaveLength(3)
+  expect(segments[1]).toHaveLength(2)
 })

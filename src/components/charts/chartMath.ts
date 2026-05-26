@@ -13,6 +13,8 @@ export interface ExcludedRange {
   reason: string
 }
 
+const DEFAULT_GAP_MULTIPLIER = 3
+
 interface AutoRangeOptions {
   includeZero?: boolean
   minSpan?: number
@@ -162,4 +164,50 @@ export function findNearestChartPointAtX(
     }
   }
   return best
+}
+
+function resolveGapThresholdMs(points: TelemetryChartPoint[], gapMultiplier: number): number {
+  const deltas: number[] = []
+  for (let i = 1; i < points.length; i += 1) {
+    const delta = points[i].date.getTime() - points[i - 1].date.getTime()
+    if (delta > 0) deltas.push(delta)
+  }
+  if (deltas.length === 0) return Number.POSITIVE_INFINITY
+  const sorted = [...deltas].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]
+  return Math.max(1, median * gapMultiplier)
+}
+
+export function splitChartLineSegments(
+  points: TelemetryChartPoint[],
+  range: { y: { min: number; max: number } },
+  width: number,
+  height: number,
+  windowMs?: number,
+  gapMultiplier = DEFAULT_GAP_MULTIPLIER,
+): Array<Array<{ x: number; y: number }>> {
+  if (points.length === 0 || width <= 0) return []
+  const gapThresholdMs = resolveGapThresholdMs(points, gapMultiplier)
+  const segments: Array<Array<{ x: number; y: number }>> = []
+  let current: Array<{ x: number; y: number }> = []
+
+  for (let i = 0; i < points.length; i += 1) {
+    const point = points[i]
+    const position = getChartPosition(points, point, range, width, height, windowMs)
+    if (!position) continue
+
+    if (i > 0) {
+      const prev = points[i - 1]
+      const deltaMs = point.date.getTime() - prev.date.getTime()
+      if (deltaMs > gapThresholdMs && current.length > 0) {
+        if (current.length >= 2) segments.push(current)
+        current = []
+      }
+    }
+
+    current.push(position)
+  }
+
+  if (current.length >= 2) segments.push(current)
+  return segments
 }
