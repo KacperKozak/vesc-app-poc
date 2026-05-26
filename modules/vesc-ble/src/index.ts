@@ -83,6 +83,20 @@ export interface AlertRule {
   createdAt: number
 }
 
+export type PrivacyZonePreset = 'home' | 'work' | 'custom'
+
+export interface PrivacyZone {
+  id: string
+  preset: PrivacyZonePreset
+  name: string
+  enabled: boolean
+  centerLatitude: number
+  centerLongitude: number
+  radiusMeters: number
+  createdAt: number
+  updatedAt: number
+}
+
 export interface TelemetryEvent {
   generation?: number
   location?: LocationEvent | null
@@ -498,6 +512,10 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   upsertAlertRule(rule: AlertRule): Promise<void>
   setAlertRuleEnabled(id: string, enabled: boolean): Promise<void>
   deleteAlertRule(id: string): Promise<void>
+  getPrivacyZones(): Promise<PrivacyZone[]>
+  upsertPrivacyZone(zone: PrivacyZone): Promise<void>
+  setPrivacyZoneEnabled(id: string, enabled: boolean): Promise<void>
+  deletePrivacyZone(id: string): Promise<void>
   getSettings(): Promise<AppSettings>
   updateSetting(key: string, value: number | boolean | string | null): Promise<void>
 }
@@ -782,6 +800,22 @@ export async function setAlertRuleEnabled(id: string, enabled: boolean): Promise
 
 export async function deleteAlertRule(id: string): Promise<void> {
   return native.deleteAlertRule(id)
+}
+
+export async function getPrivacyZones(): Promise<PrivacyZone[]> {
+  return native.getPrivacyZones()
+}
+
+export async function upsertPrivacyZone(zone: PrivacyZone): Promise<void> {
+  return native.upsertPrivacyZone(zone)
+}
+
+export async function setPrivacyZoneEnabled(id: string, enabled: boolean): Promise<void> {
+  return native.setPrivacyZoneEnabled(id, enabled)
+}
+
+export async function deletePrivacyZone(id: string): Promise<void> {
+  return native.deletePrivacyZone(id)
 }
 
 export async function getSettings(): Promise<AppSettings> {

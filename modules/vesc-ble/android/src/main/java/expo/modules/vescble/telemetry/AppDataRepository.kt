@@ -253,6 +253,26 @@ class AppDataRepository private constructor(private val context: Context) {
       dao.insertTuneProfileIfBoardHasNone(profile, history)?.toMap()
     }
 
+  suspend fun getPrivacyZones(): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
+    dao.getPrivacyZones().map { it.toMap() }
+  }
+
+  suspend fun getEnabledPrivacyZoneEntities(): List<PrivacyZoneEntity> = withContext(Dispatchers.IO) {
+    dao.getEnabledPrivacyZones()
+  }
+
+  suspend fun upsertPrivacyZone(zone: Map<String, Any?>): Unit = withContext(Dispatchers.IO) {
+    dao.upsertPrivacyZone(zone.toPrivacyZoneEntity())
+  }
+
+  suspend fun setPrivacyZoneEnabled(id: String, enabled: Boolean): Unit = withContext(Dispatchers.IO) {
+    dao.setPrivacyZoneEnabled(id, enabled, System.currentTimeMillis())
+  }
+
+  suspend fun deletePrivacyZone(id: String): Unit = withContext(Dispatchers.IO) {
+    dao.deletePrivacyZone(id)
+  }
+
   suspend fun getAutoConnectBoard(): Map<String, Any?>? = withContext(Dispatchers.IO) {
     val settings = getTypedSettings()
     settings.selectedBoardId
@@ -373,6 +393,34 @@ private fun String.toJsonMap(): Map<String, Any?> {
 
 private fun jsonValue(value: Any?): Any? =
   if (value == JSONObject.NULL) null else value
+
+fun PrivacyZoneEntity.toMap(): Map<String, Any?> = mapOf(
+  "id" to id,
+  "preset" to preset,
+  "name" to name,
+  "enabled" to enabled,
+  "centerLatitude" to centerLatitudeE7 / 10_000_000.0,
+  "centerLongitude" to centerLongitudeE7 / 10_000_000.0,
+  "radiusMeters" to radiusMeters,
+  "createdAt" to createdAt,
+  "updatedAt" to updatedAt,
+)
+
+private fun Map<String, Any?>.toPrivacyZoneEntity(): PrivacyZoneEntity {
+  val now = System.currentTimeMillis()
+  return PrivacyZoneEntity(
+    id = getString("id"),
+    preset = get("preset") as? String ?: "custom",
+    name = getString("name"),
+    enabled = getBoolean("enabled"),
+    centerLatitudeE7 = ((getDouble("centerLatitude")) * 10_000_000.0).toInt(),
+    centerLongitudeE7 = ((getDouble("centerLongitude")) * 10_000_000.0).toInt(),
+    radiusMeters = (get("radiusMeters") as? Number)?.toInt()
+      ?: throw IllegalArgumentException("Missing number field: radiusMeters"),
+    createdAt = (get("createdAt") as? Number)?.toLong() ?: now,
+    updatedAt = (get("updatedAt") as? Number)?.toLong() ?: now,
+  )
+}
 
 private fun Map<String, Any?>.toBoardEntity(): BoardEntity = BoardEntity(
   id = getString("id"),

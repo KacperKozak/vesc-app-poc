@@ -52,6 +52,21 @@ interface TelemetryDao {
   @Update
   suspend fun updateExclusionRange(exclusion: MetricExclusionRangeEntity)
 
+  @Query("SELECT * FROM privacy_zones ORDER BY created_at ASC")
+  suspend fun getPrivacyZones(): List<PrivacyZoneEntity>
+
+  @Query("SELECT * FROM privacy_zones WHERE enabled = 1")
+  suspend fun getEnabledPrivacyZones(): List<PrivacyZoneEntity>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertPrivacyZone(zone: PrivacyZoneEntity)
+
+  @Query("UPDATE privacy_zones SET enabled = :enabled, updated_at = :updatedAt WHERE id = :id")
+  suspend fun setPrivacyZoneEnabled(id: String, enabled: Boolean, updatedAt: Long)
+
+  @Query("DELETE FROM privacy_zones WHERE id = :id")
+  suspend fun deletePrivacyZone(id: String)
+
   @Insert
   suspend fun insertFrames(frames: List<TelemetryFrameEntity>): List<Long>
 

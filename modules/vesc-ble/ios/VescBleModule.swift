@@ -29,6 +29,7 @@ public class VescBleModule: Module {
   private var scanDeviceIndex = 0
   private var boards = VescBleModule.loadArray(key: "vesc_ble_boards")
   private var alertRules = VescBleModule.loadArray(key: "vesc_ble_alert_rules")
+  private var privacyZones = VescBleModule.loadArray(key: "vesc_ble_privacy_zones")
 
   private let mockDevices: [[String: Any]] = [
     [
@@ -281,6 +282,34 @@ public class VescBleModule: Module {
       promise.resolve(nil)
     }
 
+    AsyncFunction("getPrivacyZones") { (promise: Promise) in
+      promise.resolve(self.privacyZones.sorted(by: Self.sortByCreatedAt))
+    }
+
+    AsyncFunction("upsertPrivacyZone") { (zone: [String: Any], promise: Promise) in
+      self.upsert(&self.privacyZones, item: zone)
+      self.saveAppData()
+      promise.resolve(nil)
+    }
+
+    AsyncFunction("setPrivacyZoneEnabled") { (id: String, enabled: Bool, promise: Promise) in
+      self.privacyZones = self.privacyZones.map { zone in
+        guard (zone["id"] as? String) == id else { return zone }
+        var next = zone
+        next["enabled"] = enabled
+        next["updatedAt"] = Date().timeIntervalSince1970 * 1000.0
+        return next
+      }
+      self.saveAppData()
+      promise.resolve(nil)
+    }
+
+    AsyncFunction("deletePrivacyZone") { (id: String, promise: Promise) in
+      self.privacyZones.removeAll { ($0["id"] as? String) == id }
+      self.saveAppData()
+      promise.resolve(nil)
+    }
+
     AsyncFunction("getSettings") { (promise: Promise) in
       promise.resolve(Self.loadSettings())
     }
@@ -498,6 +527,7 @@ public class VescBleModule: Module {
   private func saveAppData() {
     Self.saveArray(boards, key: "vesc_ble_boards")
     Self.saveArray(alertRules, key: "vesc_ble_alert_rules")
+    Self.saveArray(privacyZones, key: "vesc_ble_privacy_zones")
   }
 
   private func upsert(_ array: inout [[String: Any?]], item: [String: Any]) {

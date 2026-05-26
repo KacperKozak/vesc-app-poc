@@ -311,6 +311,24 @@ class VescBleModule : Module() {
       AppDataRepository.get(context.applicationContext).deleteAlertRule(id)
       VescForegroundService.reloadAlertRules(context.applicationContext)
     }
+    AsyncFunction("getPrivacyZones") {
+      runBlocking { AppDataRepository.get(context.applicationContext).getPrivacyZones() }
+    }
+    AsyncFunction("upsertPrivacyZone") Coroutine { zone: Map<String, Any?> ->
+      val appCtx = context.applicationContext
+      AppDataRepository.get(appCtx).upsertPrivacyZone(zone)
+      reloadPrivacyZonesIntoRecorder(appCtx)
+    }
+    AsyncFunction("setPrivacyZoneEnabled") Coroutine { id: String, enabled: Boolean ->
+      val appCtx = context.applicationContext
+      AppDataRepository.get(appCtx).setPrivacyZoneEnabled(id, enabled)
+      reloadPrivacyZonesIntoRecorder(appCtx)
+    }
+    AsyncFunction("deletePrivacyZone") Coroutine { id: String ->
+      val appCtx = context.applicationContext
+      AppDataRepository.get(appCtx).deletePrivacyZone(id)
+      reloadPrivacyZonesIntoRecorder(appCtx)
+    }
     AsyncFunction("getSettings") {
       runBlocking { AppDataRepository.get(context.applicationContext).getSettings() }
     }
@@ -494,6 +512,11 @@ class VescBleModule : Module() {
     VescForegroundService.stopBoardSession(context.applicationContext) {
       promise.resolve(null)
     }
+  }
+
+  private suspend fun reloadPrivacyZonesIntoRecorder(appContext: Context) {
+    val zones = AppDataRepository.get(appContext).getEnabledPrivacyZoneEntities()
+    TelemetryRepository.get(appContext).reloadPrivacyZones(zones)
   }
 
   private fun setTelemetryRecordingEnabled(enabled: Boolean) {

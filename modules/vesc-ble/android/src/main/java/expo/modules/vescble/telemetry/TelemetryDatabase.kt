@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 internal const val TELEMETRY_DATABASE_NAME = "telemetry.db"
-internal const val TELEMETRY_DATABASE_VERSION = 17
+internal const val TELEMETRY_DATABASE_VERSION = 18
 
 @Database(
   entities = [
@@ -22,6 +22,7 @@ internal const val TELEMETRY_DATABASE_VERSION = 17
     TuneProfileEntity::class,
     TuneHistoryEntryEntity::class,
     DiagnosticEventEntity::class,
+    PrivacyZoneEntity::class,
   ],
   version = TELEMETRY_DATABASE_VERSION,
   exportSchema = false,
@@ -242,6 +243,26 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS privacy_zones (
+            id TEXT NOT NULL PRIMARY KEY,
+            preset TEXT NOT NULL,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL,
+            center_latitude_e7 INTEGER NOT NULL,
+            center_longitude_e7 INTEGER NOT NULL,
+            radius_meters INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+          """.trimIndent(),
+        )
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -264,6 +285,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
             MIGRATION_14_15,
             MIGRATION_15_16,
             MIGRATION_16_17,
+            MIGRATION_17_18,
           )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {

@@ -287,6 +287,27 @@ data class MetricExclusionRangeEntity(
   val sampleCount: Int,
 )
 
+@Entity(
+  tableName = "privacy_zones",
+)
+data class PrivacyZoneEntity(
+  @PrimaryKey
+  val id: String,
+  val preset: String,
+  val name: String,
+  val enabled: Boolean,
+  @ColumnInfo(name = "center_latitude_e7")
+  val centerLatitudeE7: Int,
+  @ColumnInfo(name = "center_longitude_e7")
+  val centerLongitudeE7: Int,
+  @ColumnInfo(name = "radius_meters")
+  val radiusMeters: Int,
+  @ColumnInfo(name = "created_at")
+  val createdAt: Long,
+  @ColumnInfo(name = "updated_at")
+  val updatedAt: Long,
+)
+
 @Entity(tableName = "app_settings")
 data class AppSettingEntity(
   @PrimaryKey
