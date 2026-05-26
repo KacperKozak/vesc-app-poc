@@ -3,17 +3,18 @@ package expo.modules.vescble.telemetry.sanitizers
 import expo.modules.vescble.telemetry.BucketTelemetryPoint
 import expo.modules.vescble.telemetry.EXCLUSION_REASON_FREE_SPIN
 import expo.modules.vescble.telemetry.FREE_SPIN_GPS_PRECISE_ACCURACY_CM
-import expo.modules.vescble.telemetry.FREE_SPIN_LOW_GPS_BOARD_CAP_CENTI_KMH
 import expo.modules.vescble.telemetry.FREE_SPIN_LOW_GPS_CUTOFF_CENTI_KMH
-import expo.modules.vescble.telemetry.FREE_SPIN_MAX_DELTA_CENTI_KMH
 import expo.modules.vescble.telemetry.FREE_SPIN_NEAREST_GPS_MAX_AGE_MS
-import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
-import expo.modules.vescble.telemetry.METRIC_MAX_SPEED
-import expo.modules.vescble.telemetry.MetricExclusionEntity
 import expo.modules.vescble.telemetry.UNKNOWN_TELEMETRY_DEVICE_ID
 import kotlin.math.abs
 
-internal class FreeSpinMetricSanitizer : MetricSampleSanitizer {
+internal class FreeSpinMetricSanitizer(
+  maxSpeedDeltaCentiKmh: Int,
+  stationaryBoardCapCentiKmh: Int,
+) : MetricSampleSanitizer {
+  private val maxDelta = maxSpeedDeltaCentiKmh.coerceAtLeast(0)
+  private val stationaryCap = stationaryBoardCapCentiKmh.coerceAtLeast(0)
+
   override fun sanitize(
     index: Int,
     point: BucketTelemetryPoint,
@@ -23,37 +24,20 @@ internal class FreeSpinMetricSanitizer : MetricSampleSanitizer {
     val nearestGps = findNearestPreciseGps(index, point, context) ?: return MetricSanitizerOutput()
     val gpsSpeedKmh = gpsSpeedCentiMpsToKmh(nearestGps.gpsSpeedCentiMps!!)
     val freeSpin = if (gpsSpeedKmh < FREE_SPIN_LOW_GPS_CUTOFF_CENTI_KMH) {
-      absSpeed > FREE_SPIN_LOW_GPS_BOARD_CAP_CENTI_KMH
+      absSpeed > stationaryCap
     } else {
-      absSpeed - gpsSpeedKmh > FREE_SPIN_MAX_DELTA_CENTI_KMH
+      absSpeed - gpsSpeedKmh > maxDelta
     }
     if (!freeSpin) return MetricSanitizerOutput()
-
-    val deviceId = point.deviceId ?: UNKNOWN_TELEMETRY_DEVICE_ID
-    val contextJson = buildFreeSpinContextJson(point, nearestGps)
-    val referenceValue = "${gpsSpeedKmh / 100.0}"
 
     return MetricSanitizerOutput(
       excludedFromMaxSpeed = true,
       excludedFromMaxDuty = true,
       exclusions = listOf(
-        MetricExclusionEntity(
+        MetricExclusionSample(
           capturedAtMs = point.capturedAtMs,
-          deviceId = deviceId,
-          metric = METRIC_MAX_SPEED,
+          deviceId = point.deviceId ?: UNKNOWN_TELEMETRY_DEVICE_ID,
           reason = EXCLUSION_REASON_FREE_SPIN,
-          rawValue = "${absSpeed / 100.0}",
-          referenceValue = referenceValue,
-          contextJson = contextJson,
-        ),
-        MetricExclusionEntity(
-          capturedAtMs = point.capturedAtMs,
-          deviceId = deviceId,
-          metric = METRIC_MAX_DUTY,
-          reason = EXCLUSION_REASON_FREE_SPIN,
-          rawValue = "${abs(point.dutyPermille) / 1000.0}",
-          referenceValue = referenceValue,
-          contextJson = contextJson,
         ),
       ),
     )
@@ -107,13 +91,3 @@ internal fun findNearestPreciseGps(
 }
 
 internal fun gpsSpeedCentiMpsToKmh(centiMps: Int): Int = (centiMps * 36) / 10
-
-private fun buildFreeSpinContextJson(
-  point: BucketTelemetryPoint,
-  nearestGps: BucketTelemetryPoint,
-): String =
-  "{" +
-    "\"gpsTimestampMs\":${nearestGps.gpsTimestampMs}," +
-    "\"sampleTimestampMs\":${point.capturedAtMs}," +
-    "\"gpsAccuracyCm\":${nearestGps.gpsAccuracyCm}" +
-    "}"

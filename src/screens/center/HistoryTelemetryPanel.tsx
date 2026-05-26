@@ -4,7 +4,12 @@ import { CaretDownIcon, CaretLeftIcon, CaretRightIcon } from 'phosphor-react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { TelemetryLineChart } from '@/components/charts/TelemetryLineChart'
-import { type TelemetryChartPoint, computeAutoRange } from '@/components/charts/chartMath'
+import {
+  type ExcludedRange,
+  type TelemetryChartPoint,
+  computeAutoRange,
+  toExcludedRanges,
+} from '@/components/charts/chartMath'
 import {
   OPTIONAL_CHART_METRICS,
   toggleOptionalChartMetric,
@@ -14,7 +19,7 @@ import { IconButton } from '@/components/IconButton'
 import { telemetry } from '@/constants/telemetry'
 import { downsampleTimeSeries, findNearestSampleIndexByTime } from '@/history/playback'
 import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
-import type { TelemetrySample } from '@/store/historyStore'
+import { useHistoryStore, type TelemetrySample } from '@/store/historyStore'
 
 interface HistoryTelemetryPanelProps {
   startAtMs: number
@@ -199,6 +204,16 @@ export function HistoryTelemetryPanel({
 
   const bottomInset = Math.max(insets.bottom, 16) + 8
 
+  const sessionExclusions = useHistoryStore((s) => s.sessionExclusions)
+  const speedExcludedRanges = useMemo(
+    () => toExcludedRanges(sessionExclusions, ['avg_speed', 'max_speed']),
+    [sessionExclusions],
+  )
+  const dutyExcludedRanges = useMemo(
+    () => toExcludedRanges(sessionExclusions, 'max_duty'),
+    [sessionExclusions],
+  )
+
   const hasChartData = headSample != null && sortedSamples.length >= 2
 
   const handlePointSelected = (point: TelemetryChartPoint) => {
@@ -227,6 +242,7 @@ export function HistoryTelemetryPanel({
           headValue: dutyPercent(headSample.dutyCycle, false),
           color: telemetry.duty.color,
           formatValue: (v: number) => `${v.toFixed(1)}%`,
+          excludedRanges: dutyExcludedRanges,
         },
         battery: {
           points: batteryVoltagePoints,
@@ -289,6 +305,7 @@ export function HistoryTelemetryPanel({
           headValue: number
           color: string
           formatValue: (v: number) => string
+          excludedRanges?: ExcludedRange[]
         }
       >)
     : null
@@ -326,6 +343,7 @@ export function HistoryTelemetryPanel({
             containerStyle={styles.chart}
             formatValue={(v) => telemetry.speed.formatWithUnit(v)}
             onPointSelected={(point) => handlePointSelected(point)}
+            excludedRanges={speedExcludedRanges}
           />
 
           {OPTIONAL_CHART_METRICS.filter((m) => activeCharts.has(m.key)).map((metric) => {
@@ -343,6 +361,11 @@ export function HistoryTelemetryPanel({
                 containerStyle={styles.chart}
                 formatValue={cfg.formatValue}
                 onPointSelected={(point) => handlePointSelected(point)}
+                excludedRanges={
+                  'excludedRanges' in cfg
+                    ? (cfg.excludedRanges as ExcludedRange[] | undefined)
+                    : undefined
+                }
               />
             )
           })}

@@ -7,6 +7,7 @@ import {
   deleteTelemetryRange,
   type HistoryGpsSample,
   type HistoryMarker,
+  type MetricExclusion,
   type TelemetryMinuteBucket,
   type TelemetrySample,
   type TelemetrySummary,
@@ -25,6 +26,7 @@ interface HistoryState {
   sessionSamples: TelemetrySample[]
   sessionGpsSamples: HistoryGpsSample[]
   sessionMarkers: HistoryMarker[]
+  sessionExclusions: MetricExclusion[]
   liveSamples: TelemetrySample[]
   liveGpsSamples: HistoryGpsSample[]
   markers: HistoryMarker[]
@@ -123,6 +125,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
   sessionSamples: [],
   sessionGpsSamples: [],
   sessionMarkers: [],
+  sessionExclusions: [],
   liveSamples: [],
   liveGpsSamples: [],
   markers: [],
@@ -153,6 +156,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         sessionSamples: [],
         sessionGpsSamples: [],
         sessionMarkers: [],
+        sessionExclusions: [],
         markers: [],
         sessionTruncated: false,
         hasMore: blocks.length === PAGE_SIZE,
@@ -269,6 +273,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         sessionSamples: [],
         sessionGpsSamples: [],
         sessionMarkers: [],
+        sessionExclusions: [],
         loadingSession: false,
         sessionTruncated: false,
       })
@@ -304,6 +309,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         sessionSamples: range.boardSamples,
         sessionGpsSamples: range.gpsSamples,
         sessionMarkers: range.markers,
+        sessionExclusions: range.exclusions,
         sessionTruncated:
           range.boardSamples.length < session.sampleCount ||
           range.gpsSamples.length < session.gpsPointCount,
@@ -361,6 +367,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         sessionSamples: [],
         sessionGpsSamples: [],
         sessionMarkers: [],
+        sessionExclusions: [],
         markers: [],
         sessionTruncated: false,
       })
@@ -389,6 +396,7 @@ export const useHistoryStore = create<HistoryState & HistoryActions>((set, get) 
         sessionSamples: [],
         sessionGpsSamples: [],
         sessionMarkers: [],
+        sessionExclusions: [],
         liveSamples: [],
         liveGpsSamples: [],
         markers: [],

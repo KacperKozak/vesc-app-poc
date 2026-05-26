@@ -7,6 +7,11 @@ export interface TelemetryChartRange {
   y: { min: number; max: number }
 }
 
+export interface ExcludedRange {
+  startMs: number
+  endMs: number
+}
+
 interface AutoRangeOptions {
   includeZero?: boolean
   minSpan?: number
@@ -91,6 +96,42 @@ export function getChartPosition(
     x: Math.max(0, Math.min(width, x)),
     y: Math.max(0, Math.min(height, y)),
   }
+}
+
+export function getXPosition(
+  points: TelemetryChartPoint[],
+  timeMs: number,
+  width: number,
+  windowMs?: number,
+): number | null {
+  if (points.length < 2) return null
+  const xMax = points[points.length - 1].date.getTime()
+  const xMin = windowMs ? xMax - windowMs : points[0].date.getTime()
+  const xSpan = xMax - xMin
+  if (xSpan <= 0) return null
+  const x = width * ((timeMs - xMin) / xSpan)
+  return Math.max(0, Math.min(width, x))
+}
+
+export function toExcludedRanges(
+  exclusions: Array<{ startMs: number; endMs: number; metrics: Record<string, boolean> }>,
+  metric: string | string[],
+  mergeGapMs = 2000,
+): ExcludedRange[] {
+  const metrics = Array.isArray(metric) ? metric : [metric]
+  const sorted = exclusions
+    .filter((e) => metrics.some((m) => e.metrics[m]))
+    .sort((a, b) => a.startMs - b.startMs)
+  const ranges: ExcludedRange[] = []
+  for (const e of sorted) {
+    const last = ranges.at(-1)
+    if (last && e.startMs - last.endMs <= mergeGapMs) {
+      last.endMs = Math.max(last.endMs, e.endMs)
+    } else {
+      ranges.push({ startMs: e.startMs, endMs: e.endMs })
+    }
+  }
+  return ranges
 }
 
 export function findNearestChartPointAtX(

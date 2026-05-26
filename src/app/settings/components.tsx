@@ -522,9 +522,11 @@ function SettingsComponentsShowcase() {
           hint="Speeds below this are treated as stopped"
           right={
             <Stepper
-              value={`${threshold} km/h`}
-              onDecrement={() => setThreshold((value) => Math.max(0, value - 1))}
-              onIncrement={() => setThreshold((value) => Math.min(20, value + 1))}
+              value={threshold}
+              unit="km/h"
+              min={0}
+              max={20}
+              onChange={(nextValue) => setThreshold(Math.min(20, Math.max(0, nextValue)))}
             />
           }
         />

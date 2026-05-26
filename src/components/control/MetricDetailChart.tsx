@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react'
 
 import { TelemetryLineChart } from '@/components/charts/TelemetryLineChart'
-import type { TelemetryChartPoint, TelemetryChartRange } from '@/components/charts/chartMath'
+import type {
+  ExcludedRange,
+  TelemetryChartPoint,
+  TelemetryChartRange,
+} from '@/components/charts/chartMath'
 import { StatsRow } from '@/components/control/StatsRow'
 import { computeMetricStats } from '@/components/control/metricDetailData'
 import type { TelemetryMetricConfig } from '@/constants/telemetry'
@@ -16,6 +20,7 @@ interface MetricDetailChartProps {
   showStats?: boolean
   formatValue?: (value: number) => string
   label?: string
+  excludedRanges?: ExcludedRange[]
 }
 
 export function MetricDetailChart({
@@ -27,6 +32,7 @@ export function MetricDetailChart({
   showStats = true,
   formatValue = metric.formatWithUnit,
   label = metric.label.toUpperCase(),
+  excludedRanges,
 }: MetricDetailChartProps) {
   const stats = useMemo(() => computeMetricStats(points), [points])
   const [selected, setSelected] = useState<TelemetryChartPoint | null>(null)
@@ -47,6 +53,7 @@ export function MetricDetailChart({
         onGestureStart={() => setSelected(null)}
         formatValue={formatValue}
         windowMs={windowMs}
+        excludedRanges={excludedRanges}
       />
       {showStats ? (
         <StatsRow

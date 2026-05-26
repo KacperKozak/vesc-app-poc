@@ -81,10 +81,28 @@ class TelemetryRepository private constructor(context: Context) {
   private var lastKeyframeAtMs: Long? = null
   private var forceNextKeyframe = true
   private var droppedPendingFrames = 0L
-  private var movingSpeedThresholdCentiKmh = DEFAULT_MOVING_SPEED_THRESHOLD_CENTI_KMH
+  private var metricSanitizerConfig = MetricSanitizerConfig()
 
   fun setMovingSpeedThresholdKmh(value: Double) {
-    movingSpeedThresholdCentiKmh = (value * 100.0).roundToInt().coerceAtLeast(0)
+    metricSanitizerConfig = metricSanitizerConfig.copy(
+      movingSpeedThresholdCentiKmh = (value * 100.0).roundToInt().coerceAtLeast(0),
+    )
+  }
+
+  fun setFreeSpinMaxSpeedDeltaKmh(value: Double) {
+    metricSanitizerConfig = metricSanitizerConfig.copy(
+      freeSpinMaxSpeedDeltaCentiKmh = (value * 100.0).roundToInt().coerceAtLeast(0),
+    )
+  }
+
+  fun setFreeSpinStationaryBoardCapKmh(value: Double) {
+    metricSanitizerConfig = metricSanitizerConfig.copy(
+      freeSpinStationaryBoardCapCentiKmh = (value * 100.0).roundToInt().coerceAtLeast(0),
+    )
+  }
+
+  fun applySettings(settings: AppSettings) {
+    metricSanitizerConfig = settings.toMetricSanitizerConfig()
   }
 
   fun recordMarker(
@@ -370,7 +388,7 @@ class TelemetryRepository private constructor(context: Context) {
       val states = getSampleStates(chunkFrom, chunkTo, null, Int.MAX_VALUE)
       if (states.isNotEmpty()) {
         val telemetryPoints = states.map { it.state.toBucketPoint() }
-        val sanitization = sanitizeTelemetrySamples(telemetryPoints, movingSpeedThresholdCentiKmh)
+        val sanitization = sanitizeTelemetrySamples(telemetryPoints, metricSanitizerConfig)
         val sanitizedPoints = telemetryPoints.mapIndexed { index, point ->
           point.copy(
             excludedFromAvgSpeed = sanitization.samples[index].excludedFromAvgSpeed,
@@ -378,9 +396,7 @@ class TelemetryRepository private constructor(context: Context) {
             excludedFromMaxDuty = sanitization.samples[index].excludedFromMaxDuty,
           )
         }
-        if (sanitization.exclusions.isNotEmpty()) {
-          dao.insertExclusions(sanitization.exclusions)
-        }
+        if (sanitization.exclusions.isNotEmpty()) dao.upsertExclusionRanges(sanitization.exclusions)
         val buckets = buildTelemetryBuckets(
           telemetryPoints = sanitizedPoints,
           locationPoints = states.toBucketLocationPoints(),
@@ -436,7 +452,7 @@ class TelemetryRepository private constructor(context: Context) {
 
     try {
       val telemetryPoints = frames.map { it.state.toBucketPoint() }
-      val sanitization = sanitizeTelemetrySamples(telemetryPoints, movingSpeedThresholdCentiKmh)
+      val sanitization = sanitizeTelemetrySamples(telemetryPoints, metricSanitizerConfig)
       val sanitizedPoints = telemetryPoints.mapIndexed { index, point ->
         point.copy(
           excludedFromAvgSpeed = sanitization.samples[index].excludedFromAvgSpeed,
@@ -843,15 +859,26 @@ private fun TelemetryMarkerEntity.toMap(): Map<String, Any?> = mapOf(
   "gapMs" to gapMs,
 )
 
-private fun MetricExclusionEntity.toMap(): Map<String, Any?> = mapOf(
-  "capturedAtMs" to capturedAtMs,
+private fun MetricExclusionRangeEntity.toMap(): Map<String, Any?> = mapOf(
+  "id" to id,
   "deviceId" to deviceId.ifBlank { null },
-  "metric" to metric,
   "reason" to reason,
-  "rawValue" to rawValue,
-  "referenceValue" to referenceValue,
-  "contextJson" to contextJson,
+  "startMs" to startMs,
+  "endMs" to endMs,
+  "sampleCount" to sampleCount,
+  "metrics" to metricsForExclusionReason(reason),
 )
+
+private fun metricsForExclusionReason(reason: String): Map<String, Boolean> =
+  buildMap {
+    when (reason) {
+      EXCLUSION_REASON_LOW_SPEED -> put(METRIC_AVG_SPEED, true)
+      EXCLUSION_REASON_FREE_SPIN -> {
+        put(METRIC_MAX_SPEED, true)
+        put(METRIC_MAX_DUTY, true)
+      }
+    }
+  }
 
 private fun DiagnosticEventEntity.toMap(): Map<String, Any?> = mapOf(
   "id" to id,
