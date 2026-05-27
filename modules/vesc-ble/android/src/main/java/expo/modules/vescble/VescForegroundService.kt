@@ -1374,6 +1374,14 @@ class VescForegroundService : Service() {
 
     private fun markBoardReady() {
         cancelBoardReadyTimeout()
+        cancelCanPingTimeout()
+        if (!isPollingCapable) {
+            Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
+            directConnection = true
+        }
+        if (pollRunnable == null && isPollingCapable) {
+            startPolling()
+        }
         if (boardStatus == BoardPhase.Connected) return
         autoReconnectAttempt = 0
         connectionLostMarkerAt = null
