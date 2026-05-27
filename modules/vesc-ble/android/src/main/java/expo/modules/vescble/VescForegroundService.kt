@@ -51,7 +51,8 @@ private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
 private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
 private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
 private const val TELEMETRY_STALE_MS = 4_000L
-private const val BOARD_READY_TIMEOUT_MS = 8_000L
+private const val BOARD_READY_TIMEOUT_BASE_MS = 4_000L
+private const val BOARD_READY_TIMEOUT_MAX_MS = 15_000L
 private const val CAN_PING_TIMEOUT_MS = 2_000L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
@@ -1342,9 +1343,15 @@ class VescForegroundService : Service() {
         canPingTimeoutRunnable = null
     }
 
+    private fun boardReadyTimeoutMs(): Long {
+        val ms = BOARD_READY_TIMEOUT_BASE_MS + (autoReconnectAttempt * 2_000L)
+        return ms.coerceAtMost(BOARD_READY_TIMEOUT_MAX_MS)
+    }
+
     private fun armBoardReadyTimeout(session: SessionConfig) {
         if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
+        val timeoutMs = boardReadyTimeoutMs()
         boardReadyTimeout = Runnable {
             boardReadyTimeout = null
             if (
@@ -1358,13 +1365,13 @@ class VescForegroundService : Service() {
                     "connect",
                     mapOf(
                         "message" to "Board telemetry unavailable before ready timeout",
-                        "timeout_ms" to BOARD_READY_TIMEOUT_MS,
+                        "timeout_ms" to timeoutMs,
                     ),
                 )
                 scheduleAutoReconnect(session, null, "board telemetry unavailable")
             }
         }
-        mainHandler.postDelayed(boardReadyTimeout!!, BOARD_READY_TIMEOUT_MS)
+        mainHandler.postDelayed(boardReadyTimeout!!, timeoutMs)
     }
 
     private fun cancelBoardReadyTimeout() {
