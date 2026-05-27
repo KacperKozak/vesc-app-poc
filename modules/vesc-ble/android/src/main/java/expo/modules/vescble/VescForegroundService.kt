@@ -51,9 +51,6 @@ private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
 private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
 private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
 private const val TELEMETRY_STALE_MS = 4_000L
-private const val BOARD_READY_TIMEOUT_BASE_MS = 4_000L
-private const val BOARD_READY_TIMEOUT_MAX_MS = 15_000L
-private const val CAN_PING_TIMEOUT_MS = 2_000L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
 private const val RECONNECT_SCAN_TIMEOUT_MS = 6_000L
@@ -363,7 +360,7 @@ class VescForegroundService : Service() {
     private var generation = 0L
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private var metricSanitizerConfig = MetricSanitizerConfig()
-    private val isPollingCapable get() = canId != null || directConnection
+    private val isPollingCapable get() = isPollingCapable(canId, directConnection)
     private val configChunkLength = 384
     private val configSchemaTimeoutMs = 10_000L
     private val configReadTimeoutMs = 8_000L
@@ -1328,14 +1325,14 @@ class VescForegroundService : Service() {
         cancelCanPingTimeout()
         canPingTimeoutRunnable = Runnable {
             canPingTimeoutRunnable = null
-            if (canId == null && !directConnection && boardStatus == BoardPhase.WaitingForTelemetry) {
+            if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
                 Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
                 directConnection = true
                 emitState()
                 startPolling()
             }
         }
-        mainHandler.postDelayed(canPingTimeoutRunnable!!, CAN_PING_TIMEOUT_MS)
+        mainHandler.postDelayed(canPingTimeoutRunnable!!, CAN_PING_TIMEOUT)
     }
 
     private fun cancelCanPingTimeout() {
@@ -1343,10 +1340,7 @@ class VescForegroundService : Service() {
         canPingTimeoutRunnable = null
     }
 
-    private fun boardReadyTimeoutMs(): Long {
-        val ms = BOARD_READY_TIMEOUT_BASE_MS + (autoReconnectAttempt * 2_000L)
-        return ms.coerceAtMost(BOARD_READY_TIMEOUT_MAX_MS)
-    }
+    private fun boardReadyTimeoutMs(): Long = boardReadyTimeoutMs(autoReconnectAttempt)
 
     private fun armBoardReadyTimeout(session: SessionConfig) {
         if (!session.autoReconnect) return
@@ -1382,11 +1376,11 @@ class VescForegroundService : Service() {
     private fun markBoardReady() {
         cancelBoardReadyTimeout()
         cancelCanPingTimeout()
-        if (!isPollingCapable) {
+        if (shouldSetDirectOnReady(canId, directConnection)) {
             Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
             directConnection = true
         }
-        if (pollRunnable == null && isPollingCapable) {
+        if (shouldStartPollingOnReady(canId, directConnection, pollRunnable)) {
             startPolling()
         }
         if (boardStatus == BoardPhase.Connected) return
