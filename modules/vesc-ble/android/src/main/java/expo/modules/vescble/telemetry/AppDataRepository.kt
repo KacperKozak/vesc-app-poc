@@ -307,8 +307,7 @@ fun BoardEntity.toMap(): Map<String, Any?> = mapOf(
   "bleId" to bleId,
   "isStarred" to isStarred,
   "createdAt" to createdAt,
-  "minVoltage" to minVoltage,
-  "maxVoltage" to maxVoltage,
+  "batteryConfig" to batteryConfigJson?.toJsonMap(),
 )
 
 fun AppSettings.toMap(): Map<String, Any?> = mapOf(
@@ -391,8 +390,22 @@ private fun String.toJsonMap(): Map<String, Any?> {
   return result
 }
 
-private fun jsonValue(value: Any?): Any? =
-  if (value == JSONObject.NULL) null else value
+private fun jsonValue(value: Any?): Any? {
+  return when (value) {
+    JSONObject.NULL -> null
+    is JSONObject -> {
+      val result = mutableMapOf<String, Any?>()
+      val keys = value.keys()
+      while (keys.hasNext()) {
+        val key = keys.next()
+        result[key] = jsonValue(value.get(key))
+      }
+      result
+    }
+    is JSONArray -> List(value.length()) { index -> jsonValue(value.get(index)) }
+    else -> value
+  }
+}
 
 fun PrivacyZoneEntity.toMap(): Map<String, Any?> = mapOf(
   "id" to id,
@@ -429,9 +442,36 @@ private fun Map<String, Any?>.toBoardEntity(): BoardEntity = BoardEntity(
   bleId = get("bleId") as? String,
   isStarred = getBoolean("isStarred"),
   createdAt = getLong("createdAt"),
-  minVoltage = getDoubleOrNull("minVoltage"),
-  maxVoltage = getDoubleOrNull("maxVoltage"),
+  batteryConfigJson = encodeBatteryConfig(get("batteryConfig")),
 )
+
+internal fun encodeBatteryConfig(value: Any?): String? {
+  val config = value as? Map<*, *> ?: return null
+  val mode = config["mode"] as? String ?: return null
+  val json = JSONObject()
+  when (mode) {
+    "preset" -> {
+      val cellPresetId = config["cellPresetId"] as? String ?: return null
+      val seriesCount = (config["seriesCount"] as? Number)?.toInt() ?: return null
+      val parallelCount = (config["parallelCount"] as? Number)?.toInt() ?: return null
+      if (cellPresetId.isBlank() || seriesCount < 1 || parallelCount < 1) return null
+      json.put("mode", "preset")
+      json.put("cellPresetId", cellPresetId)
+      json.put("seriesCount", seriesCount)
+      json.put("parallelCount", parallelCount)
+    }
+    "manual" -> {
+      val minVoltage = (config["minVoltage"] as? Number)?.toDouble() ?: return null
+      val maxVoltage = (config["maxVoltage"] as? Number)?.toDouble() ?: return null
+      if (!minVoltage.isFinite() || !maxVoltage.isFinite() || maxVoltage <= minVoltage) return null
+      json.put("mode", "manual")
+      json.put("minVoltage", minVoltage)
+      json.put("maxVoltage", maxVoltage)
+    }
+    else -> return null
+  }
+  return json.toString()
+}
 
 private fun Map<String, Any?>.toAlertRuleEntity(): AlertRuleEntity = AlertRuleEntity(
   id = getString("id"),

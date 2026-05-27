@@ -22,28 +22,25 @@ interface BatteryIndicatorProps {
 export function BatteryIndicator({ compact, transparent, containerStyle }: BatteryIndicatorProps) {
   const batteryVoltageHistory = useLiveMetric(liveSelectors.batteryVoltage)
   const windowMs = useLiveWindowMs()
-  const { minVoltage, maxVoltage } = useBoardStore(
+  const batteryConfig = useBoardStore(
     useShallow((s) => {
       const board = s.boards.find((b) => b.id === s.activeBoardId)
-      return { minVoltage: board?.minVoltage ?? null, maxVoltage: board?.maxVoltage ?? null }
+      return board?.batteryConfig ?? null
     }),
   )
 
   const { smoothVoltage, batterySeries } = useMemo(() => {
     const smooth = emaSeries(batteryVoltageHistory, BATTERY_SMOOTH_HALF_LIFE_MS)
     const series: SparklinePoint[] = smooth.flatMap((p) => {
-      const pct = estimateBatteryPercent(p.value, minVoltage, maxVoltage)
+      const pct = estimateBatteryPercent(p.value, batteryConfig)
       return pct != null ? [{ ts: p.ts, value: pct }] : []
     })
     return { smoothVoltage: smooth.at(-1)?.value ?? null, batterySeries: series }
-  }, [batteryVoltageHistory, minVoltage, maxVoltage])
+  }, [batteryConfig, batteryVoltageHistory])
 
   const voltage = smoothVoltage
-  const batteryConfigured = minVoltage != null && maxVoltage != null
-  const percent =
-    batteryConfigured && voltage != null
-      ? estimateBatteryPercent(voltage, minVoltage, maxVoltage)
-      : null
+  const percent = voltage != null ? estimateBatteryPercent(voltage, batteryConfig) : null
+  const batteryConfigured = percent != null
 
   return (
     <BatteryBar
@@ -51,7 +48,7 @@ export function BatteryIndicator({ compact, transparent, containerStyle }: Batte
       voltage={voltage}
       series={batteryConfigured ? batterySeries : undefined}
       windowMs={windowMs}
-      hint={!batteryConfigured ? 'Set min/max V in board settings' : undefined}
+      hint={!batteryConfigured ? 'Set battery config in board settings' : undefined}
       compact={compact}
       transparent={transparent}
       containerStyle={containerStyle}

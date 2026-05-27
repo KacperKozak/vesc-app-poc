@@ -59,8 +59,22 @@ export interface Board {
   bleId: string | null
   isStarred: boolean
   createdAt: number
-  minVoltage: number | null
-  maxVoltage: number | null
+  batteryConfig: BatteryConfig | null
+}
+
+export type BatteryConfig = BatteryPresetConfig | BatteryManualConfig
+
+export interface BatteryPresetConfig {
+  mode: 'preset'
+  cellPresetId: string
+  seriesCount: number
+  parallelCount: number
+}
+
+export interface BatteryManualConfig {
+  mode: 'manual'
+  minVoltage: number
+  maxVoltage: number
 }
 
 export type AlertSoundType = string

@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 internal const val TELEMETRY_DATABASE_NAME = "telemetry.db"
-internal const val TELEMETRY_DATABASE_VERSION = 18
+internal const val TELEMETRY_DATABASE_VERSION = 19
 
 @Database(
   entities = [
@@ -263,6 +263,37 @@ abstract class TelemetryDatabase : RoomDatabase() {
       }
     }
 
+    internal val MIGRATION_18_19 = object : Migration(18, 19) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP INDEX IF EXISTS index_boards_created_at")
+        db.execSQL("DROP INDEX IF EXISTS index_boards_is_starred")
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS boards_new (
+            id TEXT NOT NULL PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            ble_id TEXT,
+            is_starred INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            battery_config_json TEXT
+          )
+          """.trimIndent(),
+        )
+        db.execSQL(
+          """
+          INSERT INTO boards_new (id, name, description, ble_id, is_starred, created_at, battery_config_json)
+          SELECT id, name, description, ble_id, is_starred, created_at, NULL
+          FROM boards
+          """.trimIndent(),
+        )
+        db.execSQL("DROP TABLE boards")
+        db.execSQL("ALTER TABLE boards_new RENAME TO boards")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_boards_created_at ON boards(created_at)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_boards_is_starred ON boards(is_starred)")
+      }
+    }
+
     fun get(context: Context): TelemetryDatabase {
       return instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(
@@ -286,6 +317,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
             MIGRATION_15_16,
             MIGRATION_16_17,
             MIGRATION_17_18,
+            MIGRATION_18_19,
           )
           .fallbackToDestructiveMigration(true)
           .addCallback(object : Callback() {

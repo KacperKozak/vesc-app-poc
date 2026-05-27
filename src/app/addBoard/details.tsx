@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -13,10 +13,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams, useNavigation } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
+import type { BatteryConfig } from 'vesc-ble'
 
 import { useBoardStore } from '@/store/boardStore'
 import { routes } from '@/navigation/routes'
 import { theme } from '@/constants/theme'
+import { Select, type SelectOption } from '@/components/Select'
+import {
+  BATTERY_CELL_PRESETS,
+  DEFAULT_BATTERY_CONFIG,
+  deriveBatteryConfig,
+  getBatteryPreset,
+} from '@/helpers/battery'
+
+type BatteryMode = BatteryConfig['mode']
 
 export default function BoardDetailsScreen() {
   const { bleId, bleName, boardId } = useLocalSearchParams<{
@@ -40,47 +50,126 @@ export default function BoardDetailsScreen() {
   const [description, setDescription] = useState(editingBoard?.description ?? '')
   const [pairedBleId, setPairedBleId] = useState(editingBoard?.bleId ?? bleId ?? '')
   const [pairedBleName, setPairedBleName] = useState(bleName ?? '')
-  const [minVoltage, setMinVoltage] = useState(
-    editingBoard?.minVoltage != null ? String(editingBoard.minVoltage) : '',
+  const initialBatteryConfig = editingBoard?.batteryConfig ?? DEFAULT_BATTERY_CONFIG
+  const initialMode = initialBatteryConfig.mode
+  const initialPreset =
+    initialBatteryConfig.mode === 'preset' ? initialBatteryConfig : DEFAULT_BATTERY_CONFIG
+  const initialManual =
+    initialBatteryConfig.mode === 'manual'
+      ? initialBatteryConfig
+      : { mode: 'manual' as const, minVoltage: 60, maxVoltage: 84 }
+  const [batteryMode, setBatteryMode] = useState<BatteryMode>(initialMode)
+  const [cellPresetId, setCellPresetId] = useState(initialPreset.cellPresetId)
+  const [seriesCount, setSeriesCount] = useState(initialPreset.seriesCount)
+  const [parallelCount, setParallelCount] = useState(initialPreset.parallelCount)
+  const [manualMinVoltage, setManualMinVoltage] = useState(String(initialManual.minVoltage))
+  const [manualMaxVoltage, setManualMaxVoltage] = useState(String(initialManual.maxVoltage))
+  const [batteryTouched, setBatteryTouched] = useState(false)
+
+  const selectedPreset =
+    getBatteryPreset(cellPresetId) ?? getBatteryPreset(DEFAULT_BATTERY_CONFIG.cellPresetId)
+  const formFactors = useMemo(
+    () => unique(BATTERY_CELL_PRESETS.map((preset) => preset.formFactor)),
+    [],
   )
-  const [maxVoltage, setMaxVoltage] = useState(
-    editingBoard?.maxVoltage != null ? String(editingBoard.maxVoltage) : '',
+  const formFactorOptions = useMemo<SelectOption[]>(
+    () => formFactors.map((formFactor) => ({ label: formFactor, value: formFactor })),
+    [formFactors],
   )
+  const selectedFormFactor = selectedPreset?.formFactor ?? formFactors[0]
+  const brands = useMemo(
+    () =>
+      unique(
+        BATTERY_CELL_PRESETS.filter((preset) => preset.formFactor === selectedFormFactor).map(
+          (preset) => preset.brand,
+        ),
+      ),
+    [selectedFormFactor],
+  )
+  const brandOptions = useMemo<SelectOption[]>(
+    () => brands.map((brand) => ({ label: brand, value: brand })),
+    [brands],
+  )
+  const selectedBrand = selectedPreset?.brand ?? brands[0]
+  const models = useMemo(
+    () =>
+      BATTERY_CELL_PRESETS.filter(
+        (preset) => preset.formFactor === selectedFormFactor && preset.brand === selectedBrand,
+      ),
+    [selectedBrand, selectedFormFactor],
+  )
+  const modelOptions = useMemo<SelectOption[]>(
+    () =>
+      models.map((preset) => ({
+        label: `${preset.model}${preset.verified ? '' : ' (unverified)'}`,
+        value: preset.id,
+      })),
+    [models],
+  )
+
+  const previewConfig: BatteryConfig =
+    batteryMode === 'preset'
+      ? { mode: 'preset', cellPresetId, seriesCount, parallelCount }
+      : {
+          mode: 'manual',
+          minVoltage: parseVoltage(manualMinVoltage) ?? 0,
+          maxVoltage: parseVoltage(manualMaxVoltage) ?? 0,
+        }
+  const derivedBattery = deriveBatteryConfig(previewConfig)
+  const keepMissingBatteryConfig = editingBoard?.batteryConfig == null && !batteryTouched
+  const canSave =
+    Boolean(name.trim()) && (keepMissingBatteryConfig || derivedBattery.warning == null)
 
   useEffect(() => {
     navigation.setOptions({ title: editingBoard ? 'Edit Board' : 'Board Details' })
   }, [editingBoard, navigation])
 
-  const parseVoltage = (raw: string): number | null => {
-    const trimmed = raw.trim()
-    if (!trimmed) return null
-    const parsed = Number.parseFloat(trimmed)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-
   const handleSave = () => {
-    if (!name.trim()) return
-    const minV = parseVoltage(minVoltage)
-    const maxV = parseVoltage(maxVoltage)
+    if (!canSave) return
+    const batteryConfig = keepMissingBatteryConfig
+      ? null
+      : buildBatteryConfig(
+          batteryMode,
+          cellPresetId,
+          seriesCount,
+          parallelCount,
+          manualMinVoltage,
+          manualMaxVoltage,
+        )
     if (editingBoard) {
       void updateBoard({
         ...editingBoard,
         name: name.trim(),
         description: description.trim() || null,
         bleId: pairedBleId.trim() || null,
-        minVoltage: minV,
-        maxVoltage: maxV,
+        batteryConfig,
       })
     } else {
       addBoard({
         name: name.trim(),
         description: description.trim() || undefined,
         bleId: pairedBleId.trim() || undefined,
-        minVoltage: minV,
-        maxVoltage: maxV,
+        batteryConfig,
       })
     }
     router.dismissAll()
+  }
+
+  const choosePreset = (next: { formFactor?: string; brand?: string; cellPresetId?: string }) => {
+    setBatteryTouched(true)
+    if (next.cellPresetId) {
+      setCellPresetId(next.cellPresetId)
+      return
+    }
+    const formFactor = next.formFactor ?? selectedFormFactor
+    const brand =
+      next.brand ??
+      BATTERY_CELL_PRESETS.find((preset) => preset.formFactor === formFactor)?.brand ??
+      selectedBrand
+    const preset = BATTERY_CELL_PRESETS.find(
+      (candidate) => candidate.formFactor === formFactor && candidate.brand === brand,
+    )
+    if (preset) setCellPresetId(preset.id)
   }
 
   const handleOpenPairing = () => {
@@ -164,35 +253,138 @@ export default function BoardDetailsScreen() {
             textAlignVertical="top"
           />
 
-          <Text style={styles.label}>Battery — pack voltage range (V)</Text>
-          <Text style={styles.helper}>
-            Set empty + full pack voltage to show battery % (e.g. 10S Li-ion: 30 / 42).
-          </Text>
-          <View style={styles.voltageRow}>
-            <TextInput
-              style={[styles.input, styles.voltageInput]}
-              value={minVoltage}
-              onChangeText={setMinVoltage}
-              placeholder="Min (0%)"
-              placeholderTextColor="#4b5563"
-              keyboardType="decimal-pad"
-              returnKeyType="next"
-            />
-            <TextInput
-              style={[styles.input, styles.voltageInput]}
-              value={maxVoltage}
-              onChangeText={setMaxVoltage}
-              placeholder="Max (100%)"
-              placeholderTextColor="#4b5563"
-              keyboardType="decimal-pad"
-              returnKeyType="done"
-            />
+          <Text style={styles.label}>Battery config</Text>
+          <View style={styles.segmented}>
+            <Pressable
+              style={[styles.segment, batteryMode === 'preset' && styles.segmentActive]}
+              onPress={() => {
+                setBatteryTouched(true)
+                setBatteryMode('preset')
+              }}
+            >
+              <Text
+                style={[styles.segmentText, batteryMode === 'preset' && styles.segmentTextActive]}
+              >
+                Preset
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.segment, batteryMode === 'manual' && styles.segmentActive]}
+              onPress={() => {
+                setBatteryTouched(true)
+                setBatteryMode('manual')
+              }}
+            >
+              <Text
+                style={[styles.segmentText, batteryMode === 'manual' && styles.segmentTextActive]}
+              >
+                Manual
+              </Text>
+            </Pressable>
           </View>
 
+          {batteryMode === 'preset' ? (
+            <>
+              <Text style={styles.helper}>
+                Cell preset derives pack voltage range, nominal Wh, and SoC.
+              </Text>
+              <View style={styles.presetSelectRow}>
+                <View style={styles.presetSelectField}>
+                  <Text style={styles.subLabel}>Form factor</Text>
+                  <Select
+                    options={formFactorOptions}
+                    value={selectedFormFactor}
+                    onChange={(formFactor) => choosePreset({ formFactor })}
+                  />
+                </View>
+                <View style={styles.presetSelectField}>
+                  <Text style={styles.subLabel}>Brand</Text>
+                  <Select
+                    options={brandOptions}
+                    value={selectedBrand}
+                    onChange={(brand) => choosePreset({ brand })}
+                  />
+                </View>
+                <View style={styles.presetSelectField}>
+                  <Text style={styles.subLabel}>Model</Text>
+                  <Select
+                    options={modelOptions}
+                    value={cellPresetId}
+                    onChange={(nextPresetId) => choosePreset({ cellPresetId: nextPresetId })}
+                  />
+                </View>
+              </View>
+              <View style={styles.stepperRow}>
+                <Stepper
+                  label="Series"
+                  value={seriesCount}
+                  min={1}
+                  max={40}
+                  onChange={(value) => {
+                    setBatteryTouched(true)
+                    setSeriesCount(value)
+                  }}
+                />
+                <Stepper
+                  label="Parallel"
+                  value={parallelCount}
+                  min={1}
+                  max={20}
+                  onChange={(value) => {
+                    setBatteryTouched(true)
+                    setParallelCount(value)
+                  }}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.helper}>Manual mode uses only pack empty + full voltage.</Text>
+              <View style={styles.voltageRow}>
+                <TextInput
+                  style={[styles.input, styles.voltageInput]}
+                  value={manualMinVoltage}
+                  onChangeText={(value) => {
+                    setBatteryTouched(true)
+                    setManualMinVoltage(value)
+                  }}
+                  placeholder="Min (0%)"
+                  placeholderTextColor="#4b5563"
+                  keyboardType="decimal-pad"
+                  returnKeyType="next"
+                />
+                <TextInput
+                  style={[styles.input, styles.voltageInput]}
+                  value={manualMaxVoltage}
+                  onChangeText={(value) => {
+                    setBatteryTouched(true)
+                    setManualMaxVoltage(value)
+                  }}
+                  placeholder="Max (100%)"
+                  placeholderTextColor="#4b5563"
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+              </View>
+            </>
+          )}
+
+          <Text style={styles.batterySummary}>
+            {keepMissingBatteryConfig
+              ? 'Battery config not set'
+              : derivedBattery.warning
+                ? 'Battery config incomplete'
+                : `${derivedBattery.minVoltage.toFixed(1)}-${derivedBattery.maxVoltage.toFixed(1)} V${
+                    derivedBattery.nominalWh != null
+                      ? `, ${Math.round(derivedBattery.nominalWh)} Wh nominal`
+                      : ''
+                  }`}
+          </Text>
+
           <Pressable
-            style={[styles.saveButton, !name.trim() && styles.saveButtonDisabled]}
+            style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
             onPress={handleSave}
-            disabled={!name.trim()}
+            disabled={!canSave}
           >
             <Text style={styles.saveButtonText}>Save Board</Text>
           </Pressable>
@@ -305,6 +497,82 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginBottom: 6,
   },
+  subLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 3,
+    marginBottom: 6,
+  },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 6,
+    paddingVertical: 10,
+  },
+  segmentActive: {
+    backgroundColor: theme.bran.bg,
+  },
+  segmentText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  segmentTextActive: {
+    color: theme.bran.text,
+  },
+  presetSelectRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  presetSelectField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 2,
+  },
+  stepper: {
+    flex: 1,
+    gap: 6,
+  },
+  stepperControls: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+    overflow: 'hidden',
+  },
+  stepperButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonText: {
+    color: '#e2e8f0',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  stepperValue: {
+    color: '#f1f5f9',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   voltageRow: {
     flexDirection: 'row',
     gap: 8,
@@ -327,6 +595,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  batterySummary: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
   removeButton: {
     marginTop: 12,
     borderRadius: 10,
@@ -342,3 +616,73 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 })
+
+function parseVoltage(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const parsed = Number.parseFloat(trimmed)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function buildBatteryConfig(
+  mode: BatteryMode,
+  cellPresetId: string,
+  seriesCount: number,
+  parallelCount: number,
+  manualMinVoltage: string,
+  manualMaxVoltage: string,
+): BatteryConfig | null {
+  if (mode === 'preset') {
+    return {
+      mode: 'preset',
+      cellPresetId,
+      seriesCount,
+      parallelCount,
+    }
+  }
+  const minVoltage = parseVoltage(manualMinVoltage)
+  const maxVoltage = parseVoltage(manualMaxVoltage)
+  if (minVoltage == null || maxVoltage == null || maxVoltage <= minVoltage) return null
+  return { mode: 'manual', minVoltage, maxVoltage }
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values))
+}
+
+function Stepper({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <View style={styles.stepper}>
+      <Text style={styles.subLabel}>{label}</Text>
+      <View style={styles.stepperControls}>
+        <Pressable
+          style={styles.stepperButton}
+          onPress={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+        >
+          <Text style={styles.stepperButtonText}>-</Text>
+        </Pressable>
+        <Text style={styles.stepperValue}>{value}</Text>
+        <Pressable
+          style={styles.stepperButton}
+          onPress={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+        >
+          <Text style={styles.stepperButtonText}>+</Text>
+        </Pressable>
+      </View>
+    </View>
+  )
+}

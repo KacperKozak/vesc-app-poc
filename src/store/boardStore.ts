@@ -4,11 +4,15 @@ import {
   getBoards,
   getSettings,
   setSelectedBoard as nativeSetSelectedBoard,
+  type BatteryConfig,
   type Board,
   upsertBoard,
 } from 'vesc-ble'
 
+import { DEFAULT_BATTERY_CONFIG } from '@/helpers/battery'
+
 export type { Board } from 'vesc-ble'
+export { DEFAULT_BATTERY_CONFIG } from '@/helpers/battery'
 
 function generateId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -33,8 +37,7 @@ interface BoardActions {
     name: string
     description?: string
     bleId?: string
-    minVoltage?: number | null
-    maxVoltage?: number | null
+    batteryConfig?: BatteryConfig | null
   }) => Board
   updateBoard: (board: Board) => Promise<void>
   removeBoard: (id: string) => Promise<void>
@@ -69,7 +72,7 @@ export const useBoardStore = create<BoardState & BoardActions>((set, get) => ({
     }
   },
 
-  addBoard({ name, description, bleId, minVoltage, maxVoltage }) {
+  addBoard({ name, description, bleId, batteryConfig }) {
     const isFirst = get().boards.length === 0
     const board: Board = {
       id: generateId(),
@@ -78,8 +81,7 @@ export const useBoardStore = create<BoardState & BoardActions>((set, get) => ({
       bleId: bleId ?? null,
       isStarred: isFirst,
       createdAt: Date.now(),
-      minVoltage: minVoltage ?? null,
-      maxVoltage: maxVoltage ?? null,
+      batteryConfig: batteryConfig ?? DEFAULT_BATTERY_CONFIG,
     }
     set((state) => ({
       boards: [...state.boards, board],
