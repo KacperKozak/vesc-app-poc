@@ -23,6 +23,7 @@
     "build:release": "cd android && ./gradlew assembleRelease",
     "release": "bun run scripts/release.ts",
     "release:fix": "bun run scripts/release.ts --patch",
+    "check": "bun run ts && bun run lint && bun run format:check && bun run knip && bun run test",
     "knip": "knip",
     "posthog:recent": "bun run scripts/posthog.ts recent",
     "posthog:events": "bun run scripts/posthog.ts events",

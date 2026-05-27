@@ -9,10 +9,10 @@ import {
   upsertBoard,
 } from 'vesc-ble'
 
-import { DEFAULT_BATTERY_CONFIG } from '@/helpers/battery'
+import { DEFAULT_BATTERY_CONFIG } from '@/lib/battery'
 
 export type { Board } from 'vesc-ble'
-export { DEFAULT_BATTERY_CONFIG } from '@/helpers/battery'
+export { DEFAULT_BATTERY_CONFIG } from '@/lib/battery'
 
 function generateId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {

@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { BatteryBar } from '@/components/BatteryBar'
 import { type SparklinePoint } from '@/components/charts/Sparkline'
-import { estimateBatteryPercent } from '@/helpers/battery'
+import { estimateBatteryPercent } from '@/lib/battery'
 import { emaSeries } from '@/helpers/smoothing'
 import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useBoardStore } from '@/store/boardStore'

@@ -10,7 +10,7 @@ import {
   DEFAULT_BATTERY_CONFIG,
   deriveBatteryConfig,
   getBatteryPreset,
-} from '@/helpers/battery'
+} from '@/lib/battery'
 
 type BatteryMode = BatteryConfig['mode']
 

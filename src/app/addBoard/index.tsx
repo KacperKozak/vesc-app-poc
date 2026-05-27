@@ -13,7 +13,7 @@ import {
   getBatterySummary,
   parseVoltage,
 } from '@/boards/boardSetup'
-import { DEFAULT_BATTERY_CONFIG, deriveBatteryConfig } from '@/helpers/battery'
+import { DEFAULT_BATTERY_CONFIG, deriveBatteryConfig } from '@/lib/battery'
 import { routes } from '@/navigation/routes'
 import { useBoardStore } from '@/store/boardStore'
 

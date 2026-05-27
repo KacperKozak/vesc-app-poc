@@ -10,7 +10,7 @@ import { Button } from '@/components/Button'
 import { SettingsCard } from '@/components/settings/SettingsCard'
 import { SettingsSectionTitle } from '@/components/settings/SettingsSectionTitle'
 import { theme } from '@/constants/theme'
-import { BATTERY_CELL_PRESETS, deriveBatteryConfig } from '@/helpers/battery'
+import { BATTERY_CELL_PRESETS, deriveBatteryConfig } from '@/lib/battery'
 
 export type BatteryMode = BatteryConfig['mode']
 export type BatterySummary = ReturnType<typeof getBatterySummary>
