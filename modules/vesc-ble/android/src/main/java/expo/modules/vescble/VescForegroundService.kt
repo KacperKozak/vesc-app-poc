@@ -50,11 +50,12 @@ private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
 private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
 private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
 private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
-private const val TELEMETRY_STALE_MS = 2_500L
-private const val BOARD_READY_TIMEOUT_MS = 4_000L
-private const val GATT_CONNECT_TIMEOUT_MS = 4_000L
-private const val GATT_READY_TIMEOUT_MS = 4_000L
-private const val RECONNECT_SCAN_TIMEOUT_MS = 4_000L
+private const val TELEMETRY_STALE_MS = 4_000L
+private const val BOARD_READY_TIMEOUT_MS = 8_000L
+private const val CAN_PING_TIMEOUT_MS = 2_000L
+private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
+private const val GATT_READY_TIMEOUT_MS = 6_000L
+private const val RECONNECT_SCAN_TIMEOUT_MS = 6_000L
 
 data class SessionConfig(
     val appBoardId: String?,
@@ -346,6 +347,7 @@ class VescForegroundService : Service() {
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
     private var autoReconnectRunnable: Runnable? = null
+    private var canPingTimeoutRunnable: Runnable? = null
     private var reconnectScanCallback: ScanCallback? = null
     private var reconnectScanTimeout: Runnable? = null
     private var activeConfigRead: ActiveConfigRead? = null
@@ -688,8 +690,9 @@ class VescForegroundService : Service() {
         if (canId != null) {
             startPolling()
         } else {
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
+            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 300)
+            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 1_200)
+            armCanPingTimeout()
         }
         armBoardReadyTimeout(start.boardConfig)
     }
@@ -712,6 +715,7 @@ class VescForegroundService : Service() {
         when (payload[0].toInt() and 0xff) {
             COMM_FW_VERSION -> handleFwVersionPayload(payload)
             COMM_PING_CAN -> {
+                cancelCanPingTimeout()
                 if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
                     emitState()
@@ -1319,6 +1323,25 @@ class VescForegroundService : Service() {
         telemetryStaleRunnable = null
     }
 
+    private fun armCanPingTimeout() {
+        cancelCanPingTimeout()
+        canPingTimeoutRunnable = Runnable {
+            canPingTimeoutRunnable = null
+            if (canId == null && !directConnection && boardStatus == BoardPhase.WaitingForTelemetry) {
+                Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
+                directConnection = true
+                emitState()
+                startPolling()
+            }
+        }
+        mainHandler.postDelayed(canPingTimeoutRunnable!!, CAN_PING_TIMEOUT_MS)
+    }
+
+    private fun cancelCanPingTimeout() {
+        canPingTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        canPingTimeoutRunnable = null
+    }
+
     private fun armBoardReadyTimeout(session: SessionConfig) {
         if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
@@ -1435,6 +1458,7 @@ class VescForegroundService : Service() {
         stopReconnectScan()
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
+        cancelCanPingTimeout()
         stopPolling()
         gattClient.clear(markIntentional = true)
         alertFeedback.stopAllGeiger()
@@ -1535,6 +1559,7 @@ class VescForegroundService : Service() {
         pendingConnect = null
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
+        cancelCanPingTimeout()
         stopPolling()
         gattClient.clear(markIntentional = false)
         lastTelemetryAt = 0L
