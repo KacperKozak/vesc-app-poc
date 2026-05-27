@@ -240,11 +240,11 @@ public class VescBleModule: Module {
     }
 
     AsyncFunction("getBoards") { (promise: Promise) in
-      promise.resolve(self.boards.sorted(by: Self.sortBoards))
+      promise.resolve(self.boards.map(Self.normalizeBoard).sorted(by: Self.sortBoards))
     }
 
     AsyncFunction("upsertBoard") { (board: [String: Any], promise: Promise) in
-      self.upsert(&self.boards, item: board)
+      self.upsert(&self.boards, item: Self.normalizeBoard(board))
       self.saveAppData()
       promise.resolve(nil)
     }
@@ -530,16 +530,76 @@ public class VescBleModule: Module {
     Self.saveArray(privacyZones, key: "vesc_ble_privacy_zones")
   }
 
-  private func upsert(_ array: inout [[String: Any?]], item: [String: Any]) {
-    let normalized = item.reduce(into: [String: Any?]()) { result, entry in
-      result[entry.key] = entry.value
-    }
+  private func upsert(_ array: inout [[String: Any?]], item: [String: Any?]) {
+    let normalized = item
     guard let id = normalized["id"] as? String else { return }
     if let index = array.firstIndex(where: { ($0["id"] as? String) == id }) {
       array[index] = normalized
     } else {
       array.append(normalized)
     }
+  }
+
+  private static func normalizeBoard(_ raw: [String: Any?]) -> [String: Any?] {
+    var board = raw
+    board.removeValue(forKey: "minVoltage")
+    board.removeValue(forKey: "maxVoltage")
+    board["batteryConfig"] = normalizeBatteryConfig(raw["batteryConfig"])
+    return board
+  }
+
+  private static func normalizeBatteryConfig(_ raw: Any?) -> [String: Any]? {
+    guard let config = raw as? [String: Any], let mode = config["mode"] as? String else {
+      return nil
+    }
+    switch mode {
+    case "preset":
+      guard
+        let cellPresetId = config["cellPresetId"] as? String,
+        !cellPresetId.isEmpty,
+        let seriesCount = intValue(config["seriesCount"]),
+        let parallelCount = intValue(config["parallelCount"]),
+        seriesCount > 0,
+        parallelCount > 0
+      else {
+        return nil
+      }
+      return [
+        "mode": "preset",
+        "cellPresetId": cellPresetId,
+        "seriesCount": seriesCount,
+        "parallelCount": parallelCount,
+      ]
+    case "manual":
+      guard
+        let minVoltage = doubleValue(config["minVoltage"]),
+        let maxVoltage = doubleValue(config["maxVoltage"]),
+        minVoltage.isFinite,
+        maxVoltage.isFinite,
+        maxVoltage > minVoltage
+      else {
+        return nil
+      }
+      return [
+        "mode": "manual",
+        "minVoltage": minVoltage,
+        "maxVoltage": maxVoltage,
+      ]
+    default:
+      return nil
+    }
+  }
+
+  private static func intValue(_ raw: Any?) -> Int? {
+    if let value = raw as? Int { return value }
+    if let value = raw as? NSNumber { return value.intValue }
+    return nil
+  }
+
+  private static func doubleValue(_ raw: Any?) -> Double? {
+    if let value = raw as? Double { return value }
+    if let value = raw as? NSNumber { return value.doubleValue }
+    return nil
   }
 
   private static func sortBoards(_ lhs: [String: Any?], _ rhs: [String: Any?]) -> Bool {

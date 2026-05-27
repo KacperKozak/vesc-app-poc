@@ -9,6 +9,7 @@ Issues and PRDs for this repo live as GitHub issues. This is a private repo, so 
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
+- **Create a label**: `gh label create "area:<slug>" --description "<short area description>"`
 - **Close**: `gh issue close <number> --comment "..."`
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
@@ -67,8 +68,11 @@ Use one or more app-area labels for filtering:
 | `area:map`        | `[Map]`       | maps, routes, GPS display                |
 | `area:weather`    | `[Weather]`   | weather data and UI                      |
 | `area:core`       | `[Core]`      | app shell, storage, lifecycle, infra     |
+| `area:board`      | `[Board]`     | board profiles, board table/settings     |
 | `area:telemetry`  | `[Telemetry]` | live telemetry ingest/display            |
 | `area:tunes`      | `[Tunes]`     | VESC tune read/write flows               |
+
+When a PRD or issue-planning skill creates or starts using a new app-area label, update this table in the same turn. Add the label, title prefix, and a short "Use for" description so future PRDs and implementation issues can reuse the prefix consistently.
 
 If a user writes a typo for a known area, normalize it in metadata. For example, use `area:sanitizers` and `[Sanitizers]` for `sanatizers`.
 

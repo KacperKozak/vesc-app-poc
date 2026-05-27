@@ -50,11 +50,10 @@ private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
 private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
 private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
 private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
-private const val TELEMETRY_STALE_MS = 2_500L
-private const val BOARD_READY_TIMEOUT_MS = 4_000L
-private const val GATT_CONNECT_TIMEOUT_MS = 4_000L
-private const val GATT_READY_TIMEOUT_MS = 4_000L
-private const val RECONNECT_SCAN_TIMEOUT_MS = 4_000L
+private const val TELEMETRY_STALE_MS = 4_000L
+private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
+private const val GATT_READY_TIMEOUT_MS = 6_000L
+private const val RECONNECT_SCAN_TIMEOUT_MS = 6_000L
 
 data class SessionConfig(
     val appBoardId: String?,
@@ -328,6 +327,7 @@ class VescForegroundService : Service() {
     private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
     private var canId: Int? = null
+    private var directConnection = false
     private var fwVersionString: String? = null
     private var connectTimeout: Runnable? = null
     private var boardReadyTimeout: Runnable? = null
@@ -345,6 +345,7 @@ class VescForegroundService : Service() {
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
     private var autoReconnectRunnable: Runnable? = null
+    private var canPingTimeoutRunnable: Runnable? = null
     private var reconnectScanCallback: ScanCallback? = null
     private var reconnectScanTimeout: Runnable? = null
     private var activeConfigRead: ActiveConfigRead? = null
@@ -359,6 +360,7 @@ class VescForegroundService : Service() {
     private var generation = 0L
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private var metricSanitizerConfig = MetricSanitizerConfig()
+    private val isPollingCapable get() = isPollingCapable(canId, directConnection)
     private val configChunkLength = 384
     private val configSchemaTimeoutMs = 10_000L
     private val configReadTimeoutMs = 8_000L
@@ -445,7 +447,7 @@ class VescForegroundService : Service() {
             return
         }
         val id = canId
-        if (id == null) {
+        if (id == null && !directConnection) {
             pending.onError(
                 RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
                 "Cannot read Refloat config before CAN id discovery",
@@ -506,6 +508,7 @@ class VescForegroundService : Service() {
         boardConfig = start.boardConfig
         generation += 1
         canId = start.boardConfig.canId
+        directConnection = false
         boardError = null
         telemetry = null
         recentTelemetry.clear()
@@ -685,8 +688,9 @@ class VescForegroundService : Service() {
         if (canId != null) {
             startPolling()
         } else {
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 500)
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 800)
+            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 300)
+            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 1_200)
+            armCanPingTimeout()
         }
         armBoardReadyTimeout(start.boardConfig)
     }
@@ -709,6 +713,7 @@ class VescForegroundService : Service() {
         when (payload[0].toInt() and 0xff) {
             COMM_FW_VERSION -> handleFwVersionPayload(payload)
             COMM_PING_CAN -> {
+                cancelCanPingTimeout()
                 if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
                     emitState()
@@ -718,6 +723,11 @@ class VescForegroundService : Service() {
                         (payload[1].toInt() and 0xff).toByte(),
                         COMM_FW_VERSION.toByte(),
                     ))
+                } else {
+                    Log.d(VESC_SESSION_TAG, "No CAN devices found, using direct connection")
+                    directConnection = true
+                    emitState()
+                    startPolling()
                 }
             }
             COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
@@ -786,7 +796,8 @@ class VescForegroundService : Service() {
             expectedXmlLength = parsed.totalLength,
             nextXmlOffset = nextOffset,
         )
-        val id = canId ?: run {
+        val id = canId
+        if (id == null && !directConnection) {
             failConfigRead(
                 RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
                 "CAN id unavailable during Refloat config read",
@@ -818,7 +829,8 @@ class VescForegroundService : Service() {
         }
         activeConfigRead = active.copy(rawConfig = parsed.config)
         clearConfigTimeout()
-        val can = canId ?: run {
+        val can = canId
+        if (can == null && !directConnection) {
             failConfigRead(
                 RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
                 "CAN id unavailable during Refloat config read",
@@ -887,7 +899,7 @@ class VescForegroundService : Service() {
         Log.d(VESC_SESSION_TAG, "FW version: $fwVersionString")
     }
 
-    private fun sendNextConfigXmlChunk(id: Int) {
+    private fun sendNextConfigXmlChunk(id: Int?) {
         val active = activeConfigRead ?: return
         val offset = active.nextXmlOffset
         val expected = active.expectedXmlLength
@@ -907,7 +919,7 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun sendConfigBytesRequest(id: Int) {
+    private fun sendConfigBytesRequest(id: Int?) {
         armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
         val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
         if (!sent) {
@@ -951,7 +963,7 @@ class VescForegroundService : Service() {
         val active = activeConfigRead ?: return
         activeConfigRead = null
         clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && canId != null) {
+        if (active.wasPolling && boardConfig != null && isPollingCapable) {
             startPolling()
         }
         appDataScope.launch {
@@ -974,7 +986,7 @@ class VescForegroundService : Service() {
         val active = activeConfigRead ?: return
         activeConfigRead = null
         clearConfigTimeout()
-        if (resumePolling && active.wasPolling && boardConfig != null && canId != null) {
+        if (resumePolling && active.wasPolling && boardConfig != null && isPollingCapable) {
             startPolling()
         }
         captureDiagnostic(
@@ -1013,7 +1025,7 @@ class VescForegroundService : Service() {
             return
         }
         val id = canId
-        if (id == null) {
+        if (id == null && !directConnection) {
             pending.onError(
                 RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
                 "Cannot push config before CAN id discovery",
@@ -1062,7 +1074,7 @@ class VescForegroundService : Service() {
                     return@post
                 }
                 val currentId = canId
-                if (currentId == null) {
+                if (currentId == null && !directConnection) {
                     pending.onError(
                         RefloatConfigErrorCode.CAN_ID_UNAVAILABLE.name,
                         "Cannot push config before CAN id discovery",
@@ -1081,7 +1093,7 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun sendNextWriteXmlChunk(id: Int) {
+    private fun sendNextWriteXmlChunk(id: Int?) {
         val active = activeConfigWrite ?: return
         val offset = active.nextXmlOffset
         val expected = active.expectedXmlLength
@@ -1117,7 +1129,8 @@ class VescForegroundService : Service() {
             expectedXmlLength = parsed.totalLength,
             nextXmlOffset = nextOffset,
         )
-        val id = canId ?: run {
+        val id = canId
+        if (id == null && !directConnection) {
             failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
             return
         }
@@ -1143,7 +1156,8 @@ class VescForegroundService : Service() {
             }
         }
         clearConfigTimeout()
-        val id = canId ?: run {
+        val id = canId
+        if (id == null && !directConnection) {
             failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
             return
         }
@@ -1210,7 +1224,8 @@ class VescForegroundService : Service() {
         when (val result = RefloatConfigProtocol.parseSetCustomConfigResponse(payload)) {
             is RefloatConfigProtocolResult.Success -> {
                 clearConfigTimeout()
-                val id = canId ?: run {
+                val id = canId
+                if (id == null && !directConnection) {
                     failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost after write")
                     return
                 }
@@ -1231,7 +1246,7 @@ class VescForegroundService : Service() {
         val active = activeConfigWrite ?: return
         activeConfigWrite = null
         clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && canId != null) {
+        if (active.wasPolling && boardConfig != null && isPollingCapable) {
             startPolling()
         }
         appDataScope.launch {
@@ -1250,7 +1265,7 @@ class VescForegroundService : Service() {
         val active = activeConfigWrite ?: return
         activeConfigWrite = null
         clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && canId != null) {
+        if (active.wasPolling && boardConfig != null && isPollingCapable) {
             startPolling()
         }
         captureDiagnostic(
@@ -1268,20 +1283,31 @@ class VescForegroundService : Service() {
 
     private fun startPolling() {
         val session = boardConfig ?: return
-        val id = canId ?: return
+        val id = canId
+        if (id == null && !directConnection) return
         stopPolling()
         armTelemetryStaleWatchdog()
+        val pollPayload = if (id != null) {
+            byteArrayOf(
+                COMM_FORWARD_CAN.toByte(),
+                id.toByte(),
+                COMM_CUSTOM_APP_DATA.toByte(),
+                REFLOAT_MAGIC.toByte(),
+                REFLOAT_GET_ALLDATA.toByte(),
+                2,
+            )
+        } else {
+            byteArrayOf(
+                COMM_CUSTOM_APP_DATA.toByte(),
+                REFLOAT_MAGIC.toByte(),
+                REFLOAT_GET_ALLDATA.toByte(),
+                2,
+            )
+        }
         pollRunnable = object : Runnable {
             override fun run() {
                 lastPollAt = System.currentTimeMillis()
-                sendPayloadWithRetry(byteArrayOf(
-                    COMM_FORWARD_CAN.toByte(),
-                    id.toByte(),
-                    COMM_CUSTOM_APP_DATA.toByte(),
-                    REFLOAT_MAGIC.toByte(),
-                    REFLOAT_GET_ALLDATA.toByte(),
-                    2,
-                ))
+                sendPayloadWithRetry(pollPayload)
                 mainHandler.postDelayed(this, session.pollIntervalMs)
             }
         }
@@ -1295,9 +1321,31 @@ class VescForegroundService : Service() {
         telemetryStaleRunnable = null
     }
 
+    private fun armCanPingTimeout() {
+        cancelCanPingTimeout()
+        canPingTimeoutRunnable = Runnable {
+            canPingTimeoutRunnable = null
+            if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
+                Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
+                directConnection = true
+                emitState()
+                startPolling()
+            }
+        }
+        mainHandler.postDelayed(canPingTimeoutRunnable!!, CAN_PING_TIMEOUT)
+    }
+
+    private fun cancelCanPingTimeout() {
+        canPingTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        canPingTimeoutRunnable = null
+    }
+
+    private fun boardReadyTimeoutMs(): Long = boardReadyTimeoutMs(autoReconnectAttempt)
+
     private fun armBoardReadyTimeout(session: SessionConfig) {
         if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
+        val timeoutMs = boardReadyTimeoutMs()
         boardReadyTimeout = Runnable {
             boardReadyTimeout = null
             if (
@@ -1311,13 +1359,13 @@ class VescForegroundService : Service() {
                     "connect",
                     mapOf(
                         "message" to "Board telemetry unavailable before ready timeout",
-                        "timeout_ms" to BOARD_READY_TIMEOUT_MS,
+                        "timeout_ms" to timeoutMs,
                     ),
                 )
                 scheduleAutoReconnect(session, null, "board telemetry unavailable")
             }
         }
-        mainHandler.postDelayed(boardReadyTimeout!!, BOARD_READY_TIMEOUT_MS)
+        mainHandler.postDelayed(boardReadyTimeout!!, timeoutMs)
     }
 
     private fun cancelBoardReadyTimeout() {
@@ -1327,6 +1375,14 @@ class VescForegroundService : Service() {
 
     private fun markBoardReady() {
         cancelBoardReadyTimeout()
+        cancelCanPingTimeout()
+        if (shouldSetDirectOnReady(canId, directConnection)) {
+            Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
+            directConnection = true
+        }
+        if (shouldStartPollingOnReady(canId, directConnection, pollRunnable)) {
+            startPolling()
+        }
         if (boardStatus == BoardPhase.Connected) return
         autoReconnectAttempt = 0
         connectionLostMarkerAt = null
@@ -1411,6 +1467,7 @@ class VescForegroundService : Service() {
         stopReconnectScan()
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
+        cancelCanPingTimeout()
         stopPolling()
         gattClient.clear(markIntentional = true)
         alertFeedback.stopAllGeiger()
@@ -1426,6 +1483,7 @@ class VescForegroundService : Service() {
         pendingConnect = null
         connectionLostMarkerAt = null
         canId = null
+        directConnection = false
         fwVersionString = null
         telemetry = null
         recentTelemetry.clear()
@@ -1510,6 +1568,7 @@ class VescForegroundService : Service() {
         pendingConnect = null
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
+        cancelCanPingTimeout()
         stopPolling()
         gattClient.clear(markIntentional = false)
         lastTelemetryAt = 0L
@@ -2112,6 +2171,7 @@ class VescForegroundService : Service() {
             "auto_reconnect_attempt" to autoReconnectAttempt,
             "auto_reconnect_enabled" to session?.autoReconnect,
             "can_id" to canId,
+            "direct_connection" to directConnection,
             "last_sent_command" to lastSentCommand,
             "last_received_command_byte" to lastReceivedCommandByte,
             "last_telemetry_timestamp" to lastTelemetryAt.takeIf { it > 0L },

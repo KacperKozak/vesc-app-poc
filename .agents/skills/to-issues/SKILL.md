@@ -51,10 +51,21 @@ Rules:
 - When there is no PRD, use the same `<Feature Tag>` prefix for all issues spawned from the same plan unless the user asks for separate tags.
 - If the user gives an explicit bracket tag/prefix, use it exactly after fixing only obvious typos.
 - If the user does not give a tag, infer a short domain tag from the plan using the project's glossary vocabulary. Prefer a noun phrase over an implementation layer.
+- Before publishing, ask the user to confirm the issue prefix. Propose the best inferred prefix, including whether it comes from the parent PRD, an existing app area, or a new feature tag.
+- If no existing app area fits, propose a new short prefix and ask whether to create/use it. Also propose the matching GitHub area label slug when it should become a tracked area, e.g. `[Firmware Profiles]` -> `area:firmware-profiles`.
+- Use the confirmed prefix for all issue titles unless a slice clearly needs a different confirmed prefix.
 - Use 2-5 meaningful words after the number.
 - Number from the approved slice order, not GitHub issue number.
-- Apply the matching GitHub area label, e.g. `area:sanitizers`.
+- Apply the matching GitHub area label, e.g. `area:sanitizers`, when one exists or when the user approves creating/using a new one.
+- If the user approves a new area label, update the App-area labels table in `docs/agents/issue-tracker.md` in the same turn. Add the area label, title prefix, and a short "Use for" description before or alongside publishing the issues.
 - If user types a typo for a known area, normalize it in issue metadata, e.g. `sanatizers` -> `sanitizers`.
+
+When asking for prefix confirmation, keep it focused:
+
+```text
+Proposed issue prefix: [History] (from parent PRD, maps to existing `area:history`).
+Use this, or should I create/use another prefix? My fallback suggestion: [Ride Export] with `area:ride-export`.
+```
 
 ## Process
 
@@ -93,6 +104,7 @@ Present the proposed breakdown as a numbered list. For each slice, show:
 
 Ask the user:
 
+- Is the proposed issue prefix correct? If not, what prefix should be used? If this needs a new prefix/area label, confirm the proposed label slug and `docs/agents/issue-tracker.md` table entry.
 - Does the granularity feel right? (too coarse / too fine)
 - Are the dependency relationships correct?
 - Should any slices be merged or split further?
@@ -102,7 +114,7 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to the issue tracker
 
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise.
+For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise. If the confirmed prefix uses a new area label, update `docs/agents/issue-tracker.md` before or alongside publishing.
 
 Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field. Do not publish concurrently when blocker references are needed.
 

@@ -237,10 +237,8 @@ data class BoardEntity(
   val isStarred: Boolean,
   @ColumnInfo(name = "created_at")
   val createdAt: Long,
-  @ColumnInfo(name = "min_voltage")
-  val minVoltage: Double?,
-  @ColumnInfo(name = "max_voltage")
-  val maxVoltage: Double?,
+  @ColumnInfo(name = "battery_config_json")
+  val batteryConfigJson: String?,
 )
 
 @Entity(
