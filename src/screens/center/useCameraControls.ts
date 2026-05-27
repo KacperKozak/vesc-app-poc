@@ -19,6 +19,7 @@ const HISTORY_FIT_PADDING: [number, number, number, number] = [
 ]
 const HISTORY_DYNAMIC_FULL_DISTANCE_M = 80_000
 const HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS = 450
+const HISTORY_INSTANT_JUMP_DISTANCE_M = 10_000
 
 export interface CameraSnapshot {
   centerCoordinate: [number, number]
@@ -204,28 +205,49 @@ export function useCameraControls({
   const fitRide = useCallback(() => {
     if (rideRoute.length < 2) return
     const bounds = getBounds(rideRoute)
-    cameraRef.current?.fitBounds(
-      bounds.ne,
-      bounds.sw,
-      HISTORY_FIT_PADDING,
-      MAP_DEFAULTS.animationDuration,
-    )
+    const currentCamera = currentCameraRef.current
+    const routeCenter = {
+      longitude: (bounds.ne[0] + bounds.sw[0]) / 2,
+      latitude: (bounds.ne[1] + bounds.sw[1]) / 2,
+    }
+    const fitDistanceM = currentCamera
+      ? distanceMeters(
+          {
+            longitude: currentCamera.centerCoordinate[0],
+            latitude: currentCamera.centerCoordinate[1],
+          },
+          routeCenter,
+        )
+      : 0
+    const duration =
+      fitDistanceM > HISTORY_INSTANT_JUMP_DISTANCE_M ? 0 : MAP_DEFAULTS.animationDuration
+    cameraRef.current?.fitBounds(bounds.ne, bounds.sw, HISTORY_FIT_PADDING, duration)
   }, [rideRoute])
 
   const previewHistorySession = useCallback(
     (preview: HistoryPreviewTarget) => {
+      const lastTarget = historyPreviewTargetRef.current
       historyPreviewTargetRef.current = preview
       setFollowGps(false)
-      const current = currentCameraRef.current
-      const jumpDistanceM = current
+      const currentCamera = currentCameraRef.current
+      const currentDistanceM = currentCamera
         ? distanceMeters(
-            { longitude: current.centerCoordinate[0], latitude: current.centerCoordinate[1] },
+            {
+              longitude: currentCamera.centerCoordinate[0],
+              latitude: currentCamera.centerCoordinate[1],
+            },
             preview,
           )
         : 0
+      const lastTargetDistanceM = lastTarget
+        ? distanceMeters(lastTarget, preview)
+        : currentDistanceM
+      const jumpDistanceM = Math.max(currentDistanceM, lastTargetDistanceM)
+      const instantJump = jumpDistanceM > HISTORY_INSTANT_JUMP_DISTANCE_M
       const progress = clamp(jumpDistanceM / HISTORY_DYNAMIC_FULL_DISTANCE_M, 0, 1)
-      const duration =
-        MAP_DEFAULTS.animationDuration + HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS * progress
+      const duration = instantJump
+        ? 0
+        : MAP_DEFAULTS.animationDuration + HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS * progress
       const bounds = getHistoryPreviewBounds(preview)
       if (bounds) {
         cameraRef.current?.fitBounds(bounds.ne, bounds.sw, HISTORY_FIT_PADDING, duration)
