@@ -15,6 +15,7 @@
     "format": "oxfmt . '!.agents/skills/**'",
     "format:check": "oxfmt --check . '!.agents/skills/**'",
     "copy:alert-sounds": "bun run scripts/copy-alert-sounds.ts",
+    "screenshot": "bun run scripts/screenshot.ts",
     "test": "bun run test:bun && bun run test:android",
     "test:bun": "bun test",
     "test:android": "cd android && ./gradlew :vesc-ble:testDebugUnitTest",
