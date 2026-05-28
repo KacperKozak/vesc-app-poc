@@ -75,7 +75,7 @@ export default function AddBoardScanScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.header}>
-            {isScanning && <ActivityIndicator color="#3b82f6" style={styles.spinner} />}
+            {isScanning && <ActivityIndicator color={theme.wheel.color} style={styles.spinner} />}
             <Text style={styles.subtitle}>
               {status === 'denied'
                 ? 'Bluetooth permission required'
@@ -120,11 +120,11 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   subtitle: {
-    color: '#9ca3af',
+    color: theme.neutral.textSecondary,
     fontSize: 14,
   },
   empty: {
-    color: '#4b5563',
+    color: theme.neutral.textDim,
     textAlign: 'center',
     marginTop: 40,
     fontSize: 14,
@@ -134,11 +134,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: theme.neutral.border,
     borderRadius: 10,
   },
   skipText: {
-    color: '#9ca3af',
+    color: theme.neutral.textSecondary,
     fontSize: 15,
     fontWeight: '600',
   },

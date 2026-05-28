@@ -1,6 +1,6 @@
 import React from 'react'
 import { Pressable, View, Text, StyleSheet } from 'react-native'
-import { theme } from '@/constants/theme'
+import { theme, interaction } from '@/constants/theme'
 
 interface Props {
   id: string
@@ -9,14 +9,14 @@ interface Props {
   onPress: () => void
 }
 
-/** A single row in the device scan list. */
 export const DeviceRow = React.memo(function DeviceRow({ id, name, rssi, onPress }: Props) {
   const signalColor =
     rssi > -60 ? theme.gps.text : rssi > -75 ? theme.highlight.color : theme.error.text
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]}
+      style={({ pressed }) => [styles.row, pressed && { opacity: interaction.pressedOpacity }]}
+      android_ripple={interaction.ripple}
       onPress={onPress}
     >
       <View style={styles.info}>
@@ -35,7 +35,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#1f2937',
+    backgroundColor: theme.neutral.surface,
     borderRadius: 10,
     marginBottom: 8,
   },
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   name: {
-    color: '#f9fafb',
+    color: theme.neutral.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -53,12 +53,12 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   id: {
-    color: '#9ca3af',
+    color: theme.neutral.textSecondary,
     fontSize: 12,
     fontFamily: 'monospace',
   },
   chevron: {
-    color: '#6b7280',
+    color: theme.neutral.textDim,
     fontSize: 22,
     fontWeight: '300',
   },

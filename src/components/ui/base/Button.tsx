@@ -73,10 +73,10 @@ export function Button({
 
 const variantStyles = {
   primary: {
-    button: { backgroundColor: '#1d4ed8' },
-    text: { color: '#f8fafc' },
-    iconColor: '#f8fafc',
-    indicatorColor: '#f8fafc',
+    button: { backgroundColor: theme.bran.border },
+    text: { color: theme.neutral.textPrimary },
+    iconColor: theme.neutral.textPrimary,
+    indicatorColor: theme.neutral.textPrimary,
   },
   secondary: {
     button: {
@@ -84,15 +84,15 @@ const variantStyles = {
       borderWidth: 1,
       borderColor: theme.neutral.border,
     },
-    text: { color: '#cbd5e1' },
-    iconColor: '#cbd5e1',
-    indicatorColor: '#cbd5e1',
+    text: { color: theme.neutral.textSecondary },
+    iconColor: theme.neutral.textSecondary,
+    indicatorColor: theme.neutral.textSecondary,
   },
   destructive: {
     button: { backgroundColor: theme.error.border },
-    text: { color: '#fecaca' },
-    iconColor: '#fecaca',
-    indicatorColor: '#fecaca',
+    text: { color: theme.error.text },
+    iconColor: theme.error.text,
+    indicatorColor: theme.error.text,
   },
 } as const
 

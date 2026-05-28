@@ -22,7 +22,7 @@ export function BoardInfoForm({
         value={name}
         onChangeText={onChangeName}
         placeholder="e.g. FloBoard Pro"
-        placeholderTextColor="#4b5563"
+        placeholderTextColor={theme.neutral.textDim}
         returnKeyType="next"
       />
       <Text style={styles.label}>Description</Text>
@@ -31,7 +31,7 @@ export function BoardInfoForm({
         value={description}
         onChangeText={onChangeDescription}
         placeholder="Optional notes about this board"
-        placeholderTextColor="#4b5563"
+        placeholderTextColor={theme.neutral.textDim}
         multiline
         numberOfLines={3}
         textAlignVertical="top"
@@ -52,11 +52,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: '#1f2937',
+    backgroundColor: theme.neutral.surface,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    color: '#f9fafb',
+    color: theme.neutral.textPrimary,
     fontSize: 16,
   },
   inputMultiline: {

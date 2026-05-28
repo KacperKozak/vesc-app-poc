@@ -11,6 +11,7 @@ import {
   deriveBatteryConfig,
   getBatteryPreset,
 } from '@/lib/battery'
+import { parseVoltage } from '@/lib/boardSetup'
 
 type BatteryMode = BatteryConfig['mode']
 
@@ -186,7 +187,7 @@ export function BoardBatteryForm({
             value={manualMinVoltage}
             onChangeText={onChangeManualMinVoltage}
             placeholder="Min (0%)"
-            placeholderTextColor="#4b5563"
+            placeholderTextColor={theme.neutral.textDim}
             keyboardType="decimal-pad"
           />
           <TextInput
@@ -194,7 +195,7 @@ export function BoardBatteryForm({
             value={manualMaxVoltage}
             onChangeText={onChangeManualMaxVoltage}
             placeholder="Max (100%)"
-            placeholderTextColor="#4b5563"
+            placeholderTextColor={theme.neutral.textDim}
             keyboardType="decimal-pad"
           />
         </View>
@@ -207,13 +208,6 @@ export function BoardBatteryForm({
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values))
-}
-
-function parseVoltage(raw: string): number | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  const parsed = Number.parseFloat(trimmed)
-  return Number.isFinite(parsed) ? parsed : null
 }
 
 const styles = StyleSheet.create({
@@ -269,11 +263,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: '#1f2937',
+    backgroundColor: theme.neutral.surface,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    color: '#f9fafb',
+    color: theme.neutral.textPrimary,
     fontSize: 16,
   },
   voltageInput: {

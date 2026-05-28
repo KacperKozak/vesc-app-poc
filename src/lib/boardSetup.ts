@@ -1,6 +1,7 @@
 import type { BatteryConfig } from 'vesc-ble'
 
 import { BATTERY_CELL_PRESETS, deriveBatteryConfig } from '@/lib/battery'
+import { fmtVoltageRange } from '@/helpers/format'
 
 export type BatteryMode = BatteryConfig['mode']
 
@@ -57,7 +58,7 @@ export function getBatterySummary(
       hint: 'Tap to fix battery config',
     }
   }
-  const voltage = `${derivedBattery.minVoltage.toFixed(1)}-${derivedBattery.maxVoltage.toFixed(1)} V`
+  const voltage = fmtVoltageRange(derivedBattery.minVoltage, derivedBattery.maxVoltage)
   const nominalWh =
     derivedBattery.nominalWh != null ? `${Math.round(derivedBattery.nominalWh)} Wh nominal` : null
   if (batteryMode === 'manual') {
