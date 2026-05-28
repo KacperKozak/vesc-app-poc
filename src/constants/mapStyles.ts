@@ -50,7 +50,7 @@ export type MapStyleKey = (typeof MAP_STYLES)[number]['key']
 export const MAP_NAVIGATION_MODES = [
   { key: 'northUp', label: 'North up' },
   { key: 'gpsHeading', label: 'GPS heading' },
-  { key: 'phoneHeading', label: 'Phone heading' },
+  { key: 'phoneHeading', label: 'Compass' },
   { key: 'freeRotate', label: 'Free rotate' },
 ] as const
 

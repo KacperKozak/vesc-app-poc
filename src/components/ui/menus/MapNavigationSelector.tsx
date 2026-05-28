@@ -5,11 +5,13 @@ import {
   NavigationArrowIcon,
 } from 'phosphor-react-native'
 import { type ReactNode } from 'react'
-import { View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
 import { MapOptionSelector } from '@/components/ui/menus/MapOptionSelector'
 import { MAP_NAVIGATION_MODES, type MapNavigationMode } from '@/constants/mapStyles'
 import { theme } from '@/constants/theme'
+
+const COLLAPSED_ICON_COLOR = theme.neutral.textPrimary
 
 interface MapNavigationSelectorProps {
   activeMode: MapNavigationMode
@@ -33,15 +35,21 @@ export function MapNavigationSelector({
     }))
   const activeIcon =
     activeMode === 'northUp' ? (
-      <ArrowUpIcon size={21} color={theme.gps.text} weight="bold" />
+      <NorthAwareIcon>
+        <ArrowUpIcon size={21} color={COLLAPSED_ICON_COLOR} weight="bold" />
+      </NorthAwareIcon>
     ) : activeMode === 'gpsHeading' ? (
-      <NavigationArrowIcon size={21} color={theme.gps.text} weight="fill" />
+      <NorthAwareIcon northRotationDeg={-heading}>
+        <ForwardNavigationIcon size={21} color={COLLAPSED_ICON_COLOR} />
+      </NorthAwareIcon>
     ) : activeMode === 'phoneHeading' ? (
-      <DeviceMobileIcon size={21} color={theme.gps.text} weight="bold" />
+      <NorthAwareIcon northRotationDeg={-heading}>
+        <DeviceMobileIcon size={21} color={COLLAPSED_ICON_COLOR} weight="bold" />
+      </NorthAwareIcon>
     ) : (
-      <View style={{ transform: [{ rotate: `${-heading}deg` }] }}>
-        <ArrowUpIcon size={21} color={theme.gps.text} weight="bold" />
-      </View>
+      <NorthAwareIcon style={{ transform: [{ rotate: `${-heading}deg` }] }}>
+        <ArrowUpIcon size={21} color={COLLAPSED_ICON_COLOR} weight="bold" />
+      </NorthAwareIcon>
     )
 
   return (
@@ -50,7 +58,7 @@ export function MapNavigationSelector({
       activeIcon={activeIcon}
       activeColor={theme.gps.text}
       activeBackground={`${theme.gps.color}1f`}
-      collapsedAccessibilityLabel={`Navigation: ${activeMode === 'northUp' ? 'North up' : activeMode === 'gpsHeading' ? 'GPS heading' : activeMode === 'phoneHeading' ? 'Phone heading' : 'Free rotate'}`}
+      collapsedAccessibilityLabel={`Navigation: ${activeMode === 'northUp' ? 'North up' : activeMode === 'gpsHeading' ? 'GPS heading' : activeMode === 'phoneHeading' ? 'Compass' : 'Free rotate'}`}
       expanded={expanded}
       options={options}
       onToggle={onToggle}
@@ -61,10 +69,75 @@ export function MapNavigationSelector({
 
 function getNavigationIcon(mode: MapNavigationMode, activeMode: MapNavigationMode) {
   const color = activeMode === mode ? theme.gps.text : theme.neutral.textSecondary
-  if (mode === 'northUp') return <ArrowUpIcon size={20} color={color} weight="bold" />
+  if (mode === 'northUp') {
+    return <ArrowUpIcon size={20} color={color} weight="bold" />
+  }
   if (mode === 'gpsHeading') {
-    return <NavigationArrowIcon size={20} color={color} weight="fill" />
+    return <ForwardNavigationIcon size={20} color={color} />
   }
   if (mode === 'phoneHeading') return <DeviceMobileIcon size={20} color={color} weight="bold" />
   return <ArrowsClockwiseIcon size={20} color={color} weight="bold" />
 }
+
+interface NorthAwareIconProps {
+  children: ReactNode
+  compact?: boolean
+  northRotationDeg?: number
+  style?: object
+}
+
+function NorthAwareIcon({
+  children,
+  compact = false,
+  northRotationDeg = 0,
+  style,
+}: NorthAwareIconProps) {
+  return (
+    <View style={[styles.northAwareIcon, style]}>
+      <View style={[styles.northDotOrbit, { transform: [{ rotate: `${northRotationDeg}deg` }] }]}>
+        <View style={[styles.northDot, compact && styles.northDotCompact]} />
+      </View>
+      {children}
+    </View>
+  )
+}
+
+function ForwardNavigationIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <View style={styles.forwardNavigationIcon}>
+      <NavigationArrowIcon size={size} color={color} weight="fill" />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  northAwareIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  northDotOrbit: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+  },
+  northDot: {
+    position: 'absolute',
+    top: -8,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: theme.error.color,
+  },
+  northDotCompact: {
+    top: 1,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  forwardNavigationIcon: {
+    transform: [{ rotate: '45deg' }],
+  },
+})

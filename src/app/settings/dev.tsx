@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import {
   ChartLineUpIcon,
+  CompassIcon,
   ListIcon,
   SpeakerHighIcon,
   SwatchesIcon,
@@ -33,6 +34,12 @@ const devPages = [
     hint: 'PostHog status and manual events',
     route: routes.settingsDiagnostic,
     icon: ChartLineUpIcon,
+  },
+  {
+    label: 'Navigation diagnostics',
+    hint: 'Live map heading, GPS, and fallback evidence',
+    route: routes.settingsNavigationDiagnostic,
+    icon: CompassIcon,
   },
   {
     label: 'Event log',

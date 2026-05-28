@@ -31,15 +31,23 @@ describe('live follow camera profile', () => {
     })
   })
 
-  test('north-up follow keeps normal zoom profile', () => {
+  test('north-up follow keeps normal zoom profile and clears navigation padding', () => {
     expect(
       getLiveFollowCameraProfile({
         gpsCamera,
         followHeadingDeg: 0,
         gpsHeadingMode: false,
         perspectiveEnabled: true,
-      }).zoomLevel,
-    ).toBe(13)
+      }),
+    ).toMatchObject({
+      zoomLevel: 13,
+      padding: {
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+      },
+    })
   })
 
   test('manual heading zoom can stay below heading-mode default minimum', () => {

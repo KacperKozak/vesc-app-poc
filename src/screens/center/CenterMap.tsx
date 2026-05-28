@@ -38,7 +38,9 @@ import {
 } from '@/helpers/liveGpsPresentation'
 import { distanceMeters, makeCircleFeature, makeTrailLineString } from '@/helpers/mapGeometry'
 import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
+import { getNavigationFallbackReason } from '@/lib/map/navigationDiagnostics'
 import type { HistoryGpsSample, HistoryMarker } from '@/store/historyStore'
+import { useNavigationDiagnosticsStore } from '@/store/navigationDiagnosticsStore'
 import { useSettingsStore } from '@/store/settingsStore'
 
 import type { CenterViewState } from './centerViewState'
@@ -486,6 +488,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     ],
   )
   const { cameraFix, accuracyFix, accuracyRadiusM, directionBearingDeg } = gpsPresentation
+  const retainedGpsBearing = gpsPresentation.nextReliableBearing
   const gpsHeadingMode = mapNavigationMode === 'gpsHeading'
   const phoneHeadingMode = mapNavigationMode === 'phoneHeading'
   const phoneHeading = usePhoneHeading(phoneHeadingMode && !historyActive)
@@ -577,6 +580,36 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       : directionBearingDeg == null
         ? null
         : directionBearingDeg - cameraHeading
+  const updateNavigationDiagnostics = useNavigationDiagnosticsStore((s) => s.update)
+
+  useEffect(() => {
+    updateNavigationDiagnostics({
+      gpsFix,
+      retainedGpsBearingDeg: retainedGpsBearing?.bearingDeg ?? null,
+      retainedGpsBearingAt: retainedGpsBearing?.sourceTimestamp ?? null,
+      phoneHeadingDeg,
+      phoneHeadingStatus: phoneHeading.status,
+      activeDisplayHeadingDeg: gpsPinBearingDeg,
+      cameraHeadingDeg: cameraHeading,
+      fallbackReason: getNavigationFallbackReason({
+        mapNavigationMode,
+        gpsFix,
+        retainedGpsBearingDeg: retainedGpsBearing?.bearingDeg ?? null,
+        phoneHeadingDeg,
+        phoneHeadingStatus: phoneHeading.status,
+      }),
+    })
+  }, [
+    cameraHeading,
+    gpsFix,
+    gpsPinBearingDeg,
+    mapNavigationMode,
+    phoneHeading.status,
+    phoneHeadingDeg,
+    retainedGpsBearing?.bearingDeg,
+    retainedGpsBearing?.sourceTimestamp,
+    updateNavigationDiagnostics,
+  ])
 
   useEffect(() => {
     if (previousMapStyleKeyRef.current === mapStyleKey) return

@@ -52,7 +52,7 @@ describe('phoneHeading', () => {
     expect(phoneHeadingFromDeviceMotion(motion(0, RIGHT_LANDSCAPE))).toBe(90)
   })
 
-  test('smooths phone heading across the shortest wrap-around path', () => {
+  test('smooths compass heading across the shortest wrap-around path', () => {
     expect(smoothPhoneHeading(null, 90)).toBe(90)
     expect(smoothPhoneHeading(350, 10)).toBeCloseTo(356.44)
     expect(smoothPhoneHeading(10, 350)).toBeCloseTo(3.56)

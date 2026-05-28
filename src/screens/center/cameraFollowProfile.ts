@@ -57,21 +57,26 @@ export function getLiveFollowCameraProfile({
     gpsHeadingMode && enforceHeadingMinimums
       ? Math.max(getPitchForZoom(zoomLevel, perspectiveEnabled), GPS_HEADING_MIN_PITCH)
       : getPitchForZoom(zoomLevel, perspectiveEnabled)
+  const padding =
+    gpsHeadingMode && viewportHeight != null
+      ? {
+          paddingTop: Math.round(viewportHeight * GPS_HEADING_VERTICAL_OFFSET_RATIO),
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+        }
+      : {
+          paddingTop: 0,
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+        }
 
   return {
     ...gpsCamera,
     zoomLevel,
     heading: followHeadingDeg,
     pitch: perspectiveEnabled ? pitch : 0,
-    ...(gpsHeadingMode && viewportHeight != null
-      ? {
-          padding: {
-            paddingTop: Math.round(viewportHeight * GPS_HEADING_VERTICAL_OFFSET_RATIO),
-            paddingRight: 0,
-            paddingBottom: 0,
-            paddingLeft: 0,
-          },
-        }
-      : {}),
+    padding,
   }
 }
