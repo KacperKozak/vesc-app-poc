@@ -236,6 +236,20 @@ export function useCameraControls({
     viewportHeight,
   ])
 
+  const applyLiveFollowCamera = useCallback(
+    (animationDuration: number) => {
+      if (!cameraFix) return
+      const followCamera = getLiveFollowCamera()
+      lastFollowKeyRef.current = liveFollowKey(cameraFix.timestamp, followCamera)
+      cameraRef.current?.setCamera({
+        ...followCamera,
+        animationDuration,
+        animationMode: 'easeTo',
+      })
+    },
+    [cameraFix, getLiveFollowCamera],
+  )
+
   const getHistoryPreviewCamera = useCallback(
     (coordinate: { latitude: number; longitude: number }) => ({
       centerCoordinate: [coordinate.longitude, coordinate.latitude] as [number, number],
@@ -399,6 +413,9 @@ export function useCameraControls({
           MAP_DEFAULTS.maxZoom,
         )
         setFollowZoomLevel(zoomLevel)
+        if (followGps && !historyActive) {
+          applyLiveFollowCamera(0)
+        }
       },
       endPreviewZoom() {
         previewZoomBaseRef.current = null
@@ -443,10 +460,12 @@ export function useCameraControls({
       },
     }),
     [
+      applyLiveFollowCamera,
       followGps,
       followHeadingDeg,
       gpsCamera,
       gpsHeadingMode,
+      historyActive,
       onHeadingChange,
       onPerspectiveChange,
       perspectiveEnabled,
@@ -464,16 +483,14 @@ export function useCameraControls({
     const followCamera = getLiveFollowCamera()
     const nextFollowKey = liveFollowKey(cameraFix.timestamp, followCamera)
     if (lastFollowKeyRef.current === nextFollowKey) return
-    lastFollowKeyRef.current = nextFollowKey
-    cameraRef.current?.setCamera({
-      ...followCamera,
-      animationDuration: cameraMoveDuration(
+    applyLiveFollowCamera(
+      cameraMoveDuration(
         cameraDistanceTo(currentCameraRef.current, cameraFix),
         followAnimationDuration,
       ),
-      animationMode: 'easeTo',
-    })
+    )
   }, [
+    applyLiveFollowCamera,
     cameraFix,
     followAnimationDuration,
     followGps,
