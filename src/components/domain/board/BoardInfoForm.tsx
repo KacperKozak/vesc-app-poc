@@ -1,5 +1,6 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { theme } from '@/constants/theme'
+import { Input } from '@/components/ui/forms/Input'
 
 interface BoardInfoFormProps {
   name: string
@@ -17,8 +18,7 @@ export function BoardInfoForm({
   return (
     <View style={styles.form}>
       <Text style={styles.label}>Board name</Text>
-      <TextInput
-        style={styles.input}
+      <Input
         value={name}
         onChangeText={onChangeName}
         placeholder="e.g. FloBoard Pro"
@@ -26,8 +26,8 @@ export function BoardInfoForm({
         returnKeyType="next"
       />
       <Text style={styles.label}>Description</Text>
-      <TextInput
-        style={[styles.input, styles.inputMultiline]}
+      <Input
+        style={styles.inputMultiline}
         value={description}
         onChangeText={onChangeDescription}
         placeholder="Optional notes about this board"
@@ -50,14 +50,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-  },
-  input: {
-    backgroundColor: theme.neutral.surface,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    color: theme.neutral.textPrimary,
-    fontSize: 16,
   },
   inputMultiline: {
     minHeight: 84,

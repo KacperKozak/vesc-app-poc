@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { BatteryConfig } from 'vesc-ble'
 
 import { Select, type SelectOption } from '@/components/ui/forms/Select'
 import { Stepper } from '@/components/ui/forms/Stepper'
+import { Input } from '@/components/ui/forms/Input'
 import { theme } from '@/constants/theme'
 import {
   BATTERY_CELL_PRESETS,
@@ -182,16 +183,16 @@ export function BoardBatteryForm({
         </>
       ) : (
         <View style={styles.selectGrid}>
-          <TextInput
-            style={[styles.input, styles.voltageInput]}
+          <Input
+            style={styles.voltageInput}
             value={manualMinVoltage}
             onChangeText={onChangeManualMinVoltage}
             placeholder="Min (0%)"
             placeholderTextColor={theme.neutral.textDim}
             keyboardType="decimal-pad"
           />
-          <TextInput
-            style={[styles.input, styles.voltageInput]}
+          <Input
+            style={styles.voltageInput}
             value={manualMaxVoltage}
             onChangeText={onChangeManualMaxVoltage}
             placeholder="Max (100%)"
@@ -261,14 +262,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-  },
-  input: {
-    backgroundColor: theme.neutral.surface,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    color: theme.neutral.textPrimary,
-    fontSize: 16,
   },
   voltageInput: {
     flex: 1,

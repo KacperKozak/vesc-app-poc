@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Modal, Pressable, TextInput, Text, View, StyleSheet } from 'react-native'
+import { Modal, Pressable, Text, View, StyleSheet } from 'react-native'
 import { CheckIcon } from 'phosphor-react-native'
 import { theme } from '@/constants/theme'
+import { Input } from '@/components/ui/forms/Input'
 
 interface TextPromptModalContentProps {
   title: string
@@ -25,12 +26,12 @@ function TextPromptModalContent({
     <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
       <Pressable style={styles.promptModal} onPress={(e) => e.stopPropagation()}>
         <Text style={styles.promptTitle}>{title}</Text>
-        <TextInput
+        <Input
           style={styles.promptInput}
           value={text}
           onChangeText={setText}
           placeholder={placeholder}
-          placeholderTextColor="#475569"
+          placeholderTextColor={theme.neutral.textDim}
           autoFocus
           selectTextOnFocus
         />
@@ -109,13 +110,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   promptInput: {
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
-    color: theme.neutral.textPrimary,
-    paddingHorizontal: 12,
     fontSize: 16,
     fontWeight: '700',
   },

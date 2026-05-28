@@ -7,13 +7,13 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from 'expo-router'
 import { theme } from '@/constants/theme'
+import { Input } from '@/components/ui/forms/Input'
 
 import { Button } from '@/components/ui/base/Button'
 import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
@@ -464,12 +464,12 @@ export default function PrivacyZonesScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setAddNameVisible(false)}>
           <Pressable style={styles.modalCard} onPress={() => undefined}>
             <Text style={styles.modalTitle}>Zone name</Text>
-            <TextInput
+            <Input
               style={styles.modalInput}
               value={addNameText}
               onChangeText={setAddNameText}
               placeholder="e.g. Gym, Work 2"
-              placeholderTextColor="#475569"
+              placeholderTextColor={theme.neutral.textDim}
               autoFocus
               maxLength={32}
               onSubmitEditing={handleAddConfirm}
@@ -502,12 +502,12 @@ export default function PrivacyZonesScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setRenameTarget(null)}>
           <Pressable style={styles.modalCard} onPress={() => undefined}>
             <Text style={styles.modalTitle}>Rename zone</Text>
-            <TextInput
+            <Input
               style={styles.modalInput}
               value={renameText}
               onChangeText={setRenameText}
               placeholder="Zone name"
-              placeholderTextColor="#475569"
+              placeholderTextColor={theme.neutral.textDim}
               autoFocus
               maxLength={32}
               onSubmitEditing={() => void handleRenameConfirm()}
@@ -628,14 +628,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modalInput: {
-    backgroundColor: theme.neutral.surfaceDeep,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
     borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: theme.neutral.textPrimary,
-    fontSize: 15,
     fontWeight: '500',
   },
   modalActions: {

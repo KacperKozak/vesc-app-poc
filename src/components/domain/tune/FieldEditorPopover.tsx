@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { CheckIcon, XIcon } from 'phosphor-react-native'
 
 import { Dropdown } from '@/components/ui/forms/Dropdown'
+import { Input } from '@/components/ui/forms/Input'
 import { TuneDial } from '@/components/ui/tune/TuneDial'
 import { theme } from '@/constants/theme'
 import { snapValue } from '@/lib/tune/sliderDefinitions'
@@ -87,7 +88,7 @@ function FieldEditorPopoverInner({ target, onCancel, onApply }: FieldEditorPopov
           {target.help}
         </Text>
 
-        <TextInput
+        <Input
           style={styles.input}
           value={draftText}
           keyboardType="numeric"
@@ -187,12 +188,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
-    color: theme.neutral.textPrimary,
-    paddingHorizontal: 12,
+    paddingVertical: 0,
     fontSize: 18,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],

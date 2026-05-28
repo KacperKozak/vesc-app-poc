@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useCallback, useMemo, useState } from 'react'
 
 import { Dropdown, useTriggerRef } from '@/components/ui/forms/Dropdown'
+import { Input } from '@/components/ui/forms/Input'
 import { Select, type SelectOption } from '@/components/ui/forms/Select'
 import { SoundPicker } from '@/components/ui/forms/SoundPicker'
 import { ShowcaseCard } from '@/components/ui/dev/ShowcaseCard'
@@ -26,6 +27,32 @@ function SelectShowcase() {
   return (
     <ShowcaseCard name="Select">
       <Select options={options} value={value} onChange={setValue} placeholder="Choose metric…" />
+    </ShowcaseCard>
+  )
+}
+
+function InputShowcase() {
+  const [text, setText] = useState('')
+  return (
+    <ShowcaseCard name="Input">
+      <Input value={text} onChangeText={setText} placeholder="Type something…" />
+    </ShowcaseCard>
+  )
+}
+
+function TextareaShowcase() {
+  const [text, setText] = useState('')
+  return (
+    <ShowcaseCard name="Textarea (Input multiline)">
+      <Input
+        value={text}
+        onChangeText={setText}
+        placeholder="Multi-line text…"
+        multiline
+        numberOfLines={3}
+        textAlignVertical="top"
+        style={{ minHeight: 84, paddingTop: 12 }}
+      />
     </ShowcaseCard>
   )
 }
@@ -81,6 +108,8 @@ export default function FormsPage() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
+        <InputShowcase />
+        <TextareaShowcase />
         <SelectShowcase />
         <DropdownShowcase />
         <SoundPickerShowcase />

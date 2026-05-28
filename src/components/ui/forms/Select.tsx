@@ -4,6 +4,7 @@ import { CaretDownIcon, CheckIcon } from 'phosphor-react-native'
 
 import { interaction, theme } from '@/constants/theme'
 import { Dropdown } from './Dropdown'
+import { inputBase } from './Input'
 
 const MAX_DROPDOWN_HEIGHT = 280
 
@@ -84,20 +85,17 @@ export function Select<T extends string = string>({
 
 const styles = StyleSheet.create({
   trigger: {
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: theme.neutral.surface,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
-    paddingHorizontal: 14,
+    ...inputBase,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    paddingVertical: 0,
+    height: 42,
   },
   triggerText: {
     color: theme.neutral.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     flex: 1,
   },
