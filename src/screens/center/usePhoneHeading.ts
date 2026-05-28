@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { deviceMotionPhoneHeadingAdapter } from './deviceMotionPhoneHeadingAdapter'
 import {
-  deviceMotionPhoneHeadingAdapter,
   smoothPhoneHeading,
   startPhoneHeadingUpdates,
   type PhoneHeadingAdapter,

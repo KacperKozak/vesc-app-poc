@@ -31,15 +31,6 @@ export interface PhoneHeadingSubscription {
   remove: () => void
 }
 
-export const deviceMotionPhoneHeadingAdapter: PhoneHeadingAdapter = {
-  isAvailableAsync: () => require('expo-sensors').DeviceMotion.isAvailableAsync(),
-  getPermissionsAsync: () => require('expo-sensors').DeviceMotion.getPermissionsAsync(),
-  requestPermissionsAsync: () => require('expo-sensors').DeviceMotion.requestPermissionsAsync(),
-  setUpdateInterval: (intervalMs) =>
-    require('expo-sensors').DeviceMotion.setUpdateInterval(intervalMs),
-  addListener: (listener) => require('expo-sensors').DeviceMotion.addListener(listener),
-}
-
 function normalizeHeading(degrees: number): number {
   return ((degrees % 360) + 360) % 360
 }
