@@ -37,7 +37,7 @@ import {
   getReliableGpsBearingFromFixes,
 } from '@/helpers/liveGpsPresentation'
 import { distanceMeters, makeCircleFeature, makeTrailLineString } from '@/helpers/mapGeometry'
-import { findNearestSampleIndexByTime } from '@/lib/history/playback'
+import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
 import type { HistoryGpsSample, HistoryMarker } from '@/store/historyStore'
 import { useSettingsStore } from '@/store/settingsStore'
 
@@ -289,21 +289,18 @@ function HistoryMapLayers({
           color={MAP_DEFAULTS.markerColor}
         />
       )}
-      {rideMarkers.map((marker) => {
-        const idx = findNearestSampleIndexByTime(rideGpsSamples, marker.occurredAtMs)
-        const gps = idx >= 0 ? rideGpsSamples[idx] : null
-        if (!gps) return null
-        return (
+      {resolveMarkerRenderData(rideMarkers, rideGpsSamples).map(
+        ({ marker, gps, renderCoordinate }) => (
           <MapPin
             key={marker.id}
             id={`center-ride-marker-${marker.id}`}
-            coordinate={[gps.longitude, gps.latitude]}
+            coordinate={renderCoordinate}
             color={HISTORY_MARKER_COLORS[marker.type]}
             icon={HISTORY_MARKER_ICONS[marker.type]}
             onSelected={() => onSelectMarker({ marker, gps })}
           />
-        )
-      })}
+        ),
+      )}
     </>
   )
 }
