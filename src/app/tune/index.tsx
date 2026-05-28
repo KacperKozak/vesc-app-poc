@@ -1,27 +1,15 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { useCallback, useLayoutEffect, useRef } from 'react'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useNavigation, useRouter } from 'expo-router'
 import {
   ArrowsClockwiseIcon,
   BluetoothSlashIcon,
-  CheckIcon,
   ClockCounterClockwiseIcon,
   CopyIcon,
   FadersIcon,
-  InfoIcon,
   PencilSimpleIcon,
   TrashIcon,
   WarningCircleIcon,
-  XIcon,
 } from 'phosphor-react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { type TuneProfile, type RefloatConfigField, type TuneProfileFieldValue } from 'vesc-ble'
@@ -38,7 +26,9 @@ import { TuneConfigCell } from '@/components/tune/TuneConfigCell'
 import { TuneGroupGrid } from '@/components/tune/TuneGroupGrid'
 import { TuneSyncBar } from '@/components/tune/TuneSyncBar'
 import { routes } from '@/navigation/routes'
-import { type Board } from '@/store/boardStore'
+import { TextPromptModal } from '@/components/TextPromptModal'
+import { BoardPickerModal } from '@/components/tune/BoardPickerModal'
+import { InfoBadge } from '@/components/tune/InfoBadge'
 import { useTuneProfileStore } from '@/store/tuneProfileStore'
 import type { BasicSliderItem } from '@/tune/sliderDefinitions'
 import { useTuneScreenData } from '@/tune/useTuneScreenData'
@@ -439,25 +429,6 @@ export default function TuneScreen() {
   )
 }
 
-function InfoBadge({
-  label,
-  danger = false,
-  onPress,
-}: {
-  label: string
-  danger?: boolean
-  onPress: () => void
-}) {
-  return (
-    <Pressable style={[styles.metaBadge, danger && styles.metaBadgeDanger]} onPress={onPress}>
-      <Text style={[styles.metaText, danger && styles.metaTextDanger]} selectable>
-        {label}
-      </Text>
-      <InfoIcon size={12} color={danger ? '#fecaca' : '#64748b'} weight="bold" />
-    </Pressable>
-  )
-}
-
 function BasicSliderItemCell({
   item,
   editable,
@@ -525,85 +496,6 @@ function TuneFieldCell({
   )
 }
 
-function TextPromptModal({
-  visible,
-  title,
-  placeholder,
-  initialValue,
-  confirmLabel,
-  onConfirm,
-  onDismiss,
-}: {
-  visible: boolean
-  title: string
-  placeholder?: string
-  initialValue: string
-  confirmLabel: string
-  onConfirm: (value: string) => void
-  onDismiss: () => void
-}) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
-      {visible ? (
-        <TextPromptModalContent
-          title={title}
-          placeholder={placeholder}
-          initialValue={initialValue}
-          confirmLabel={confirmLabel}
-          onConfirm={onConfirm}
-          onDismiss={onDismiss}
-        />
-      ) : null}
-    </Modal>
-  )
-}
-
-function TextPromptModalContent({
-  title,
-  placeholder,
-  initialValue,
-  confirmLabel,
-  onConfirm,
-  onDismiss,
-}: {
-  title: string
-  placeholder?: string
-  initialValue: string
-  confirmLabel: string
-  onConfirm: (value: string) => void
-  onDismiss: () => void
-}) {
-  const [text, setText] = useState(initialValue)
-  return (
-    <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
-      <Pressable style={styles.promptModal} onPress={(e) => e.stopPropagation()}>
-        <Text style={styles.promptTitle}>{title}</Text>
-        <TextInput
-          style={styles.promptInput}
-          value={text}
-          onChangeText={setText}
-          placeholder={placeholder}
-          placeholderTextColor="#475569"
-          autoFocus
-          selectTextOnFocus
-        />
-        <View style={styles.promptActions}>
-          <Pressable style={styles.promptCancelBtn} onPress={onDismiss}>
-            <Text style={styles.promptCancelText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            style={styles.promptConfirmBtn}
-            onPress={() => text.trim() && onConfirm(text.trim())}
-          >
-            <CheckIcon size={15} color="#020617" weight="bold" />
-            <Text style={styles.promptConfirmText}>{confirmLabel}</Text>
-          </Pressable>
-        </View>
-      </Pressable>
-    </Pressable>
-  )
-}
-
 function RenameProfileModal({
   profile,
   onRename,
@@ -622,46 +514,6 @@ function RenameProfileModal({
       onConfirm={onRename}
       onDismiss={onDismiss}
     />
-  )
-}
-
-function BoardPickerModal({
-  visible,
-  boards,
-  onSelect,
-  onDismiss,
-}: {
-  visible: boolean
-  boards: Board[]
-  onSelect: (board: Board) => void
-  onDismiss: () => void
-}) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
-      <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
-        <Pressable style={styles.promptModal} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.promptHeader}>
-            <Text style={styles.promptTitle}>Copy to board</Text>
-            <Pressable style={styles.promptCloseBtn} onPress={onDismiss}>
-              <XIcon size={14} color="#cbd5e1" weight="bold" />
-            </Pressable>
-          </View>
-          {boards.length === 0 ? (
-            <Text style={styles.emptyText}>No other boards available.</Text>
-          ) : (
-            boards.map((board) => (
-              <Pressable
-                key={board.id}
-                style={styles.boardPickerItem}
-                onPress={() => onSelect(board)}
-              >
-                <Text style={styles.boardPickerText}>{board.name}</Text>
-              </Pressable>
-            ))
-          )}
-        </Pressable>
-      </Pressable>
-    </Modal>
   )
 }
 
@@ -746,127 +598,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
-  },
-  metaBadge: {
-    minHeight: 30,
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  metaBadgeDanger: {
-    backgroundColor: theme.error.bg,
-    borderColor: theme.error.border,
-  },
-  metaText: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  metaTextDanger: {
-    color: '#fee2e2',
-  },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(2, 6, 23, 0.72)',
-    padding: 32,
-  },
-  promptModal: {
-    width: '100%',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-    padding: 16,
-    gap: 14,
-  },
-  promptHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  promptTitle: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  promptCloseBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0f172a',
-  },
-  promptInput: {
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    backgroundColor: '#0f172a',
-    color: '#f8fafc',
-    paddingHorizontal: 12,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  promptActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-  },
-  promptCancelBtn: {
-    minHeight: 40,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  promptCancelText: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  promptConfirmBtn: {
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: theme.wheel.color,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  promptConfirmText: {
-    color: '#020617',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  boardPickerItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#0f172a',
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  boardPickerText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  emptyText: {
-    color: '#64748b',
-    fontSize: 13,
-    textAlign: 'center',
-    paddingVertical: 16,
   },
 })
