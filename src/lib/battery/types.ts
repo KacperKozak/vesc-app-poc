@@ -1,10 +1,5 @@
 import type { BatteryConfig, BatteryPresetConfig } from 'vesc-ble'
 
-export interface BatterySocPoint {
-  voltage: number
-  soc: number
-}
-
 export interface BatteryCellPreset {
   id: string
   formFactor: string
@@ -18,7 +13,6 @@ export interface BatteryCellPreset {
   capacityAh: number
   maxContinuousDischargeA?: number
   verified: boolean
-  socCurve: BatterySocPoint[]
 }
 
 export interface DerivedBatteryConfig {

@@ -124,6 +124,7 @@ export interface TelemetryEvent {
   balanceCurrent: number
   speed: number
   batteryVoltage: number
+  batteryPercent: number | null
   motorCurrent: number
   batteryCurrent: number
   erpm: number

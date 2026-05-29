@@ -19,6 +19,7 @@ import java.io.File
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
+import expo.modules.vescble.telemetry.BatterySocEstimator
 import expo.modules.vescble.telemetry.BucketTelemetryPoint
 import expo.modules.vescble.telemetry.FullTelemetryState
 import expo.modules.vescble.telemetry.METRIC_AVG_SPEED
@@ -323,6 +324,8 @@ class VescForegroundService : Service() {
     }
 
     private var boardConfig: SessionConfig? = null
+    @Volatile
+    private var batteryConfigCache: Map<String, Any?>? = null
     private var boardStatus: BoardPhase = BoardPhase.Idle
     private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
@@ -511,6 +514,7 @@ class VescForegroundService : Service() {
         directConnection = false
         boardError = null
         telemetry = null
+        loadBatteryConfig(start.boardConfig.appBoardId)
         recentTelemetry.clear()
         liveTelemetryPoints.clear()
         packetReassembler.reset()
@@ -762,6 +766,10 @@ class VescForegroundService : Service() {
                 val baseEventMap = parsed.toMap().toMutableMap()
                 if (firedAlerts.isNotEmpty()) baseEventMap["firedAlerts"] = firedAlerts
                 baseEventMap["generation"] = generation
+                baseEventMap["batteryPercent"] = BatterySocEstimator.estimateBatteryPercent(
+                    parsed.batteryVoltage,
+                    batteryConfigCache,
+                )
                 val eventMap = appendLiveTelemetry(parsed, baseEventMap)
                 showNotification(
                     formatNotificationText(parsed),
@@ -1909,6 +1917,24 @@ class VescForegroundService : Service() {
         } catch (e: Exception) {
             Log.w(VESC_SESSION_TAG, "Failed to load alert rules: ${e.message}")
             alertRules = emptyList()
+        }
+    }
+
+    private fun loadBatteryConfig(appBoardId: String?) {
+        if (appBoardId == null) {
+            batteryConfigCache = null
+            return
+        }
+        batteryConfigCache = try {
+            val board = kotlinx.coroutines.runBlocking {
+                AppDataRepository.get(applicationContext).getBoard(appBoardId)
+            }
+            board?.get("batteryConfig") as? Map<String, Any?>
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(VESC_SESSION_TAG, "Failed to load battery config: ${e.message}")
+            null
         }
     }
 

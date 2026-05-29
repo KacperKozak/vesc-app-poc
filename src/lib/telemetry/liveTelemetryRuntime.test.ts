@@ -14,6 +14,7 @@ function telemetry(overrides: Partial<TelemetryEvent> = {}): TelemetryEvent {
     balanceCurrent: 4,
     speed: -15,
     batteryVoltage: 48,
+    batteryPercent: null,
     motorCurrent: 20,
     batteryCurrent: 7,
     erpm: 1000,

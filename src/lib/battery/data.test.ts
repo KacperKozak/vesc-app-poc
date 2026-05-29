@@ -31,23 +31,6 @@ describe('BATTERY_CELL_PRESETS', () => {
       expect(preset.model).toBeTruthy()
       expect(preset.chemistry).toBeTruthy()
       expect(preset.capacityAh).toBeGreaterThan(0)
-      expect(preset.socCurve.length).toBeGreaterThan(0)
-    }
-  })
-
-  test('all presets have a valid socCurve', () => {
-    for (const preset of BATTERY_CELL_PRESETS) {
-      const curve = preset.socCurve
-      expect(curve.length).toBeGreaterThanOrEqual(2)
-
-      expect(curve[0].soc).toBe(100)
-      expect(curve[curve.length - 1].soc).toBe(0)
-
-      for (const point of curve) {
-        expect(point.voltage).toBeGreaterThan(0)
-        expect(point.soc).toBeGreaterThanOrEqual(0)
-        expect(point.soc).toBeLessThanOrEqual(100)
-      }
     }
   })
 })
