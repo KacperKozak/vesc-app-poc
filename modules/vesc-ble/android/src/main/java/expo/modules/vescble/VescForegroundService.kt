@@ -16,6 +16,10 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import java.io.File
+import expo.modules.vescble.runtime.BoardSession
+import expo.modules.vescble.runtime.Cancellable
+import expo.modules.vescble.runtime.HandlerScheduler
+import expo.modules.vescble.runtime.Scheduler
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
@@ -293,6 +297,7 @@ class VescForegroundService : Service() {
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scheduler: Scheduler = HandlerScheduler(mainHandler)
     private val packetReassembler = VescPacketReassembler()
     private val rttHistory = ArrayDeque<Long>()
     private val notificationController by lazy {
@@ -332,11 +337,11 @@ class VescForegroundService : Service() {
     private var canId: Int? = null
     private var directConnection = false
     private var fwVersionString: String? = null
-    private var connectTimeout: Runnable? = null
-    private var boardReadyTimeout: Runnable? = null
+    private var connectTimeoutHandle: Cancellable? = null
+    private var boardReadyTimeoutHandle: Cancellable? = null
     private var pendingConnect: PendingStart? = null
-    private var pollRunnable: Runnable? = null
-    private var telemetryStaleRunnable: Runnable? = null
+    private var pollHandle: Cancellable? = null
+    private var telemetryStaleHandle: Cancellable? = null
     private var lastPollAt = 0L
     private var lastTelemetryAt = 0L
     private var connectAttempt = 0
@@ -347,20 +352,22 @@ class VescForegroundService : Service() {
     private var latestPreciseLocation: LocationSnapshot? = null
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
-    private var autoReconnectRunnable: Runnable? = null
-    private var canPingTimeoutRunnable: Runnable? = null
+    private var autoReconnectHandle: Cancellable? = null
+    private var canPingTimeoutHandle: Cancellable? = null
     private var reconnectScanCallback: ScanCallback? = null
-    private var reconnectScanTimeout: Runnable? = null
+    private var reconnectScanTimeoutHandle: Cancellable? = null
     private var activeConfigRead: ActiveConfigRead? = null
     private var activeConfigWrite: ActiveConfigWrite? = null
-    private var configTimeoutRunnable: Runnable? = null
+    private var configTimeoutHandle: Cancellable? = null
     private var autoReconnectAttempt = 0
     private var telemetryParseFailedReported = false
     private var telemetryParseFailedCount = 0
     private var lastSentCommand: Int? = null
     private var lastReceivedCommandByte: Int? = null
     private var connectionLostMarkerAt: Long? = null
-    private var generation = 0L
+    private var boardSession: BoardSession? = null
+    private var sessionSequence: Long = 0L
+    private val currentSessionId: Long get() = boardSession?.id ?: sessionSequence
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private var metricSanitizerConfig = MetricSanitizerConfig()
     private val isPollingCapable get() = isPollingCapable(canId, directConnection)
@@ -457,7 +464,7 @@ class VescForegroundService : Service() {
             )
             return
         }
-        val wasPolling = pollRunnable != null
+        val wasPolling = pollHandle != null
         stopPolling()
         activeConfigRead = ActiveConfigRead(
             pending = pending,
@@ -509,7 +516,8 @@ class VescForegroundService : Service() {
         refreshLiveHistoryLimit()
         VescForegroundService.reloadAlertRules(applicationContext)
         boardConfig = start.boardConfig
-        generation += 1
+        sessionSequence += 1
+        boardSession = BoardSession(id = sessionSequence)
         canId = start.boardConfig.canId
         directConnection = false
         boardError = null
@@ -614,7 +622,7 @@ class VescForegroundService : Service() {
             } else if (wasConnecting != null) {
                 if (status == 133 && connectAttempt < 2) {
                     Log.w(VESC_SESSION_TAG, "status=133 during connect, retrying once")
-                    mainHandler.postDelayed({ startBleSession(wasConnecting) }, 250)
+                    scheduler.postDelayed(250L) { startBleSession(wasConnecting) }
                 } else if (wasConnecting.boardConfig.autoReconnect) {
                     captureDiagnostic(
                         "ble_connect_failed",
@@ -692,8 +700,8 @@ class VescForegroundService : Service() {
         if (canId != null) {
             startPolling()
         } else {
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 300)
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 1_200)
+            scheduler.postDelayed(300L) { sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }
+            scheduler.postDelayed(1_200L) { sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }
             armCanPingTimeout()
         }
         armBoardReadyTimeout(start.boardConfig)
@@ -765,7 +773,7 @@ class VescForegroundService : Service() {
                 val firedAlerts = evaluateAlerts(parsed)
                 val baseEventMap = parsed.toMap().toMutableMap()
                 if (firedAlerts.isNotEmpty()) baseEventMap["firedAlerts"] = firedAlerts
-                baseEventMap["generation"] = generation
+                baseEventMap["generation"] = currentSessionId
                 baseEventMap["batteryPercent"] = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
@@ -959,15 +967,14 @@ class VescForegroundService : Service() {
 
     private fun armConfigTimeout(code: RefloatConfigErrorCode, timeoutMs: Long) {
         clearConfigTimeout()
-        configTimeoutRunnable = Runnable {
+        configTimeoutHandle = scheduler.postDelayed(timeoutMs) {
             failConfigRead(code, "Timed out reading Refloat config")
         }
-        mainHandler.postDelayed(configTimeoutRunnable!!, timeoutMs)
     }
 
     private fun clearConfigTimeout() {
-        configTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        configTimeoutRunnable = null
+        configTimeoutHandle?.cancel()
+        configTimeoutHandle = null
     }
 
     private fun completeConfigRead(snapshot: RefloatConfigSnapshot) {
@@ -983,7 +990,7 @@ class VescForegroundService : Service() {
             } catch (e: Exception) {
                 Log.w(VESC_SESSION_TAG, "Failed to auto-create main tune profile", e)
             }
-            mainHandler.post {
+            scheduler.post {
                 active.pending.onSuccess(snapshot.toMap())
             }
         }
@@ -1050,7 +1057,7 @@ class VescForegroundService : Service() {
                 null
             }
             if (profile == null) {
-                mainHandler.post {
+                scheduler.post {
                     pending.onError(
                         RefloatConfigErrorCode.PROFILE_NOT_FOUND.name,
                         "Tune profile not found: ${pending.profileId}",
@@ -1060,7 +1067,7 @@ class VescForegroundService : Service() {
             }
             @Suppress("UNCHECKED_CAST")
             val fields = (profile["fields"] as? Map<String, Any>) ?: emptyMap()
-            mainHandler.post {
+            scheduler.post {
                 if (activeConfigRead != null || activeConfigWrite != null) {
                     pending.onError(
                         RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
@@ -1092,7 +1099,7 @@ class VescForegroundService : Service() {
                     )
                     return@post
                 }
-                val wasPolling = pollRunnable != null
+                val wasPolling = pollHandle != null
                 stopPolling()
                 activeConfigWrite = ActiveConfigWrite(
                     pending = pending,
@@ -1266,7 +1273,7 @@ class VescForegroundService : Service() {
             } catch (e: Exception) {
                 Log.w(VESC_SESSION_TAG, "Failed to update profile after push", e)
             }
-            mainHandler.post {
+            scheduler.post {
                 active.pending.onSuccess(verifiedSnapshot.toMap())
             }
         }
@@ -1315,27 +1322,31 @@ class VescForegroundService : Service() {
                 2,
             )
         }
-        pollRunnable = object : Runnable {
-            override fun run() {
+        fun scheduleNext() {
+            pollHandle = scheduler.postDelayed(session.pollIntervalMs) {
                 lastPollAt = System.currentTimeMillis()
                 sendPayloadWithRetry(pollPayload)
-                mainHandler.postDelayed(this, session.pollIntervalMs)
+                scheduleNext()
             }
         }
-        mainHandler.post(pollRunnable!!)
+        pollHandle = scheduler.post {
+            lastPollAt = System.currentTimeMillis()
+            sendPayloadWithRetry(pollPayload)
+            scheduleNext()
+        }
     }
 
     private fun stopPolling() {
-        pollRunnable?.let { mainHandler.removeCallbacks(it) }
-        pollRunnable = null
-        telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
-        telemetryStaleRunnable = null
+        pollHandle?.cancel()
+        pollHandle = null
+        telemetryStaleHandle?.cancel()
+        telemetryStaleHandle = null
     }
 
     private fun armCanPingTimeout() {
         cancelCanPingTimeout()
-        canPingTimeoutRunnable = Runnable {
-            canPingTimeoutRunnable = null
+        canPingTimeoutHandle = scheduler.postDelayed(CAN_PING_TIMEOUT) {
+            canPingTimeoutHandle = null
             if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
                 Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
                 directConnection = true
@@ -1343,12 +1354,11 @@ class VescForegroundService : Service() {
                 startPolling()
             }
         }
-        mainHandler.postDelayed(canPingTimeoutRunnable!!, CAN_PING_TIMEOUT)
     }
 
     private fun cancelCanPingTimeout() {
-        canPingTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        canPingTimeoutRunnable = null
+        canPingTimeoutHandle?.cancel()
+        canPingTimeoutHandle = null
     }
 
     private fun boardReadyTimeoutMs(): Long = boardReadyTimeoutMs(autoReconnectAttempt)
@@ -1357,8 +1367,8 @@ class VescForegroundService : Service() {
         if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
         val timeoutMs = boardReadyTimeoutMs()
-        boardReadyTimeout = Runnable {
-            boardReadyTimeout = null
+        boardReadyTimeoutHandle = scheduler.postDelayed(timeoutMs) {
+            boardReadyTimeoutHandle = null
             if (
                 (boardStatus == BoardPhase.Connecting || boardStatus == BoardPhase.WaitingForTelemetry) &&
                 boardConfig?.autoReconnect == true &&
@@ -1376,12 +1386,11 @@ class VescForegroundService : Service() {
                 scheduleAutoReconnect(session, null, "board telemetry unavailable")
             }
         }
-        mainHandler.postDelayed(boardReadyTimeout!!, timeoutMs)
     }
 
     private fun cancelBoardReadyTimeout() {
-        boardReadyTimeout?.let { mainHandler.removeCallbacks(it) }
-        boardReadyTimeout = null
+        boardReadyTimeoutHandle?.cancel()
+        boardReadyTimeoutHandle = null
     }
 
     private fun markBoardReady() {
@@ -1391,7 +1400,7 @@ class VescForegroundService : Service() {
             Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
             directConnection = true
         }
-        if (shouldStartPollingOnReady(canId, directConnection, pollRunnable)) {
+        if (shouldStartPollingOnReady(canId, directConnection, pollHandle)) {
             startPolling()
         }
         if (boardStatus == BoardPhase.Connected) return
@@ -1422,10 +1431,10 @@ class VescForegroundService : Service() {
     private fun armTelemetryStaleWatchdog() {
         val session = boardConfig ?: return
         if (!session.autoReconnect) return
-        telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
+        telemetryStaleHandle?.cancel()
         val armedAt = lastTelemetryAt
-        telemetryStaleRunnable = Runnable {
-            telemetryStaleRunnable = null
+        telemetryStaleHandle = scheduler.postDelayed(TELEMETRY_STALE_MS) {
+            telemetryStaleHandle = null
             val stillStale = lastTelemetryAt == armedAt ||
                 System.currentTimeMillis() - lastTelemetryAt >= TELEMETRY_STALE_MS
             if (boardStatus == BoardPhase.Connected && boardConfig?.autoReconnect == true && stillStale) {
@@ -1434,7 +1443,6 @@ class VescForegroundService : Service() {
                 scheduleAutoReconnect(session, null, "telemetry stale")
             }
         }
-        mainHandler.postDelayed(telemetryStaleRunnable!!, TELEMETRY_STALE_MS)
     }
 
     private fun sendPayload(payload: ByteArray): Boolean {
@@ -1445,7 +1453,7 @@ class VescForegroundService : Service() {
     private fun sendPayloadWithRetry(payload: ByteArray): Boolean {
         val sent = sendPayload(payload)
         if (!sent) {
-            mainHandler.postDelayed({ sendPayload(payload) }, 120)
+            scheduler.postDelayed(120L) { sendPayload(payload) }
         }
         return sent
     }
@@ -1473,8 +1481,8 @@ class VescForegroundService : Service() {
             )
         }
         val stoppedConfig = boardConfig
-        autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
-        autoReconnectRunnable = null
+        autoReconnectHandle?.cancel()
+        autoReconnectHandle = null
         stopReconnectScan()
         cancelConnectTimeout()
         cancelBoardReadyTimeout()
@@ -1499,7 +1507,9 @@ class VescForegroundService : Service() {
         telemetry = null
         recentTelemetry.clear()
         liveTelemetryPoints.clear()
-        generation += 1
+        boardSession?.invalidate()
+        boardSession = null
+        sessionSequence += 1
         boardError = null
         boardStatus = BoardPhase.Idle
         boardConfig = null
@@ -1593,16 +1603,14 @@ class VescForegroundService : Service() {
         emitState()
         showNotification("Reconnecting...")
 
-        autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        autoReconnectHandle?.cancel()
         val delayMs = minOf(250L * autoReconnectAttempt, 2_000L)
-        val retry = Runnable {
-            autoReconnectRunnable = null
+        autoReconnectHandle = scheduler.postDelayed(delayMs) {
+            autoReconnectHandle = null
             if (boardConfig?.autoReconnect == true && boardStatus == BoardPhase.Reconnecting) {
                 startReconnectScan(session)
             }
         }
-        autoReconnectRunnable = retry
-        mainHandler.postDelayed(retry, delayMs)
     }
 
     private fun startReconnectScan(session: SessionConfig) {
@@ -1690,8 +1698,8 @@ class VescForegroundService : Service() {
     }
 
     private fun stopReconnectScan() {
-        reconnectScanTimeout?.let { mainHandler.removeCallbacks(it) }
-        reconnectScanTimeout = null
+        reconnectScanTimeoutHandle?.cancel()
+        reconnectScanTimeoutHandle = null
         val callback = reconnectScanCallback ?: return
         reconnectScanCallback = null
         try {
@@ -1702,9 +1710,9 @@ class VescForegroundService : Service() {
     }
 
     private fun armReconnectScanTimeout(session: SessionConfig, callback: ScanCallback) {
-        reconnectScanTimeout?.let { mainHandler.removeCallbacks(it) }
-        reconnectScanTimeout = Runnable {
-            reconnectScanTimeout = null
+        reconnectScanTimeoutHandle?.cancel()
+        reconnectScanTimeoutHandle = scheduler.postDelayed(RECONNECT_SCAN_TIMEOUT_MS) {
+            reconnectScanTimeoutHandle = null
             if (
                 reconnectScanCallback == callback &&
                 boardConfig?.autoReconnect == true &&
@@ -1723,7 +1731,6 @@ class VescForegroundService : Service() {
                 startReconnectDirectConnect(session, "scan_timeout")
             }
         }
-        mainHandler.postDelayed(reconnectScanTimeout!!, RECONNECT_SCAN_TIMEOUT_MS)
     }
 
     private fun startReconnectDirectConnect(session: SessionConfig, reason: String) {
@@ -1894,7 +1901,7 @@ class VescForegroundService : Service() {
                 boardPhase = phase,
                 boardConfig = boardConfig,
                 boardError = boardError,
-                connectionSeq = generation,
+                connectionSeq = currentSessionId,
                 lastTelemetryAt = telemetry?.lastPacketAt,
                 recentTelemetry = recentTelemetryValue,
                 gpsActive = gpsMonitor.active,
@@ -2079,14 +2086,14 @@ class VescForegroundService : Service() {
     }
 
     private fun cancelConnectTimeout() {
-        connectTimeout?.let { mainHandler.removeCallbacks(it) }
-        connectTimeout = null
+        connectTimeoutHandle?.cancel()
+        connectTimeoutHandle = null
     }
 
     private fun armConnectPhaseTimeout(start: PendingStart, phase: String, timeoutMs: Long) {
         cancelConnectTimeout()
         val startedAt = System.currentTimeMillis()
-        connectTimeout = Runnable {
+        connectTimeoutHandle = scheduler.postDelayed(timeoutMs) {
             if (pendingConnect == start) {
                 val elapsedMs = System.currentTimeMillis() - startedAt
                 Log.w(
@@ -2107,7 +2114,6 @@ class VescForegroundService : Service() {
                 failStart(start, "CONNECT_TIMEOUT", "Timed out connecting to board")
             }
         }
-        mainHandler.postDelayed(connectTimeout!!, timeoutMs)
     }
 
     private fun formatNotificationText(values: RefloatTelemetry): String {
@@ -2201,7 +2207,7 @@ class VescForegroundService : Service() {
             "phase" to boardStatus.wireValue,
             "previous_board_phase" to boardStatus.wireValue,
             "current_board_phase" to boardStatus.wireValue,
-            "connection_seq" to generation,
+            "connection_seq" to currentSessionId,
             "connect_attempt" to connectAttempt,
             "auto_reconnect_attempt" to autoReconnectAttempt,
             "auto_reconnect_enabled" to session?.autoReconnect,
