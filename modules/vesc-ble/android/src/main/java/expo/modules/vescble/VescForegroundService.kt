@@ -15,6 +15,10 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import java.io.File
+import expo.modules.vescble.config.ConfigRWEffect
+import expo.modules.vescble.config.ConfigRWEvent
+import expo.modules.vescble.config.ConfigRWFsm
+import expo.modules.vescble.config.ConfigRWState
 import expo.modules.vescble.diagnostics.DiagnosticContext
 import expo.modules.vescble.diagnostics.DiagnosticsRecorder
 import expo.modules.vescble.notification.NotificationPresenter
@@ -260,41 +264,11 @@ class VescForegroundService : Service() {
         val onSuccess: (Map<String, Any?>) -> Unit,
         val onError: (String, String) -> Unit,
     )
-    private data class ActiveConfigRead(
-        val pending: PendingConfigRead,
-        val wasPolling: Boolean,
-        val operationId: String = newOperationId(),
-        val xmlBytes: ByteArray = ByteArray(0),
-        val expectedXmlLength: Int? = null,
-        val nextXmlOffset: Int = 0,
-        val rawConfig: ByteArray? = null,
-    )
 
     private data class PendingConfigWrite(
         val profileId: String,
         val onSuccess: (Map<String, Any?>) -> Unit,
         val onError: (String, String) -> Unit,
-    )
-
-    private enum class ConfigWritePhase {
-        READING_SCHEMA,
-        READING_CONFIG,
-        SENDING_WRITE,
-        VERIFYING,
-    }
-
-    private data class ActiveConfigWrite(
-        val pending: PendingConfigWrite,
-        val wasPolling: Boolean,
-        val profileFields: Map<String, Any>,
-        val operationId: String = newOperationId(),
-        val phase: ConfigWritePhase = ConfigWritePhase.READING_SCHEMA,
-        val xmlBytes: ByteArray = ByteArray(0),
-        val expectedXmlLength: Int? = null,
-        val nextXmlOffset: Int = 0,
-        val originalConfig: ByteArray? = null,
-        val patchedConfig: ByteArray? = null,
-        val schema: RefloatConfigSchema? = null,
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -385,8 +359,9 @@ class VescForegroundService : Service() {
     private var canPingTimeoutHandle: Cancellable? = null
     private var reconnectScanCallback: ScanCallback? = null
     private var reconnectScanTimeoutHandle: Cancellable? = null
-    private var activeConfigRead: ActiveConfigRead? = null
-    private var activeConfigWrite: ActiveConfigWrite? = null
+    private var configFsmState: ConfigRWState = ConfigRWState.Idle
+    private var configReadCallbacks: PendingConfigRead? = null
+    private var configWriteCallbacks: PendingConfigWrite? = null
     private var configTimeoutHandle: Cancellable? = null
     private var autoReconnectAttempt = 0
     private var lastSentCommand: Int? = null
@@ -398,10 +373,6 @@ class VescForegroundService : Service() {
     private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
     private var metricSanitizerConfig = MetricSanitizerConfig()
     private val isPollingCapable get() = isPollingCapable(canId, directConnection)
-    private val configChunkLength = 384
-    private val configSchemaTimeoutMs = 10_000L
-    private val configReadTimeoutMs = 8_000L
-    private val configWriteTimeoutMs = 10_000L
     private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
     private val liveTelemetryPoints = ArrayDeque<LiveTelemetryPoint>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
@@ -469,7 +440,7 @@ class VescForegroundService : Service() {
     private fun consumePendingConfigRead() {
         val pending = pendingConfigRead ?: return
         pendingConfigRead = null
-        if (activeConfigRead != null || activeConfigWrite != null) {
+        if (configFsmState !is ConfigRWState.Idle) {
             pending.onError(
                 RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
                 "Config operation already in flight",
@@ -493,11 +464,17 @@ class VescForegroundService : Service() {
         }
         val wasPolling = pollHandle != null
         stopPolling()
-        activeConfigRead = ActiveConfigRead(
-            pending = pending,
-            wasPolling = wasPolling,
+        configReadCallbacks = pending
+        dispatchConfigEvent(
+            ConfigRWEvent.StartRead(
+                opId = newOperationId(),
+                canId = id,
+                directConnection = directConnection,
+                wasPolling = wasPolling,
+                appBoardId = boardConfig?.appBoardId,
+                fwVersion = fwVersionString,
+            ),
         )
-        sendNextConfigXmlChunk(id)
     }
 
     private fun consumePendingGpsStart() {
@@ -630,17 +607,9 @@ class VescForegroundService : Service() {
             )
             cancelConnectTimeout()
             stopPolling()
-            if (!intentional && activeConfigRead != null) {
-                failConfigRead(
-                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                    "Board disconnected during Refloat config read",
-                    resumePolling = false,
-                )
-            }
-            if (!intentional && activeConfigWrite != null) {
-                failConfigWrite(
-                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                    "Board disconnected during config write",
+            if (!intentional && configFsmState !is ConfigRWState.Idle) {
+                dispatchConfigEvent(
+                    ConfigRWEvent.SessionTerminated("Board disconnected during Refloat config op"),
                 )
             }
             if (intentional) {
@@ -741,7 +710,7 @@ class VescForegroundService : Service() {
     }
 
     private fun sendStartupPayload(payload: ByteArray) {
-        if (activeConfigRead != null || activeConfigWrite != null) return
+        if (configFsmState !is ConfigRWState.Idle) return
         sendPayloadWithRetry(payload)
     }
 
@@ -768,16 +737,20 @@ class VescForegroundService : Service() {
                     startPolling()
                 }
             }
-            COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
-            COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
-            COMM_SET_CUSTOM_CONFIG -> handleSetConfigResponse(payload)
+            COMM_GET_CUSTOM_CONFIG_XML -> dispatchConfigEvent(ConfigRWEvent.XmlPayloadReceived(payload))
+            COMM_GET_CUSTOM_CONFIG -> dispatchConfigEvent(
+                ConfigRWEvent.ConfigBytesPayloadReceived(payload, System.currentTimeMillis()),
+            )
+            COMM_SET_CUSTOM_CONFIG -> dispatchConfigEvent(ConfigRWEvent.SetConfigResponseReceived(payload))
             COMM_FORWARD_CAN -> {
                 if (payload.size >= 3) {
                     when (payload[2].toInt() and 0xff) {
                         COMM_FW_VERSION -> handleFwVersionPayload(payload.copyOfRange(2, payload.size))
-                        COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
-                        COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
-                        COMM_SET_CUSTOM_CONFIG -> handleSetConfigResponse(payload)
+                        COMM_GET_CUSTOM_CONFIG_XML -> dispatchConfigEvent(ConfigRWEvent.XmlPayloadReceived(payload))
+                        COMM_GET_CUSTOM_CONFIG -> dispatchConfigEvent(
+                            ConfigRWEvent.ConfigBytesPayloadReceived(payload, System.currentTimeMillis()),
+                        )
+                        COMM_SET_CUSTOM_CONFIG -> dispatchConfigEvent(ConfigRWEvent.SetConfigResponseReceived(payload))
                     }
                 }
             }
@@ -815,106 +788,6 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun handleConfigXmlPayload(payload: ByteArray) {
-        if (activeConfigWrite != null) {
-            handleWriteXmlPayload(payload)
-            return
-        }
-        val active = activeConfigRead ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigRead(
-                    RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                    result.message,
-                )
-                return
-            }
-        }
-        clearConfigTimeout()
-        val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
-        active.xmlBytes.copyInto(merged)
-        parsed.chunk.copyInto(merged, active.xmlBytes.size)
-        val nextOffset = parsed.offset + parsed.chunk.size
-        activeConfigRead = active.copy(
-            xmlBytes = merged,
-            expectedXmlLength = parsed.totalLength,
-            nextXmlOffset = nextOffset,
-        )
-        val id = canId
-        if (id == null && !directConnection) {
-            failConfigRead(
-                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
-                "CAN id unavailable during Refloat config read",
-            )
-            return
-        }
-        if (nextOffset >= parsed.totalLength) {
-            sendConfigBytesRequest(id)
-        } else {
-            sendNextConfigXmlChunk(id)
-        }
-    }
-
-    private fun handleConfigBytesPayload(payload: ByteArray) {
-        if (activeConfigWrite != null) {
-            handleWriteConfigBytesPayload(payload)
-            return
-        }
-        val active = activeConfigRead ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigRead(
-                    RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                    result.message,
-                )
-                return
-            }
-        }
-        activeConfigRead = active.copy(rawConfig = parsed.config)
-        clearConfigTimeout()
-        val can = canId
-        if (can == null && !directConnection) {
-            failConfigRead(
-                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
-                "CAN id unavailable during Refloat config read",
-            )
-            return
-        }
-        try {
-            val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
-            val snapshot = RefloatConfigDecoder.decode(
-                schema = schema,
-                rawConfig = parsed.config,
-                boardId = boardConfig?.appBoardId,
-                canId = can,
-                capturedAt = System.currentTimeMillis(),
-                fwVersion = fwVersionString,
-            )
-            completeConfigRead(snapshot)
-        } catch (e: RefloatConfigSchemaException) {
-            dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
-            failConfigRead(
-                RefloatConfigErrorCode.UNSUPPORTED_SCHEMA,
-                e.message ?: "Unsupported Refloat config schema",
-            )
-        } catch (e: RefloatConfigDecodeException) {
-            dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
-            failConfigRead(
-                RefloatConfigErrorCode.CONFIG_DECODE_FAILED,
-                e.message ?: "Failed to decode Refloat config",
-            )
-        } catch (e: Exception) {
-            Log.w(VESC_SESSION_TAG, "Unexpected Refloat config read failure", e)
-            dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
-            failConfigRead(
-                RefloatConfigErrorCode.CONFIG_DECODE_FAILED,
-                e.message ?: "Failed to read Refloat config",
-            )
-        }
-    }
-
     private fun handleFwVersionPayload(payload: ByteArray) {
         if (payload.size < 3) return
         val hex = payload.joinToString(" ") { "%02x".format(it) }
@@ -944,34 +817,6 @@ class VescForegroundService : Service() {
         Log.d(VESC_SESSION_TAG, "FW version: $fwVersionString")
     }
 
-    private fun sendNextConfigXmlChunk(id: Int?) {
-        val active = activeConfigRead ?: return
-        val offset = active.nextXmlOffset
-        val expected = active.expectedXmlLength
-        val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
-            .coerceAtLeast(0)
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT, configSchemaTimeoutMs)
-        val sent = sendPayload(
-            RefloatConfigProtocol.buildGetCustomConfigXml(
-                canId = id,
-                confInd = 0,
-                length = length,
-                offset = offset,
-            ),
-        )
-        if (!sent) {
-            failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-        }
-    }
-
-    private fun sendConfigBytesRequest(id: Int?) {
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
-        val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
-        if (!sent) {
-            failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-        }
-    }
-
     private fun dumpRefloatConfigDebug(xmlBytes: ByteArray, configBytes: ByteArray) {
         try {
             val dir = File(filesDir, "refloat-debug").apply { mkdirs() }
@@ -991,70 +836,12 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun armConfigTimeout(code: RefloatConfigErrorCode, timeoutMs: Long) {
-        clearConfigTimeout()
-        configTimeoutHandle = scheduler.postDelayed(timeoutMs) {
-            failConfigRead(code, "Timed out reading Refloat config")
-        }
-    }
-
-    private fun clearConfigTimeout() {
-        configTimeoutHandle?.cancel()
-        configTimeoutHandle = null
-    }
-
-    private fun completeConfigRead(snapshot: RefloatConfigSnapshot) {
-        val active = activeConfigRead ?: return
-        activeConfigRead = null
-        clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        appDataScope.launch {
-            try {
-                AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
-            } catch (e: Exception) {
-                Log.w(VESC_SESSION_TAG, "Failed to auto-create main tune profile", e)
-            }
-            scheduler.post {
-                active.pending.onSuccess(snapshot.toMap())
-            }
-        }
-    }
-
-    private fun failConfigRead(code: RefloatConfigErrorCode, message: String) {
-        failConfigRead(code, message, resumePolling = true)
-    }
-
-    private fun failConfigRead(code: RefloatConfigErrorCode, message: String, resumePolling: Boolean) {
-        val active = activeConfigRead ?: return
-        activeConfigRead = null
-        clearConfigTimeout()
-        if (resumePolling && active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        captureDiagnostic(
-            if (code == RefloatConfigErrorCode.CONFIG_DECODE_FAILED || code == RefloatConfigErrorCode.UNSUPPORTED_SCHEMA) {
-                "config_decode_failed"
-            } else {
-                "config_read_failed"
-            },
-            diagnosticProperties(boardConfig, "config_read") + mapOf(
-                "operation_id" to active.operationId,
-                "message" to message,
-                "error_code" to code.name,
-                "firmware" to fwVersionString,
-            ) + DiagnosticReporter.configBlobProperties(active.rawConfig),
-        )
-        active.pending.onError(code.name, message)
-    }
-
     // --- Config write flow (push profile to board) ---
 
     private fun consumePendingConfigWrite() {
         val pending = pendingConfigWrite ?: return
         pendingConfigWrite = null
-        if (activeConfigRead != null || activeConfigWrite != null) {
+        if (configFsmState !is ConfigRWState.Idle) {
             pending.onError(
                 RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
                 "Config operation already in flight",
@@ -1094,7 +881,7 @@ class VescForegroundService : Service() {
             @Suppress("UNCHECKED_CAST")
             val fields = (profile["fields"] as? Map<String, Any>) ?: emptyMap()
             scheduler.post {
-                if (activeConfigRead != null || activeConfigWrite != null) {
+                if (configFsmState !is ConfigRWState.Idle) {
                     pending.onError(
                         RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
                         "Config operation already in flight",
@@ -1127,202 +914,112 @@ class VescForegroundService : Service() {
                 }
                 val wasPolling = pollHandle != null
                 stopPolling()
-                activeConfigWrite = ActiveConfigWrite(
-                    pending = pending,
-                    wasPolling = wasPolling,
-                    profileFields = fields,
+                configWriteCallbacks = pending
+                dispatchConfigEvent(
+                    ConfigRWEvent.StartWrite(
+                        opId = newOperationId(),
+                        canId = currentId,
+                        directConnection = directConnection,
+                        wasPolling = wasPolling,
+                        profileFields = fields,
+                        appBoardId = boardConfig?.appBoardId,
+                        fwVersion = fwVersionString,
+                    ),
                 )
-                sendNextWriteXmlChunk(currentId)
             }
         }
     }
 
-    private fun sendNextWriteXmlChunk(id: Int?) {
-        val active = activeConfigWrite ?: return
-        val offset = active.nextXmlOffset
-        val expected = active.expectedXmlLength
-        val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
-            .coerceAtLeast(0)
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT, configSchemaTimeoutMs)
-        val sent = sendPayload(
-            RefloatConfigProtocol.buildGetCustomConfigXml(
-                canId = id, confInd = 0, length = length, offset = offset,
-            ),
-        )
-        if (!sent) {
-            failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-        }
+    private fun dispatchConfigEvent(event: ConfigRWEvent) {
+        val (next, effects) = ConfigRWFsm.apply(configFsmState, event)
+        configFsmState = next
+        effects.forEach(::interpretConfigEffect)
     }
 
-    private fun handleWriteXmlPayload(payload: ByteArray) {
-        val active = activeConfigWrite ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigWrite(RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE, result.message)
-                return
+    private fun interpretConfigEffect(effect: ConfigRWEffect) {
+        when (effect) {
+            is ConfigRWEffect.SendFrame -> {
+                if (!sendPayload(effect.payload)) {
+                    dispatchConfigEvent(ConfigRWEvent.GattWriteFailed("Board GATT is not writable"))
+                }
             }
-        }
-        clearConfigTimeout()
-        val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
-        active.xmlBytes.copyInto(merged)
-        parsed.chunk.copyInto(merged, active.xmlBytes.size)
-        val nextOffset = parsed.offset + parsed.chunk.size
-        activeConfigWrite = active.copy(
-            xmlBytes = merged,
-            expectedXmlLength = parsed.totalLength,
-            nextXmlOffset = nextOffset,
-        )
-        val id = canId
-        if (id == null && !directConnection) {
-            failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
-            return
-        }
-        if (nextOffset >= parsed.totalLength) {
-            activeConfigWrite = activeConfigWrite?.copy(phase = ConfigWritePhase.READING_CONFIG)
-            armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
-            val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
-            if (!sent) {
-                failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+            is ConfigRWEffect.ScheduleTimeout -> {
+                configTimeoutHandle?.cancel()
+                val code = effect.code
+                configTimeoutHandle = scheduler.postDelayed(effect.timeoutMs) {
+                    configTimeoutHandle = null
+                    dispatchConfigEvent(ConfigRWEvent.Timeout(code))
+                }
             }
-        } else {
-            sendNextWriteXmlChunk(id)
-        }
-    }
-
-    private fun handleWriteConfigBytesPayload(payload: ByteArray) {
-        val active = activeConfigWrite ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigWrite(RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE, result.message)
-                return
+            ConfigRWEffect.CancelTimeout -> {
+                configTimeoutHandle?.cancel()
+                configTimeoutHandle = null
             }
-        }
-        clearConfigTimeout()
-        val id = canId
-        if (id == null && !directConnection) {
-            failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
-            return
-        }
-
-        when (active.phase) {
-            ConfigWritePhase.READING_CONFIG -> {
-                try {
-                    val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
-                    val patched = RefloatConfigEncoder.encode(schema, parsed.config, active.profileFields)
-                    activeConfigWrite = active.copy(
-                        phase = ConfigWritePhase.SENDING_WRITE,
-                        originalConfig = parsed.config,
-                        patchedConfig = patched,
-                        schema = schema,
-                    )
-                    armConfigTimeout(RefloatConfigErrorCode.CONFIG_WRITE_TIMEOUT, configWriteTimeoutMs)
-                    val sent = sendPayload(RefloatConfigProtocol.buildSetCustomConfig(id, 0, patched))
-                    if (!sent) {
-                        failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+            is ConfigRWEffect.EmitReadComplete -> {
+                val callbacks = configReadCallbacks
+                configReadCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                val snapshot = effect.snapshot
+                appDataScope.launch {
+                    try {
+                        AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
+                    } catch (e: Exception) {
+                        Log.w(VESC_SESSION_TAG, "Failed to auto-create main tune profile", e)
                     }
-                } catch (e: RefloatConfigSchemaException) {
-                    failConfigWrite(RefloatConfigErrorCode.UNSUPPORTED_SCHEMA, e.message ?: "Unsupported schema")
-                } catch (e: RefloatConfigEncodeException) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_ENCODE_FAILED, e.message ?: "Encode failed")
-                } catch (e: Exception) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, e.message ?: "Write failed")
+                    scheduler.post { callbacks?.onSuccess?.invoke(snapshot.toMap()) }
                 }
             }
-            ConfigWritePhase.VERIFYING -> {
-                val schema = active.schema
-                val patchedConfig = active.patchedConfig
-                if (schema == null || patchedConfig == null) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, "Missing state for verification")
-                    return
-                }
-                try {
-                    when (val verification = RefloatConfigWriteVerifier.verifyExactBytes(patchedConfig, parsed.config)) {
-                        is RefloatConfigWriteVerification.Success -> Unit
-                        is RefloatConfigWriteVerification.Failure -> {
-                            Log.w(VESC_SESSION_TAG, verification.message)
-                            failConfigWrite(
-                                RefloatConfigErrorCode.CONFIG_VERIFY_FAILED,
-                                verification.message,
-                            )
-                            return
-                        }
+            is ConfigRWEffect.EmitReadFailure -> {
+                val callbacks = configReadCallbacks
+                configReadCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                val eventName = if (
+                    effect.code == RefloatConfigErrorCode.CONFIG_DECODE_FAILED ||
+                    effect.code == RefloatConfigErrorCode.UNSUPPORTED_SCHEMA
+                ) "config_decode_failed" else "config_read_failed"
+                captureDiagnostic(
+                    eventName,
+                    diagnosticProperties(boardConfig, "config_read") + mapOf(
+                        "operation_id" to effect.opId,
+                        "message" to effect.message,
+                        "error_code" to effect.code.name,
+                        "firmware" to fwVersionString,
+                    ) + DiagnosticReporter.configBlobProperties(effect.rawConfig),
+                )
+                callbacks?.onError?.invoke(effect.code.name, effect.message)
+            }
+            is ConfigRWEffect.EmitWriteComplete -> {
+                val callbacks = configWriteCallbacks
+                configWriteCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                val snapshot = effect.snapshot
+                appDataScope.launch {
+                    try {
+                        AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
+                    } catch (e: Exception) {
+                        Log.w(VESC_SESSION_TAG, "Failed to update profile after push", e)
                     }
-                    val actualSnapshot = RefloatConfigDecoder.decode(schema, parsed.config, boardConfig?.appBoardId, id, System.currentTimeMillis(), fwVersionString)
-                    completeConfigWrite(actualSnapshot)
-                } catch (e: RefloatConfigDecodeException) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
-                } catch (e: Exception) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
+                    scheduler.post { callbacks?.onSuccess?.invoke(snapshot.toMap()) }
                 }
             }
-            else -> {
-                failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, "Unexpected config bytes in phase ${active.phase}")
+            is ConfigRWEffect.EmitWriteFailure -> {
+                val callbacks = configWriteCallbacks
+                configWriteCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                captureDiagnostic(
+                    "profile_push_failed",
+                    diagnosticProperties(boardConfig, "profile_push") + mapOf(
+                        "operation_id" to effect.opId,
+                        "message" to effect.message,
+                        "error_code" to effect.code.name,
+                        "phase" to effect.phase.name,
+                        "firmware" to fwVersionString,
+                    ) + DiagnosticReporter.configBlobProperties(effect.rawConfig),
+                )
+                callbacks?.onError?.invoke(effect.code.name, effect.message)
             }
+            is ConfigRWEffect.DumpDebugBytes -> dumpRefloatConfigDebug(effect.xmlBytes, effect.configBytes)
         }
-    }
-
-    private fun handleSetConfigResponse(payload: ByteArray) {
-        val active = activeConfigWrite ?: return
-        when (val result = RefloatConfigProtocol.parseSetCustomConfigResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> {
-                clearConfigTimeout()
-                val id = canId
-                if (id == null && !directConnection) {
-                    failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost after write")
-                    return
-                }
-                activeConfigWrite = active.copy(phase = ConfigWritePhase.VERIFYING)
-                armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
-                val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
-                if (!sent) {
-                    failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-                }
-            }
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, result.message)
-            }
-        }
-    }
-
-    private fun completeConfigWrite(verifiedSnapshot: RefloatConfigSnapshot) {
-        val active = activeConfigWrite ?: return
-        activeConfigWrite = null
-        clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        appDataScope.launch {
-            try {
-                AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(verifiedSnapshot)
-            } catch (e: Exception) {
-                Log.w(VESC_SESSION_TAG, "Failed to update profile after push", e)
-            }
-            scheduler.post {
-                active.pending.onSuccess(verifiedSnapshot.toMap())
-            }
-        }
-    }
-
-    private fun failConfigWrite(code: RefloatConfigErrorCode, message: String) {
-        val active = activeConfigWrite ?: return
-        activeConfigWrite = null
-        clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        captureDiagnostic(
-            "profile_push_failed",
-            diagnosticProperties(boardConfig, "profile_push") + mapOf(
-                "operation_id" to active.operationId,
-                "message" to message,
-                "error_code" to code.name,
-                "phase" to active.phase.name,
-                "firmware" to fwVersionString,
-            ) + DiagnosticReporter.configBlobProperties(active.originalConfig ?: active.patchedConfig),
-        )
-        active.pending.onError(code.name, message)
     }
 
     private fun startPolling() {
@@ -1493,17 +1190,9 @@ class VescForegroundService : Service() {
 
     private fun stopCurrentBoardSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
         flushTelemetryDiagnostics("stop")
-        if (activeConfigRead != null) {
-            failConfigRead(
-                RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                "Board session stopped during Refloat config read",
-                resumePolling = false,
-            )
-        }
-        if (activeConfigWrite != null) {
-            failConfigWrite(
-                RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                "Board session stopped during config write",
+        if (configFsmState !is ConfigRWState.Idle) {
+            dispatchConfigEvent(
+                ConfigRWEvent.SessionTerminated("Board session stopped during Refloat config op"),
             )
         }
         val stoppedConfig = boardConfig
