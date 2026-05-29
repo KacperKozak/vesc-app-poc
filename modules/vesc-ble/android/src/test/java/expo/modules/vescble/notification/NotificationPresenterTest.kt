@@ -25,13 +25,13 @@ class NotificationPresenterTest {
 
     @Test
     fun `formatNotificationText reports fault when hasFault set`() {
-        val text = NotificationPresenter.formatNotificationText(telemetry(hasFault = true, faultCode = 7))
+        val text = NotificationFormatter.formatNotificationText(telemetry(hasFault = true, faultCode = 7))
         assertEquals("Fault 7", text)
     }
 
     @Test
     fun `formatNotificationText formats speed duty voltage`() {
-        val text = NotificationPresenter.formatNotificationText(
+        val text = NotificationFormatter.formatNotificationText(
             telemetry(speed = 25.5, dutyCycle = 0.42, batteryVoltage = 75.13),
         )
         assertEquals("25.5 km/h | 42% duty | 75.1V", text)
@@ -39,7 +39,7 @@ class NotificationPresenterTest {
 
     @Test
     fun `formatNotificationText takes absolute speed`() {
-        val text = NotificationPresenter.formatNotificationText(
+        val text = NotificationFormatter.formatNotificationText(
             telemetry(speed = -12.0, dutyCycle = 0.0, batteryVoltage = 50.0),
         )
         assertEquals("12.0 km/h | 0% duty | 50.0V", text)
@@ -47,7 +47,7 @@ class NotificationPresenterTest {
 
     @Test
     fun `formatNotificationText zeroes duty when below threshold`() {
-        val text = NotificationPresenter.formatNotificationText(
+        val text = NotificationFormatter.formatNotificationText(
             telemetry(speed = 0.0, dutyCycle = 0.005, batteryVoltage = 50.0),
         )
         assertEquals("0.0 km/h | 0% duty | 50.0V", text)
@@ -57,7 +57,7 @@ class NotificationPresenterTest {
     fun `formatBatteryVoltageChipText returns FAULT for fault`() {
         assertEquals(
             "FAULT",
-            NotificationPresenter.formatBatteryVoltageChipText(telemetry(hasFault = true)),
+            NotificationFormatter.formatBatteryVoltageChipText(telemetry(hasFault = true)),
         )
     }
 
@@ -65,7 +65,7 @@ class NotificationPresenterTest {
     fun `formatBatteryVoltageChipText formats voltage`() {
         assertEquals(
             "75.1V",
-            NotificationPresenter.formatBatteryVoltageChipText(telemetry(batteryVoltage = 75.13)),
+            NotificationFormatter.formatBatteryVoltageChipText(telemetry(batteryVoltage = 75.13)),
         )
     }
 
@@ -73,7 +73,7 @@ class NotificationPresenterTest {
     fun `formatGpsNotificationText converts mps to kmh`() {
         assertEquals(
             "GPS 18.0 km/h",
-            NotificationPresenter.formatGpsNotificationText(location(speedMps = 5.0)),
+            NotificationFormatter.formatGpsNotificationText(location(speedMps = 5.0)),
         )
     }
 
@@ -81,7 +81,7 @@ class NotificationPresenterTest {
     fun `formatGpsNotificationText handles null speed`() {
         assertEquals(
             "GPS 0.0 km/h",
-            NotificationPresenter.formatGpsNotificationText(location(speedMps = null)),
+            NotificationFormatter.formatGpsNotificationText(location(speedMps = null)),
         )
     }
 
@@ -89,7 +89,7 @@ class NotificationPresenterTest {
     fun `formatGpsNotificationText takes absolute speed`() {
         assertEquals(
             "GPS 36.0 km/h",
-            NotificationPresenter.formatGpsNotificationText(location(speedMps = -10.0)),
+            NotificationFormatter.formatGpsNotificationText(location(speedMps = -10.0)),
         )
     }
 

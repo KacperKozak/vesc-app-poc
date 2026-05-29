@@ -21,6 +21,7 @@ import expo.modules.vescble.config.ConfigRWFsm
 import expo.modules.vescble.config.ConfigRWState
 import expo.modules.vescble.diagnostics.DiagnosticContext
 import expo.modules.vescble.diagnostics.DiagnosticsRecorder
+import expo.modules.vescble.notification.NotificationFormatter
 import expo.modules.vescble.notification.NotificationPresenter
 import expo.modules.vescble.reconnect.RECONNECT_MAX_ATTEMPTS
 import expo.modules.vescble.reconnect.ReconnectBlePort
@@ -32,6 +33,7 @@ import expo.modules.vescble.runtime.BoardSession
 import expo.modules.vescble.runtime.Cancellable
 import expo.modules.vescble.runtime.HandlerScheduler
 import expo.modules.vescble.runtime.Scheduler
+import expo.modules.vescble.runtime.postDelayedForSession
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
@@ -817,7 +819,12 @@ class VescForegroundService : Service() {
             } else if (wasConnecting != null) {
                 if (status == 133 && connectAttempt < 2) {
                     Log.w(VESC_SESSION_TAG, "status=133 during connect, retrying once")
-                    scheduler.postDelayed(250L) { startBleSession(wasConnecting) }
+                    val session = boardSession
+                    if (session != null) {
+                        scheduler.postDelayedForSession(session, 250L, ::isCurrentBoardSession) {
+                            if (pendingConnect == wasConnecting) startBleSession(wasConnecting)
+                        }
+                    }
                 } else if (wasConnecting.boardConfig.autoReconnect) {
                     captureDiagnostic(
                         "ble_connect_failed",
@@ -895,8 +902,15 @@ class VescForegroundService : Service() {
         if (canId != null) {
             startPolling()
         } else {
-            scheduler.postDelayed(300L) { sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }
-            scheduler.postDelayed(1_200L) { sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }
+            val session = boardSession
+            if (session != null) {
+                scheduler.postDelayedForSession(session, 300L, ::isCurrentBoardSession) {
+                    sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte()), session)
+                }
+                scheduler.postDelayedForSession(session, 1_200L, ::isCurrentBoardSession) {
+                    sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte()), session)
+                }
+            }
             armCanPingTimeout()
         }
         armBoardReadyTimeout(start.boardConfig)
@@ -909,9 +923,10 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun sendStartupPayload(payload: ByteArray) {
+    private fun sendStartupPayload(payload: ByteArray, session: BoardSession) {
+        if (!isCurrentBoardSession(session)) return
         if (configFsmState !is ConfigRWState.Idle) return
-        sendPayloadWithRetry(payload)
+        sendPayloadWithRetry(payload, session)
     }
 
     private fun handlePayload(payload: ByteArray) {
@@ -983,8 +998,8 @@ class VescForegroundService : Service() {
                     eventMap + mapOf("metricExclusionUpdates" to processed.metricExclusionUpdates)
                 } else eventMap
                 presenter.show(
-                    NotificationPresenter.formatNotificationText(parsed),
-                    shortCriticalText = NotificationPresenter.formatBatteryVoltageChipText(parsed),
+                    NotificationFormatter.formatNotificationText(parsed),
+                    shortCriticalText = NotificationFormatter.formatBatteryVoltageChipText(parsed),
                 )
                 emitEvent("onTelemetry", emitMap)
                 telemetryStore?.recordTelemetry(processed.capture)
@@ -1228,6 +1243,7 @@ class VescForegroundService : Service() {
 
     private fun startPolling() {
         val session = boardConfig ?: return
+        val sessionToken = boardSession ?: return
         val id = canId
         if (id == null && !directConnection) return
         stopPolling()
@@ -1250,15 +1266,15 @@ class VescForegroundService : Service() {
             )
         }
         fun scheduleNext() {
-            pollHandle = scheduler.postDelayed(session.pollIntervalMs) {
+            pollHandle = scheduler.postDelayedForSession(sessionToken, session.pollIntervalMs, ::isCurrentBoardSession) {
                 lastPollAt = System.currentTimeMillis()
-                sendPayloadWithRetry(pollPayload)
+                sendPayloadWithRetry(pollPayload, sessionToken)
                 scheduleNext()
             }
         }
-        pollHandle = scheduler.post {
+        pollHandle = scheduler.postDelayedForSession(sessionToken, 0L, ::isCurrentBoardSession) {
             lastPollAt = System.currentTimeMillis()
-            sendPayloadWithRetry(pollPayload)
+            sendPayloadWithRetry(pollPayload, sessionToken)
             scheduleNext()
         }
     }
@@ -1271,7 +1287,8 @@ class VescForegroundService : Service() {
 
     private fun armCanPingTimeout() {
         cancelCanPingTimeout()
-        canPingTimeoutHandle = scheduler.postDelayed(CAN_PING_TIMEOUT) {
+        val session = boardSession ?: return
+        canPingTimeoutHandle = scheduler.postDelayedForSession(session, CAN_PING_TIMEOUT, ::isCurrentBoardSession) {
             canPingTimeoutHandle = null
             if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
                 Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
@@ -1294,8 +1311,9 @@ class VescForegroundService : Service() {
     private fun armBoardReadyTimeout(session: SessionConfig) {
         if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
+        val sessionToken = boardSession ?: return
         val timeoutMs = boardReadyTimeoutMs()
-        boardReadyTimeoutHandle = scheduler.postDelayed(timeoutMs) {
+        boardReadyTimeoutHandle = scheduler.postDelayedForSession(sessionToken, timeoutMs, ::isCurrentBoardSession) {
             boardReadyTimeoutHandle = null
             if (
                 (boardStatus == BoardPhase.Connecting || boardStatus == BoardPhase.WaitingForTelemetry) &&
@@ -1371,13 +1389,21 @@ class VescForegroundService : Service() {
         return gattClient.sendPayload(payload)
     }
 
-    private fun sendPayloadWithRetry(payload: ByteArray): Boolean {
+    private fun sendPayloadWithRetry(payload: ByteArray, session: BoardSession? = boardSession): Boolean {
+        if (session != null && !isCurrentBoardSession(session)) return false
         val sent = sendPayload(payload)
         if (!sent) {
-            scheduler.postDelayed(120L) { sendPayload(payload) }
+            if (session != null) {
+                scheduler.postDelayedForSession(session, 120L, ::isCurrentBoardSession) {
+                    sendPayload(payload)
+                }
+            }
         }
         return sent
     }
+
+    private fun isCurrentBoardSession(session: BoardSession): Boolean =
+        session.isActive && session === boardSession && !isStoppingService
 
     private fun updateLatency(now: Long): Int? {
         if (lastPollAt <= 0) return null
@@ -1584,7 +1610,7 @@ class VescForegroundService : Service() {
         if (!precise) {
             emitEvent("onLocation", snapshot.toMap())
             if (boardConfig == null) {
-                presenter.show(NotificationPresenter.formatGpsNotificationText(snapshot))
+                presenter.show(NotificationFormatter.formatGpsNotificationText(snapshot))
             }
             return
         }
@@ -1593,7 +1619,7 @@ class VescForegroundService : Service() {
         persistLastGpsLocation(snapshot)
         appendRecentLocation(snapshot)
         emitEvent("onLocation", snapshot.toMap())
-        if (boardConfig == null) presenter.show(NotificationPresenter.formatGpsNotificationText(snapshot))
+        if (boardConfig == null) presenter.show(NotificationFormatter.formatGpsNotificationText(snapshot))
         recorder?.recordLocation(snapshot)
     }
 

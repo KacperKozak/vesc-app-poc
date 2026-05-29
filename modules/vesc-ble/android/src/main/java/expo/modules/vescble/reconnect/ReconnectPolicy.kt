@@ -14,10 +14,8 @@ internal sealed interface ReconnectDecision {
 }
 
 internal object ReconnectPolicy {
-    @Suppress("UNUSED_PARAMETER")
     fun nextDecision(
         currentAttempt: Int,
-        lastError: String? = null,
         maxAttempts: Int = RECONNECT_MAX_ATTEMPTS,
     ): ReconnectDecision {
         val next = currentAttempt + 1

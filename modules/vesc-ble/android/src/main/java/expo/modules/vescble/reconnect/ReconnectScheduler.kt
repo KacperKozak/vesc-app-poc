@@ -46,7 +46,6 @@ internal class ReconnectScheduler(
 
         val decision = ReconnectPolicy.nextDecision(
             currentAttempt = attempt,
-            lastError = reason,
             maxAttempts = maxAttempts,
         )
         if (decision is ReconnectDecision.GiveUp) {

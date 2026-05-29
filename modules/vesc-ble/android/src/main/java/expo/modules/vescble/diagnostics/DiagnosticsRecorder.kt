@@ -1,6 +1,5 @@
 package expo.modules.vescble.diagnostics
 
-import expo.modules.vescble.DiagnosticReporter
 import expo.modules.vescble.SessionConfig
 
 data class DiagnosticContext(
@@ -59,7 +58,7 @@ class DiagnosticsRecorder(
         captureDiagnostic(
             "telemetry_parse_failed",
             diagnosticProperties(session, "telemetry") +
-                DiagnosticReporter.telemetryPayloadProperties(payload) +
+                DiagnosticPayloadProperties.telemetry(payload) +
                 mapOf(
                     "message" to "Invalid Refloat telemetry payload",
                     "telemetry_parse_failed_count" to telemetryParseFailedCount,
