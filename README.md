@@ -164,6 +164,29 @@ cd android
 ./gradlew assembleDebug
 ```
 
+## Agent Skills
+
+Project-local skills under `.claude/skills/` chain into a plan-to-PR pipeline. Each runs as a slash command.
+
+- `/to-prd` — Turn current conversation context into a PRD issue. Publishes `[PRD][Area] Title` to GitHub Issues with `ready-for-agent` + matching `area:*` label.
+- `/to-issues` — Break a PRD or plan into vertical-slice implementation issues. Titles use `[Area] N - Verb phrase`. Auto-fills `## Related` cross-refs across siblings after publish.
+- `/to-code` — Implement one issue end-to-end. Reads repo + domain docs, follows existing conventions, runs focused tests, reports. No git ops unless asked.
+- `/to-pr` — Same as `/to-code` plus branch/PR lifecycle. Creates feature branch off `dev`, opens PR with linked issue list, appends `Closes #N` + implementation notes on later runs.
+- `/grill-me` — Interview-style stress test for a plan or design. Walks the decision tree one question at a time, recommends an answer, resolves dependencies before code is written. Use before `/to-prd` or `/to-issues` when scope is fuzzy.
+- `/grill-with-docs` — Same as `/grill-me` but checks each answer against `CONTEXT.md`, ADRs under `docs/adr/`, and the domain glossary. Updates docs inline as decisions crystallise.
+
+Typical flow:
+
+```text
+/grill-me          # optional: sharpen idea
+/to-prd            # idea -> PRD issue
+/to-issues <prd>   # PRD -> N implementation issues
+/to-code <id>      # implement one issue locally
+/to-pr <id>        # implement + push + open/update feature PR
+```
+
+`/to-pr` reuses `/to-code` verify gate — tests run once. PR base is `dev` (`main` reserved for production releases).
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
