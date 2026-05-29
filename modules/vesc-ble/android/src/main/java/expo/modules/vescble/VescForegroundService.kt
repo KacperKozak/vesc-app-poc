@@ -30,15 +30,11 @@ import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
 import expo.modules.vescble.telemetry.BatterySocEstimator
-import expo.modules.vescble.telemetry.BucketTelemetryPoint
-import expo.modules.vescble.telemetry.FullTelemetryState
-import expo.modules.vescble.telemetry.METRIC_AVG_SPEED
-import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
-import expo.modules.vescble.telemetry.METRIC_MAX_SPEED
-import expo.modules.vescble.telemetry.MetricSanitizerConfig
-import expo.modules.vescble.telemetry.SanitizedSample
+import expo.modules.vescble.telemetry.DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.MAX_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.MIN_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.TelemetryPipeline
 import expo.modules.vescble.telemetry.TelemetryRepository
-import expo.modules.vescble.telemetry.sanitizeTelemetrySamples
 import expo.modules.vescble.telemetry.toMetricSanitizerConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,9 +53,6 @@ private const val ACTION_START_GPS_MONITORING = "expo.modules.vescble.ACTION_STA
 private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP_GPS_MONITORING"
 
 private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
-private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
-private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
-private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
 private const val TELEMETRY_STALE_MS = 4_000L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
@@ -178,7 +171,7 @@ class VescForegroundService : Service() {
             val minutes = (limit?.toInt() ?: DEFAULT_LIVE_HISTORY_LIMIT_MINUTES)
                 .coerceIn(MIN_LIVE_HISTORY_LIMIT_MINUTES, MAX_LIVE_HISTORY_LIMIT_MINUTES)
             requestedLiveHistoryLimitMinutes = minutes
-            instance?.setLiveHistoryLimitMinutes(minutes)
+            instance?.applyLiveHistoryLimitMinutes(minutes)
         }
 
         fun reloadTelemetrySettings(context: Context) {
@@ -255,10 +248,6 @@ class VescForegroundService : Service() {
     )
 
     private data class PendingStop(val onSuccess: () -> Unit)
-    private data class LiveTelemetryPoint(
-        val bucketPoint: BucketTelemetryPoint,
-        val eventMap: MutableMap<String, Any?>,
-    )
 
     private data class PendingConfigRead(
         val onSuccess: (Map<String, Any?>) -> Unit,
@@ -310,11 +299,17 @@ class VescForegroundService : Service() {
                     directConnection = directConnection,
                     lastSentCommand = lastSentCommand,
                     lastReceivedCommandByte = lastReceivedCommandByte,
-                    lastTelemetryAt = lastTelemetryAt,
+                    lastTelemetryAt = telemetryPipeline.lastTelemetryAt,
                 )
             },
         )
     }
+    private val telemetryPipeline = TelemetryPipeline(
+        scheduler = scheduler,
+        onTelemetryStale = ::onTelemetryStaleFired,
+        captureBuilder = { parsed, cfg, id -> parsed.toCapture(cfg, id) },
+        staleTimeoutMs = TELEMETRY_STALE_MS,
+    )
     private val gpsMonitor by lazy {
         VescGpsMonitor(
             context = this,
@@ -344,9 +339,7 @@ class VescForegroundService : Service() {
     private var boardReadyTimeoutHandle: Cancellable? = null
     private var pendingConnect: PendingStart? = null
     private var pollHandle: Cancellable? = null
-    private var telemetryStaleHandle: Cancellable? = null
     private var lastPollAt = 0L
-    private var lastTelemetryAt = 0L
     private var connectAttempt = 0
     private var recorder: VescSessionRecorder? = null
     private var telemetryStore: TelemetryRepository? = null
@@ -370,11 +363,7 @@ class VescForegroundService : Service() {
     private var boardSession: BoardSession? = null
     private var sessionSequence: Long = 0L
     private val currentSessionId: Long get() = boardSession?.id ?: sessionSequence
-    private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
-    private var metricSanitizerConfig = MetricSanitizerConfig()
     private val isPollingCapable get() = isPollingCapable(canId, directConnection)
-    private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
-    private val liveTelemetryPoints = ArrayDeque<LiveTelemetryPoint>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -521,20 +510,19 @@ class VescForegroundService : Service() {
         VescForegroundService.reloadAlertRules(applicationContext)
         boardConfig = start.boardConfig
         sessionSequence += 1
-        boardSession = BoardSession(id = sessionSequence)
+        val session = BoardSession(id = sessionSequence)
+        boardSession = session
         canId = start.boardConfig.canId
         directConnection = false
         boardError = null
         telemetry = null
         loadBatteryConfig(start.boardConfig.appBoardId)
-        recentTelemetry.clear()
-        liveTelemetryPoints.clear()
+        telemetryPipeline.beginSession(session, start.boardConfig)
         packetReassembler.reset()
         gattClient.resetDiagnostics()
         diagnosticsRecorder.resetTelemetryParseFailedCounters()
         connectAttempt = 0
         autoReconnectAttempt = 0
-        lastTelemetryAt = 0L
         if (start.boardConfig.recordingEnabled) {
             recorder = VescSessionRecorder(this, start.boardConfig).also { it.start() }
         }
@@ -723,6 +711,7 @@ class VescForegroundService : Service() {
                 cancelCanPingTimeout()
                 if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
+                    telemetryPipeline.updateCanId(canId)
                     emitState()
                     startPolling()
                     sendPayloadWithRetry(byteArrayOf(
@@ -733,6 +722,7 @@ class VescForegroundService : Service() {
                 } else {
                     Log.d(VESC_SESSION_TAG, "No CAN devices found, using direct connection")
                     directConnection = true
+                    telemetryPipeline.updateCanId(null)
                     emitState()
                     startPolling()
                 }
@@ -765,25 +755,27 @@ class VescForegroundService : Service() {
                     captureTelemetryParseFailed(payload)
                     return
                 }
+                val sessionToken = boardSession ?: return
+                val processed = telemetryPipeline.process(parsed, sessionToken) ?: return
                 markBoardReady()
                 telemetry = parsed
-                lastTelemetryAt = parsed.lastPacketAt
-                armTelemetryStaleWatchdog()
                 val firedAlerts = evaluateAlerts(parsed)
-                val baseEventMap = parsed.toMap().toMutableMap()
-                if (firedAlerts.isNotEmpty()) baseEventMap["firedAlerts"] = firedAlerts
-                baseEventMap["generation"] = currentSessionId
-                baseEventMap["batteryPercent"] = BatterySocEstimator.estimateBatteryPercent(
+                val eventMap = processed.eventMap
+                if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
+                eventMap["generation"] = currentSessionId
+                eventMap["batteryPercent"] = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
                 )
-                val eventMap = appendLiveTelemetry(parsed, baseEventMap)
+                val emitMap = if (processed.metricExclusionUpdates.isNotEmpty()) {
+                    eventMap + mapOf("metricExclusionUpdates" to processed.metricExclusionUpdates)
+                } else eventMap
                 presenter.show(
                     NotificationPresenter.formatNotificationText(parsed),
                     shortCriticalText = NotificationPresenter.formatBatteryVoltageChipText(parsed),
                 )
-                emitEvent("onTelemetry", eventMap)
-                recordTelemetry(parsed)
+                emitEvent("onTelemetry", emitMap)
+                telemetryStore?.recordTelemetry(processed.capture)
             }
         }
     }
@@ -1027,7 +1019,7 @@ class VescForegroundService : Service() {
         val id = canId
         if (id == null && !directConnection) return
         stopPolling()
-        armTelemetryStaleWatchdog()
+        telemetryPipeline.armStaleWatchdog()
         val pollPayload = if (id != null) {
             byteArrayOf(
                 COMM_FORWARD_CAN.toByte(),
@@ -1062,8 +1054,7 @@ class VescForegroundService : Service() {
     private fun stopPolling() {
         pollHandle?.cancel()
         pollHandle = null
-        telemetryStaleHandle?.cancel()
-        telemetryStaleHandle = null
+        telemetryPipeline.cancelStaleWatchdog()
     }
 
     private fun armCanPingTimeout() {
@@ -1073,6 +1064,7 @@ class VescForegroundService : Service() {
             if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
                 Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
                 directConnection = true
+                telemetryPipeline.updateCanId(null)
                 emitState()
                 startPolling()
             }
@@ -1122,6 +1114,7 @@ class VescForegroundService : Service() {
         if (shouldSetDirectOnReady(canId, directConnection)) {
             Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
             directConnection = true
+            telemetryPipeline.updateCanId(null)
         }
         if (shouldStartPollingOnReady(canId, directConnection, pollHandle)) {
             startPolling()
@@ -1151,20 +1144,12 @@ class VescForegroundService : Service() {
         emitState()
     }
 
-    private fun armTelemetryStaleWatchdog() {
+    private fun onTelemetryStaleFired() {
         val session = boardConfig ?: return
-        if (!session.autoReconnect) return
-        telemetryStaleHandle?.cancel()
-        val armedAt = lastTelemetryAt
-        telemetryStaleHandle = scheduler.postDelayed(TELEMETRY_STALE_MS) {
-            telemetryStaleHandle = null
-            val stillStale = lastTelemetryAt == armedAt ||
-                System.currentTimeMillis() - lastTelemetryAt >= TELEMETRY_STALE_MS
-            if (boardStatus == BoardPhase.Connected && boardConfig?.autoReconnect == true && stillStale) {
-                boardStatus = BoardPhase.Stale
-                emitState()
-                scheduleAutoReconnect(session, null, "telemetry stale")
-            }
+        if (boardStatus == BoardPhase.Connected && session.autoReconnect) {
+            boardStatus = BoardPhase.Stale
+            emitState()
+            scheduleAutoReconnect(session, null, "telemetry stale")
         }
     }
 
@@ -1220,10 +1205,9 @@ class VescForegroundService : Service() {
         directConnection = false
         fwVersionString = null
         telemetry = null
-        recentTelemetry.clear()
-        liveTelemetryPoints.clear()
         boardSession?.invalidate()
         boardSession = null
+        telemetryPipeline.endSession()
         sessionSequence += 1
         boardError = null
         boardStatus = BoardPhase.Idle
@@ -1296,7 +1280,7 @@ class VescForegroundService : Service() {
                     "reason" to reason,
                     "gatt_status" to gattStatus,
                     "auto_reconnect_enabled" to session.autoReconnect,
-                    "last_telemetry_timestamp" to lastTelemetryAt.takeIf { it > 0L },
+                    "last_telemetry_timestamp" to telemetryPipeline.lastTelemetryAt.takeIf { it > 0L },
                     "telemetry_parse_failed_count" to diagnosticsRecorder.telemetryParseFailedCount(),
                 ),
             )
@@ -1307,7 +1291,7 @@ class VescForegroundService : Service() {
         cancelCanPingTimeout()
         stopPolling()
         gattClient.clear(markIntentional = false)
-        lastTelemetryAt = 0L
+        telemetryPipeline.resetLastTelemetryAt()
         boardStatus = BoardPhase.Reconnecting
         boardError = reason
         autoReconnectAttempt += 1
@@ -1603,12 +1587,13 @@ class VescForegroundService : Service() {
         }
         applyTelemetrySettings(settings)
         val now = System.currentTimeMillis()
+        val lastTelemetryAt = telemetryPipeline.lastTelemetryAt
         val phase = if (
             boardStatus == BoardPhase.Connected &&
             lastTelemetryAt > 0L &&
             now - lastTelemetryAt >= TELEMETRY_STALE_MS
         ) BoardPhase.Stale else boardStatus
-        val recentTelemetryValue = if (includeRecent) recentTelemetry.toList() else emptyList()
+        val recentTelemetryValue = if (includeRecent) telemetryPipeline.recentSnapshot() else emptyList()
         val recentLocationsValue = if (includeRecent) recentLocations.toList() else emptyList()
 
         return buildLiveState(
@@ -1682,90 +1667,24 @@ class VescForegroundService : Service() {
         return fired.map { it.toMap() }
     }
 
-    private fun appendRecentTelemetry(point: Map<String, Any?>, packetAt: Long) {
-        recentTelemetry.addLast(point)
-        pruneRecent(recentTelemetry, packetAt)
-    }
-
-    private fun appendLiveTelemetry(
-        parsed: RefloatTelemetry,
-        eventMap: MutableMap<String, Any?>,
-    ): Map<String, Any?> {
-        val session = boardConfig
-        if (session == null) {
-            appendRecentTelemetry(eventMap, parsed.lastPacketAt)
-            return eventMap
-        }
-
-        val bucketPoint = FullTelemetryState.from(parsed.toCapture(session, canId)).toBucketPoint()
-        liveTelemetryPoints.addLast(LiveTelemetryPoint(bucketPoint, eventMap))
-        pruneLiveTelemetryPoints(parsed.lastPacketAt)
-        val updates = sanitizeLiveTelemetryPoints()
-        appendRecentTelemetry(eventMap, parsed.lastPacketAt)
-        return if (updates.isNotEmpty()) eventMap + mapOf("metricExclusionUpdates" to updates) else eventMap
-    }
-
-    private fun pruneLiveTelemetryPoints(nowMs: Long) {
-        val oldest = nowMs - recentWindowMs()
-        while (liveTelemetryPoints.isNotEmpty() && liveTelemetryPoints.first().bucketPoint.capturedAtMs < oldest) {
-            liveTelemetryPoints.removeFirst()
-        }
-    }
-
-    private fun sanitizeLiveTelemetryPoints(): List<Map<String, Any?>> {
-        if (liveTelemetryPoints.isEmpty()) return emptyList()
-        val points = liveTelemetryPoints.map { it.bucketPoint }
-        val sanitization = sanitizeTelemetrySamples(points, metricSanitizerConfig)
-        val updates = mutableListOf<Map<String, Any?>>()
-        val lastIndex = liveTelemetryPoints.size - 1
-        liveTelemetryPoints.forEachIndexed { index, point ->
-            val exclusions = sanitization.samples[index].toLiveMetricExclusions()
-            val previous = point.eventMap["metricExclusions"] as? Map<*, *>
-            point.eventMap["metricExclusions"] = exclusions
-            if (index != lastIndex && previous != exclusions) updates.add(
-                mapOf(
-                    "lastPacketAt" to point.bucketPoint.capturedAtMs,
-                    "metricExclusions" to exclusions,
-                ),
-            )
-        }
-        return updates
-    }
-
-    private fun SanitizedSample.toLiveMetricExclusions(): Map<String, Boolean> =
-        buildMap {
-            if (excludedFromAvgSpeed) put(METRIC_AVG_SPEED, true)
-            if (excludedFromMaxSpeed) put(METRIC_MAX_SPEED, true)
-            if (excludedFromMaxDuty) put(METRIC_MAX_DUTY, true)
-        }
-
     private fun appendRecentLocation(location: LocationSnapshot) {
         val point = location.toMap()
         recentLocations.addLast(point)
-        pruneRecent(recentLocations, location.timestamp)
+        pruneRecentLocations(location.timestamp)
     }
 
-    private fun pruneRecent(points: ArrayDeque<Map<String, Any?>>, nowMs: Long) {
-        val oldest = nowMs - recentWindowMs()
-        while (points.isNotEmpty()) {
-            val timestamp = (points.first()["lastPacketAt"] as? Number)?.toLong()
-                ?: (points.first()["timestamp"] as? Number)?.toLong()
-                ?: break
-            if (timestamp >= oldest) break
-            points.removeFirst()
+    private fun pruneRecentLocations(nowMs: Long) {
+        val oldest = nowMs - telemetryPipeline.recentWindowMs()
+        while (recentLocations.isNotEmpty()) {
+            val ts = (recentLocations.first()["timestamp"] as? Number)?.toLong() ?: break
+            if (ts >= oldest) break
+            recentLocations.removeFirst()
         }
     }
 
-    private fun recentWindowMs(): Long = liveHistoryLimitMinutes.toLong() * 60_000L
-
-    private fun setLiveHistoryLimitMinutes(minutes: Int) {
-        liveHistoryLimitMinutes = minutes.coerceIn(
-            MIN_LIVE_HISTORY_LIMIT_MINUTES,
-            MAX_LIVE_HISTORY_LIMIT_MINUTES,
-        )
-        pruneRecent(recentTelemetry, System.currentTimeMillis())
-        pruneLiveTelemetryPoints(System.currentTimeMillis())
-        pruneRecent(recentLocations, System.currentTimeMillis())
+    private fun applyLiveHistoryLimitMinutes(minutes: Int) {
+        telemetryPipeline.setLiveHistoryLimitMinutes(minutes)
+        pruneRecentLocations(System.currentTimeMillis())
     }
 
     private fun refreshLiveHistoryLimit() {
@@ -1780,8 +1699,8 @@ class VescForegroundService : Service() {
     }
 
     private fun applyTelemetrySettings(settings: AppSettings) {
-        setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
-        metricSanitizerConfig = settings.toMetricSanitizerConfig()
+        applyLiveHistoryLimitMinutes(settings.liveHistoryLimit)
+        telemetryPipeline.metricSanitizerConfig = settings.toMetricSanitizerConfig()
         telemetryStore?.applySettings(settings)
     }
 
@@ -1820,11 +1739,6 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun recordTelemetry(values: RefloatTelemetry) {
-        val session = boardConfig ?: return
-        telemetryStore?.recordTelemetry(values.toCapture(session, canId))
-    }
-
     private fun captureTelemetryParseFailed(payload: ByteArray) =
         diagnosticsRecorder.captureTelemetryParseFailed(payload, boardConfig)
 
@@ -1846,7 +1760,7 @@ class VescForegroundService : Service() {
 
     private fun recordConnectionLostMarker(session: SessionConfig, reason: String) {
         val store = telemetryStore ?: return
-        val markerAt = lastTelemetryAt.takeIf { it > 0L } ?: return
+        val markerAt = telemetryPipeline.lastTelemetryAt.takeIf { it > 0L } ?: return
         if (connectionLostMarkerAt == markerAt) return
         connectionLostMarkerAt = markerAt
         store.recordMarker(
