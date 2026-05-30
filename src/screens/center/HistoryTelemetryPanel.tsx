@@ -23,9 +23,9 @@ import { useHistoryStore, type TelemetrySample } from '@/store/historyStore'
 import { theme } from '@/constants/theme'
 
 interface HistoryTelemetryPanelProps {
-  startAtMs: number
-  endAtMs: number
-  deviceName: string
+  startAtMs: number | null
+  endAtMs: number | null
+  deviceName: string | null
   samples: TelemetrySample[]
   canPrevious: boolean
   canNext: boolean
@@ -63,6 +63,22 @@ function formatRideDate(startMs: number, endMs: number): string {
     return `${s.getDate()}–${e.getDate()} ${MONTHS[s.getMonth()]} ${s.getFullYear()}`
   }
   return `${s.getDate()} ${MONTHS[s.getMonth()]} – ${e.getDate()} ${MONTHS[e.getMonth()]} ${e.getFullYear()}`
+}
+
+function formatRideTitle(startAtMs: number | null, endAtMs: number | null): string {
+  if (startAtMs == null || endAtMs == null) return ''
+  return formatRideTime(startAtMs, endAtMs)
+}
+
+function formatRideMeta(
+  startAtMs: number | null,
+  endAtMs: number | null,
+  deviceName: string | null,
+): string {
+  if (startAtMs == null || endAtMs == null) return deviceName ?? ''
+  return deviceName
+    ? `${formatRideDate(startAtMs, endAtMs)} · ${deviceName}`
+    : formatRideDate(startAtMs, endAtMs)
 }
 
 export function HistoryTelemetryPanel({
@@ -321,10 +337,10 @@ export function HistoryTelemetryPanel({
         <Pressable style={styles.titleButton} onPress={onOpenList}>
           <View style={styles.titleContent}>
             <Text style={styles.titleTime} numberOfLines={1}>
-              {formatRideTime(startAtMs, endAtMs)}
+              {formatRideTitle(startAtMs, endAtMs)}
             </Text>
             <Text style={styles.titleMeta} numberOfLines={1}>
-              {formatRideDate(startAtMs, endAtMs)} · {deviceName}
+              {formatRideMeta(startAtMs, endAtMs, deviceName)}
             </Text>
           </View>
           <CaretDownIcon size={12} color="#64748b" weight="bold" />

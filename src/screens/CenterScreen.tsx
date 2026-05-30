@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { ActivityIndicator, View, Text, StyleSheet } from 'react-native'
 
 import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
@@ -35,6 +35,7 @@ export function CenterScreen({
   onToggleRecordDebug,
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
+  const [historyBottomInset, setHistoryBottomInset] = useState(0)
   const controller = useCenterScreenController({ mapRef })
 
   if (!boardsLoaded) {
@@ -59,6 +60,7 @@ export function CenterScreen({
         rideMarkers={controller.sessionMarkers}
         historyPreview={controller.historyPreview}
         historyActive={controller.historyActive}
+        historyBottomInset={historyBottomInset}
         mapStyleKey={controller.mapStyleKey}
         mapNavigationMode={controller.mapNavigationMode}
         rotationLocked={controller.rotationLocked}
@@ -124,6 +126,7 @@ export function CenterScreen({
           exitHistory: controller.exitHistory,
           removeSession: controller.removeSession,
           onSeek: controller.onSeek,
+          onBottomInsetChange: setHistoryBottomInset,
         }}
       />
     </View>

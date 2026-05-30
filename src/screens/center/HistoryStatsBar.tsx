@@ -18,7 +18,7 @@ import type { HistorySession } from '@/store/historyStore'
 import { theme } from '@/constants/theme'
 
 interface HistoryStatsBarProps {
-  session: HistorySession
+  session: HistorySession | null
 }
 
 interface StatItem {
@@ -63,68 +63,68 @@ function CompactStat({ item }: CompactStatProps) {
   )
 }
 
-function sessionToStats(session: HistorySession): StatItem[] {
+function sessionToStats(session: HistorySession | null): StatItem[] {
   return [
     {
       key: 'rideTime',
       label: 'Time',
-      value: formatDuration(session.endAtMs - session.startAtMs),
+      value: session ? formatDuration(session.endAtMs - session.startAtMs) : '',
       icon: ClockCountdownIcon,
       accent: theme.target.color,
     },
     {
       key: 'topSpeed',
       label: 'Top speed',
-      value: formatSpeed(session.maxSpeedKmh),
+      value: session ? formatSpeed(session.maxSpeedKmh) : '',
       icon: GaugeIcon,
       accent: theme.warning.color,
     },
     {
       key: 'mosfetTemp',
       label: 'Ctrl max',
-      value: formatTemp(session.maxTempMosfet),
+      value: session ? formatTemp(session.maxTempMosfet) : '',
       icon: ThermometerHotIcon,
       accent: theme.error.color,
     },
     {
       key: 'batteryUsed',
       label: 'Used',
-      value: formatWh(session.batteryUsedWh),
+      value: session ? formatWh(session.batteryUsedWh) : '',
       icon: BatteryMediumIcon,
       accent: theme.warning.color,
     },
     {
       key: 'maxDuty',
       label: 'Max duty',
-      value: formatDuty(session.maxDuty),
+      value: session ? formatDuty(session.maxDuty) : '',
       icon: LightningIcon,
       accent: theme.bran.color,
     },
     {
       key: 'distance',
       label: 'Distance',
-      value: formatDistance(session.distanceM),
+      value: session ? formatDistance(session.distanceM) : '',
       icon: RoadHorizonIcon,
       accent: theme.wheel.color,
     },
     {
       key: 'avgSpeed',
       label: 'Avg speed',
-      value: formatSpeed(session.avgSpeedKmh),
+      value: session ? formatSpeed(session.avgSpeedKmh) : '',
       icon: RepeatIcon,
       accent: theme.teal.color,
     },
     {
       key: 'motorTemp',
       label: 'Motor max',
-      value: formatTemp(session.maxTempMotor),
+      value: session ? formatTemp(session.maxTempMotor) : '',
       icon: ThermometerSimpleIcon,
       accent: theme.highlight.color,
     },
     {
       key: 'batteryRegen',
       label: 'Regen',
-      value: formatWh(session.batteryRegenWh),
+      value: session ? formatWh(session.batteryRegenWh) : '',
       icon: BatteryChargingIcon,
       accent: theme.gps.color,
     },

@@ -88,6 +88,7 @@ interface CenterHistoryOverlayProps {
   exitHistory: () => void
   removeSession: () => void
   onSeek: (timeMs: number) => void
+  onBottomInsetChange: (height: number) => void
 }
 
 interface CenterOverlaysProps {
@@ -155,6 +156,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
   const telemetryReturnOpacity = useSharedValue(mode === 'telemetry' ? 1 : 0)
   const weatherLoading = useWeatherStore((s) => s.loading)
   const historyBusy = history.loadingSession || history.historyLoading
+  const onHistoryBottomInsetChange = history.onBottomInsetChange
   const telemetryInteractive = mode === 'telemetry' && !revealGestureActive
   const interfaceFadeStyle = useAnimatedStyle(
     () => ({
@@ -233,6 +235,14 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
       telemetryReturnOpacity.value = 0
     }
   }, [dragOpacity, mode, revealProgress, telemetryReturnOpacity])
+
+  useEffect(() => {
+    if (mode !== 'history') {
+      onHistoryBottomInsetChange(0)
+      return
+    }
+    onHistoryBottomInsetChange(historyPanelBottom + panelHeight)
+  }, [historyPanelBottom, mode, onHistoryBottomInsetChange, panelHeight])
 
   return (
     <>
@@ -341,8 +351,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
           <MapVignette mode={mode} panelHeight={panelHeight} idPrefix="history-map-vignette" />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
-              <View style={styles.mapLoadingDim} />
-              <ActivityIndicator size="large" color={theme.wheel.color} />
+              <ActivityIndicator size="small" color={theme.wheel.color} />
             </View>
           )}
           <HistoryTelemetryPanel
@@ -374,12 +383,30 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
 
       {mode === 'history' && !history.selectedSession && (
         <>
+          <MapVignette
+            mode={mode}
+            panelHeight={panelHeight || 150}
+            idPrefix="history-map-vignette-loading"
+          />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
-              <View style={styles.mapLoadingDim} />
-              <ActivityIndicator size="large" color={theme.wheel.color} />
+              <ActivityIndicator size="small" color={theme.wheel.color} />
             </View>
           )}
+          <HistoryTelemetryPanel
+            startAtMs={null}
+            endAtMs={null}
+            deviceName={null}
+            samples={[]}
+            canPrevious={false}
+            canNext={false}
+            onPrevious={() => undefined}
+            onNext={() => undefined}
+            onOpenList={() => history.setHistorySheetVisible(true)}
+            onSeek={history.onSeek}
+            onHeightChange={setPanelHeight}
+          />
+          <HistoryStatsBar session={null} />
           <HistoryControls
             loading={historyBusy}
             canRemove={false}
@@ -533,13 +560,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   mapLoading: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
     zIndex: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  mapLoadingDim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: theme.neutral.surfaceDeep,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(9, 12, 18, 0.58)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    transform: [{ translateX: -17 }, { translateY: -17 }],
   },
 })

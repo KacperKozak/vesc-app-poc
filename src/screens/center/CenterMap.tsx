@@ -7,6 +7,7 @@ import Mapbox, {
   RasterSource,
   ShapeSource,
 } from '@rnmapbox/maps'
+import type { LineLayerStyle } from '@rnmapbox/maps'
 import {
   ArrowUpIcon,
   ClockCountdownIcon,
@@ -99,6 +100,13 @@ const GPS_POINT_COLOR = theme.target.color
 const GPS_POINT_TEXT_COLOR = theme.target.text
 const DESTINATION_POINT_COLOR = theme.gps.color
 const DESTINATION_POINT_TEXT_COLOR = theme.gps.text
+const HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS = 50
+const HISTORY_ROUTE_HIGHLIGHT_WIDTH = 0.16
+const HISTORY_ROUTE_HIGHLIGHT_COLOR = 'rgba(216, 180, 254, 0.95)'
+const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = 'rgba(216, 180, 254, 0)'
+const HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS = 1400
+const HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS = 5200
+const HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM = 260
 interface MapLayout {
   width: number
   height: number
@@ -431,14 +439,45 @@ function HistoryMapLayers({
   rideGpsSamples: CenterMapLayersProps['rideGpsSamples']
   onSelectMarker: CenterMapLayersProps['onSelectMarker']
 }) {
+  const [highlightProgress, setHighlightProgress] = useState(0)
+  const highlightDurationMs = useMemo(
+    () => getHistoryRouteHighlightDurationMs(rideRoute),
+    [rideRoute],
+  )
+
+  useEffect(() => {
+    if (!rideRouteShape) return
+    const startedAt = Date.now()
+    const interval = setInterval(() => {
+      const progress = (Date.now() - startedAt) / highlightDurationMs
+      setHighlightProgress(Math.min(1, progress))
+      if (progress >= 1) clearInterval(interval)
+    }, HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [highlightDurationMs, rideRouteShape])
+
+  const routeHighlightGradient = useMemo(
+    () => getHistoryRouteHighlightGradient(highlightProgress),
+    [highlightProgress],
+  )
+
   return (
     <>
       {rideRouteShape && (
-        <ShapeSource id="center-ride-route-source" shape={rideRouteShape}>
+        <ShapeSource id="center-ride-route-source" shape={rideRouteShape} lineMetrics>
           <LineLayer
             id="center-ride-route-line"
             style={{
               lineColor: theme.target.color,
+              lineWidth: 4,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
+          />
+          <LineLayer
+            id="center-ride-route-highlight"
+            style={{
+              lineGradient: routeHighlightGradient,
               lineWidth: 4,
               lineCap: 'round',
               lineJoin: 'round',
@@ -472,6 +511,132 @@ function HistoryMapLayers({
         ),
       )}
     </>
+  )
+}
+
+function getHistoryRouteHighlightGradient(
+  progress: number,
+): NonNullable<LineLayerStyle['lineGradient']> {
+  const peak = -HISTORY_ROUTE_HIGHLIGHT_WIDTH + progress * (1 + HISTORY_ROUTE_HIGHLIGHT_WIDTH * 2)
+  const leadingEdge = Math.max(0, peak - HISTORY_ROUTE_HIGHLIGHT_WIDTH)
+  const trailingEdge = Math.min(1, peak + HISTORY_ROUTE_HIGHLIGHT_WIDTH)
+
+  if (peak <= 0) {
+    if (trailingEdge <= 0) {
+      return [
+        'interpolate',
+        ['linear'],
+        ['line-progress'],
+        0,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+        1,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+    }
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+      trailingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  if (peak >= 1) {
+    if (leadingEdge >= 1) {
+      return [
+        'interpolate',
+        ['linear'],
+        ['line-progress'],
+        0,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+        1,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+    }
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      leadingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  if (leadingEdge <= 0) {
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      peak,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+      trailingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  if (trailingEdge >= 1) {
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      leadingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      peak,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  return [
+    'interpolate',
+    ['linear'],
+    ['line-progress'],
+    0,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    leadingEdge,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    peak,
+    HISTORY_ROUTE_HIGHLIGHT_COLOR,
+    trailingEdge,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    1,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+  ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+}
+
+function getHistoryRouteHighlightDurationMs(route: [number, number][]) {
+  if (route.length < 2) return HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS
+  let distanceM = 0
+  for (let index = 1; index < route.length; index += 1) {
+    const [fromLongitude, fromLatitude] = route[index - 1]
+    const [toLongitude, toLatitude] = route[index]
+    distanceM += distanceMeters(
+      { longitude: fromLongitude, latitude: fromLatitude },
+      { longitude: toLongitude, latitude: toLatitude },
+    )
+  }
+  return Math.min(
+    HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS,
+    Math.max(
+      HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS,
+      (distanceM / 1000) * HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM,
+    ),
   )
 }
 
@@ -561,6 +726,7 @@ interface CenterMapProps {
   rideGpsSamples: HistoryGpsSample[]
   rideMarkers: HistoryMarker[]
   historyActive: boolean
+  historyBottomInset: number
   mapStyleKey: MapStyleKey
   mapNavigationMode: MapNavigationMode
   rotationLocked: boolean
@@ -588,6 +754,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     rideGpsSamples,
     rideMarkers,
     historyActive,
+    historyBottomInset,
     mapStyleKey,
     mapNavigationMode,
     rotationLocked,
@@ -726,6 +893,10 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
     [rideGpsSamples],
   )
+  const historyMapViewport = useMemo(
+    () => ({ ...mapLayout, bottomInset: historyBottomInset }),
+    [historyBottomInset, mapLayout],
+  )
 
   const {
     cameraRef,
@@ -745,6 +916,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     historyActive,
     historyPreview,
     rideRoute,
+    mapViewport: historyMapViewport,
     gpsHeadingMode: headingFollowMode,
     phoneHeadingMode,
     phoneHeadingReady: phoneHeadingDeg != null,

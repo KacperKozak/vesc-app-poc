@@ -3,21 +3,12 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState 
 import { Dimensions } from 'react-native'
 
 import { MAP_DEFAULTS } from '@/constants/mapStyles'
-import { distanceMeters, getBounds, zoomLevelForDelta } from '@/helpers/mapGeometry'
-import { getCameraAfterScreenDrag } from '@/screens/center/cameraPanProjection'
+import { distanceMeters, zoomLevelForDelta } from '@/helpers/mapGeometry'
 import { getLiveFollowCameraProfile, getPitchForZoom } from '@/screens/center/cameraFollowProfile'
+import { getCameraAfterScreenDrag } from '@/screens/center/cameraPanProjection'
+import { getHistoryRouteCamera, type HistoryCameraViewport } from '@/screens/center/historyCamera'
 
 const MIN_ZOOM = 0
-const HISTORY_PREVIEW_ZOOM = 11.8
-const HISTORY_PREVIEW_BOTTOM_PADDING = 300
-const HISTORY_PREVIEW_SIDE_PADDING = 72
-const HISTORY_PREVIEW_TOP_PADDING = 120
-const HISTORY_FIT_PADDING: [number, number, number, number] = [
-  HISTORY_PREVIEW_TOP_PADDING,
-  HISTORY_PREVIEW_SIDE_PADDING,
-  HISTORY_PREVIEW_BOTTOM_PADDING,
-  HISTORY_PREVIEW_SIDE_PADDING,
-]
 const HISTORY_DYNAMIC_FULL_DISTANCE_M = 80_000
 const HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS = 450
 const INSTANT_JUMP_DISTANCE_M = 10_000
@@ -110,6 +101,7 @@ interface UseCameraControlsParams {
   historyActive: boolean
   historyPreview: ({ key: string } & HistoryPreviewTarget) | null
   rideRoute: [number, number][]
+  mapViewport: HistoryCameraViewport
   gpsHeadingMode: boolean
   phoneHeadingMode: boolean
   phoneHeadingReady: boolean
@@ -130,6 +122,7 @@ export function useCameraControls({
   historyActive,
   historyPreview,
   rideRoute,
+  mapViewport,
   gpsHeadingMode,
   phoneHeadingMode,
   phoneHeadingReady,
@@ -155,7 +148,15 @@ export function useCameraControls({
   const cameraModeRef = useRef<CameraMode>({ kind: 'liveFollow' })
   const [cameraMode, setCameraModeState] = useState<CameraMode>({ kind: 'liveFollow' })
   const followGps = cameraMode.kind === 'liveFollow'
-  const viewportHeight = Dimensions.get('window').height
+  const windowSize = Dimensions.get('window')
+  const viewportHeight = windowSize.height
+  const historyViewport = useMemo(
+    () =>
+      mapViewport.width > 0 && mapViewport.height > 0
+        ? mapViewport
+        : { width: windowSize.width, height: windowSize.height },
+    [mapViewport, windowSize.height, windowSize.width],
+  )
 
   const setCameraModeRef = useCallback((mode: CameraMode) => {
     cameraModeRef.current = mode
@@ -241,6 +242,7 @@ export function useCameraControls({
       if (!cameraFix) return
       const followCamera = getLiveFollowCamera()
       lastFollowKeyRef.current = liveFollowKey(cameraFix.timestamp, followCamera)
+      currentCameraRef.current = followCamera
       cameraRef.current?.setCamera({
         ...followCamera,
         animationDuration,
@@ -251,21 +253,26 @@ export function useCameraControls({
   )
 
   const getHistoryPreviewCamera = useCallback(
-    (coordinate: { latitude: number; longitude: number }) => ({
-      centerCoordinate: [coordinate.longitude, coordinate.latitude] as [number, number],
-      zoomLevel: HISTORY_PREVIEW_ZOOM,
-      heading: 0,
-      pitch: getPitchForZoom(HISTORY_PREVIEW_ZOOM, perspectiveEnabled),
-      padding: {
-        paddingTop: HISTORY_PREVIEW_TOP_PADDING,
-        paddingRight: HISTORY_PREVIEW_SIDE_PADDING,
-        paddingBottom: HISTORY_PREVIEW_BOTTOM_PADDING,
-        paddingLeft: HISTORY_PREVIEW_SIDE_PADDING,
-      },
-      animationDuration: MAP_DEFAULTS.animationDuration,
-      animationMode: 'easeTo' as const,
-    }),
-    [perspectiveEnabled],
+    (coordinate: { latitude: number; longitude: number }) => {
+      const camera = getHistoryRouteCamera({
+        route: [[coordinate.longitude, coordinate.latitude]],
+        viewport: historyViewport,
+        maxZoom: MAP_DEFAULTS.maxZoom,
+      })
+      const zoomLevel = camera?.zoomLevel ?? MAP_DEFAULTS.persistedGpsFallbackZoom
+      return {
+        centerCoordinate:
+          camera?.centerCoordinate ??
+          ([coordinate.longitude, coordinate.latitude] as [number, number]),
+        zoomLevel,
+        heading: 0,
+        pitch: getPitchForZoom(zoomLevel, perspectiveEnabled),
+        padding: camera?.padding,
+        animationDuration: MAP_DEFAULTS.animationDuration,
+        animationMode: 'easeTo' as const,
+      }
+    },
+    [historyViewport, perspectiveEnabled],
   )
 
   const recenterLive = useCallback(
@@ -278,6 +285,7 @@ export function useCameraControls({
         cameraDistanceTo(currentCameraRef.current, cameraFix),
         MAP_DEFAULTS.animationDuration,
       )
+      currentCameraRef.current = followCamera
       cameraRef.current?.setCamera({
         ...followCamera,
         ...(options?.resetPadding
@@ -304,18 +312,29 @@ export function useCameraControls({
 
   const fitRide = useCallback(
     (selectionKey: string | null) => {
-      if (rideRoute.length < 2) return
+      const historyCamera = getHistoryRouteCamera({
+        route: rideRoute,
+        viewport: historyViewport,
+        maxZoom: MAP_DEFAULTS.maxZoom,
+      })
+      if (!historyCamera) return
       enterCameraMode({ kind: 'rideHistory', selectionKey, phase: 'route' })
-      const bounds = getBounds(rideRoute)
       const currentCamera = currentCameraRef.current
       const routeCenter = {
-        longitude: (bounds.ne[0] + bounds.sw[0]) / 2,
-        latitude: (bounds.ne[1] + bounds.sw[1]) / 2,
+        longitude: historyCamera.centerCoordinate[0],
+        latitude: historyCamera.centerCoordinate[1],
       }
       const duration = historyMoveDuration(cameraDistanceTo(currentCamera, routeCenter))
-      cameraRef.current?.fitBounds(bounds.ne, bounds.sw, HISTORY_FIT_PADDING, duration)
+      cameraRef.current?.setCamera({
+        ...historyCamera,
+        heading: 0,
+        pitch: getPitchForZoom(historyCamera.zoomLevel, perspectiveEnabled),
+        animationDuration: duration,
+        animationMode: 'easeTo',
+      })
+      onHeadingChange(0)
     },
-    [enterCameraMode, rideRoute],
+    [enterCameraMode, historyViewport, onHeadingChange, perspectiveEnabled, rideRoute],
   )
 
   const previewHistorySession = useCallback(
@@ -335,7 +354,20 @@ export function useCameraControls({
       const duration = historyMoveDuration(Math.max(currentDistanceM, lastTargetDistanceM))
       const bounds = getHistoryPreviewBounds(preview)
       if (bounds) {
-        cameraRef.current?.fitBounds(bounds.ne, bounds.sw, HISTORY_FIT_PADDING, duration)
+        const historyCamera = getHistoryRouteCamera({
+          route: [bounds.ne, bounds.sw],
+          viewport: historyViewport,
+          maxZoom: MAP_DEFAULTS.maxZoom,
+        })
+        if (historyCamera) {
+          cameraRef.current?.setCamera({
+            ...historyCamera,
+            heading: 0,
+            pitch: getPitchForZoom(historyCamera.zoomLevel, perspectiveEnabled),
+            animationDuration: duration,
+            animationMode: 'easeTo',
+          })
+        }
       } else {
         cameraRef.current?.setCamera({
           ...getHistoryPreviewCamera(preview),
@@ -344,7 +376,13 @@ export function useCameraControls({
       }
       onHeadingChange(0)
     },
-    [enterCameraMode, getHistoryPreviewCamera, onHeadingChange],
+    [
+      enterCameraMode,
+      getHistoryPreviewCamera,
+      historyViewport,
+      onHeadingChange,
+      perspectiveEnabled,
+    ],
   )
 
   const restorePreviewPan = useCallback(() => {
@@ -375,12 +413,14 @@ export function useCameraControls({
       recenterLive,
       previewHistorySession,
       beginPreviewPan() {
-        const currentCamera = currentCameraRef.current
-        const baseCamera = currentCamera ?? {
-          ...gpsCamera,
-          heading: followHeadingDeg,
-          pitch: getPitchForZoom(gpsCamera.zoomLevel, perspectiveEnabled),
-        }
+        const baseCamera =
+          followGps && !historyActive
+            ? getLiveFollowCamera()
+            : (currentCameraRef.current ?? {
+                ...gpsCamera,
+                heading: followHeadingDeg,
+                pitch: getPitchForZoom(gpsCamera.zoomLevel, perspectiveEnabled),
+              })
         previewPanBaseRef.current =
           followGps && gpsHeadingMode
             ? {
@@ -402,7 +442,8 @@ export function useCameraControls({
         })
       },
       beginPreviewZoom() {
-        previewZoomBaseRef.current = currentCameraRef.current
+        previewZoomBaseRef.current =
+          followGps && !historyActive ? getLiveFollowCamera() : currentCameraRef.current
       },
       previewZoomBy(scale: number) {
         const baseCamera = previewZoomBaseRef.current
@@ -463,6 +504,7 @@ export function useCameraControls({
       applyLiveFollowCamera,
       followGps,
       followHeadingDeg,
+      getLiveFollowCamera,
       gpsCamera,
       gpsHeadingMode,
       historyActive,
@@ -564,7 +606,7 @@ export function useCameraControls({
   }, [historyActive, historyPreview, previewHistorySession, setCameraModeRef])
 
   useEffect(() => {
-    if (!historyActive || rideRoute.length < 2) return
+    if (!historyActive || rideRoute.length === 0) return
     historyPreviewTargetRef.current = null
     const selectionKey = historyPreview?.key ?? null
     setCameraModeRef({ kind: 'rideHistory', selectionKey, phase: 'route' })
