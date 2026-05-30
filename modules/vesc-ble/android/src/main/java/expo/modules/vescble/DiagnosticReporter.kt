@@ -3,6 +3,7 @@ package expo.modules.vescble
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import expo.modules.vescble.diagnostics.DiagnosticPayloadProperties
 import com.posthog.PostHog
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
@@ -12,7 +13,6 @@ private const val DIAGNOSTIC_TAG = "DiagnosticReporter"
 private const val POSTHOG_API_KEY_META = "expo.modules.vescble.POSTHOG_API_KEY"
 private const val POSTHOG_HOST_META = "expo.modules.vescble.POSTHOG_HOST"
 private const val DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com"
-private const val PAYLOAD_PREFIX_BYTES = 32
 private const val DIAGNOSTIC_PREFS = "vesc_ble_diagnostics"
 private const val DIAGNOSTIC_DISTINCT_ID_KEY = "diagnostic_distinct_id"
 
@@ -129,24 +129,11 @@ class DiagnosticReporter private constructor(
         }
 
         fun telemetryPayloadProperties(payload: ByteArray): Map<String, Any?> {
-            val commandByte = payload.getOrNull(0)?.toInt()?.and(0xff)
-            val modeByte = payload.getOrNull(3)?.toInt()?.and(0xff)
-            return mapOf(
-                "payload_size" to payload.size,
-                "command_byte" to commandByte,
-                "mode_byte" to modeByte,
-                "payload_prefix_hex" to payload
-                    .take(PAYLOAD_PREFIX_BYTES)
-                    .joinToString("") { "%02x".format(it) },
-            )
+            return DiagnosticPayloadProperties.telemetry(payload)
         }
 
         fun configBlobProperties(config: ByteArray?): Map<String, Any?> {
-            if (config == null) return emptyMap()
-            return mapOf(
-                "raw_config_length" to config.size,
-                "raw_config_hex" to config.joinToString("") { "%02x".format(it) },
-            )
+            return DiagnosticPayloadProperties.configBlob(config)
         }
 
         private fun commonProperties(context: Context): Map<String, Any?> {

@@ -1,7 +1,6 @@
 package expo.modules.vescble
 
 import android.annotation.SuppressLint
-import android.app.Notification
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
@@ -16,27 +15,42 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import java.io.File
+import expo.modules.vescble.config.ConfigRWEffect
+import expo.modules.vescble.config.ConfigRWEvent
+import expo.modules.vescble.config.ConfigRWFsm
+import expo.modules.vescble.config.ConfigRWState
+import expo.modules.vescble.connection.ConnectPhaseTimeout
+import expo.modules.vescble.connection.ConnectionCoordinator
+import expo.modules.vescble.diagnostics.DiagnosticContext
+import expo.modules.vescble.diagnostics.DiagnosticsRecorder
+import expo.modules.vescble.notification.NotificationFormatter
+import expo.modules.vescble.notification.NotificationPresenter
+import expo.modules.vescble.recording.RecordingCoordinator
+import expo.modules.vescble.reconnect.RECONNECT_MAX_ATTEMPTS
+import expo.modules.vescble.reconnect.ReconnectBlePort
+import expo.modules.vescble.reconnect.ReconnectListener
+import expo.modules.vescble.reconnect.ReconnectPolicy
+import expo.modules.vescble.reconnect.ReconnectScanMatch
+import expo.modules.vescble.reconnect.ReconnectScheduler
+import expo.modules.vescble.runtime.BoardSession
+import expo.modules.vescble.runtime.Cancellable
+import expo.modules.vescble.runtime.HandlerScheduler
+import expo.modules.vescble.runtime.Scheduler
+import expo.modules.vescble.runtime.postDelayedForSession
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
 import expo.modules.vescble.telemetry.BatterySocEstimator
-import expo.modules.vescble.telemetry.BucketTelemetryPoint
-import expo.modules.vescble.telemetry.FullTelemetryState
-import expo.modules.vescble.telemetry.METRIC_AVG_SPEED
-import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
-import expo.modules.vescble.telemetry.METRIC_MAX_SPEED
-import expo.modules.vescble.telemetry.MetricSanitizerConfig
-import expo.modules.vescble.telemetry.SanitizedSample
+import expo.modules.vescble.telemetry.DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.MAX_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.MIN_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.TelemetryPipeline
 import expo.modules.vescble.telemetry.TelemetryRepository
-import expo.modules.vescble.telemetry.sanitizeTelemetrySamples
 import expo.modules.vescble.telemetry.toMetricSanitizerConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 internal const val VESC_SESSION_TAG = "VescSession"
 private const val CHANNEL_ID = "vesc_monitoring_v5"
@@ -48,13 +62,9 @@ private const val ACTION_START_GPS_MONITORING = "expo.modules.vescble.ACTION_STA
 private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP_GPS_MONITORING"
 
 private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
-private const val DEFAULT_LIVE_HISTORY_LIMIT_MINUTES = 5
-private const val MIN_LIVE_HISTORY_LIMIT_MINUTES = 1
-private const val MAX_LIVE_HISTORY_LIMIT_MINUTES = 50
 private const val TELEMETRY_STALE_MS = 4_000L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
-private const val RECONNECT_SCAN_TIMEOUT_MS = 6_000L
 
 data class SessionConfig(
     val appBoardId: String?,
@@ -65,6 +75,12 @@ data class SessionConfig(
     val recordingEnabled: Boolean,
     val telemetryRecordingEnabled: Boolean,
     val autoReconnect: Boolean = false,
+)
+
+internal data class PendingStart(
+    val boardConfig: SessionConfig,
+    val onSuccess: () -> Unit,
+    val onError: (String, String) -> Unit,
 )
 
 @SuppressLint("MissingPermission")
@@ -78,7 +94,6 @@ class VescForegroundService : Service() {
         private var pendingStop: PendingStop? = null
         private var pendingConfigRead: PendingConfigRead? = null
         private var pendingGpsStart = false
-        private var requestedTelemetryRecordingEnabled = false
         private var requestedLiveHistoryLimitMinutes = DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
         private val appDataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -160,7 +175,7 @@ class VescForegroundService : Service() {
         }
 
         fun setTelemetryRecordingEnabled(context: Context, enabled: Boolean) {
-            requestedTelemetryRecordingEnabled = enabled
+            RecordingCoordinator.requestTelemetryRecording(enabled)
             instance?.setTelemetryRecordingEnabled(enabled)
             if (!enabled) TelemetryRepository.get(context.applicationContext).flushBlocking()
         }
@@ -169,7 +184,7 @@ class VescForegroundService : Service() {
             val minutes = (limit?.toInt() ?: DEFAULT_LIVE_HISTORY_LIMIT_MINUTES)
                 .coerceIn(MIN_LIVE_HISTORY_LIMIT_MINUTES, MAX_LIVE_HISTORY_LIMIT_MINUTES)
             requestedLiveHistoryLimitMinutes = minutes
-            instance?.setLiveHistoryLimitMinutes(minutes)
+            instance?.applyLiveHistoryLimitMinutes(minutes)
         }
 
         fun reloadTelemetrySettings(context: Context) {
@@ -199,7 +214,7 @@ class VescForegroundService : Service() {
         fun setAppInForeground(active: Boolean) {
             if (appInForeground == active) return
             appInForeground = active
-            instance?.showNotification()
+            instance?.presenter?.show()
         }
 
         private fun idleState(repository: AppDataRepository): Map<String, Any?> {
@@ -239,30 +254,11 @@ class VescForegroundService : Service() {
         }
     }
 
-    private data class PendingStart(
-        val boardConfig: SessionConfig,
-        val onSuccess: () -> Unit,
-        val onError: (String, String) -> Unit,
-    )
-
     private data class PendingStop(val onSuccess: () -> Unit)
-    private data class LiveTelemetryPoint(
-        val bucketPoint: BucketTelemetryPoint,
-        val eventMap: MutableMap<String, Any?>,
-    )
 
     private data class PendingConfigRead(
         val onSuccess: (Map<String, Any?>) -> Unit,
         val onError: (String, String) -> Unit,
-    )
-    private data class ActiveConfigRead(
-        val pending: PendingConfigRead,
-        val wasPolling: Boolean,
-        val operationId: String = newOperationId(),
-        val xmlBytes: ByteArray = ByteArray(0),
-        val expectedXmlLength: Int? = null,
-        val nextXmlOffset: Int = 0,
-        val rawConfig: ByteArray? = null,
     )
 
     private data class PendingConfigWrite(
@@ -271,30 +267,18 @@ class VescForegroundService : Service() {
         val onError: (String, String) -> Unit,
     )
 
-    private enum class ConfigWritePhase {
-        READING_SCHEMA,
-        READING_CONFIG,
-        SENDING_WRITE,
-        VERIFYING,
-    }
-
-    private data class ActiveConfigWrite(
-        val pending: PendingConfigWrite,
-        val wasPolling: Boolean,
-        val profileFields: Map<String, Any>,
-        val operationId: String = newOperationId(),
-        val phase: ConfigWritePhase = ConfigWritePhase.READING_SCHEMA,
-        val xmlBytes: ByteArray = ByteArray(0),
-        val expectedXmlLength: Int? = null,
-        val nextXmlOffset: Int = 0,
-        val originalConfig: ByteArray? = null,
-        val patchedConfig: ByteArray? = null,
-        val schema: RefloatConfigSchema? = null,
-    )
-
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scheduler: Scheduler = HandlerScheduler(mainHandler)
     private val packetReassembler = VescPacketReassembler()
-    private val rttHistory = ArrayDeque<Long>()
+    private val pollingLoop = PollingLoop(
+        scheduler = scheduler,
+        isCurrentSession = ::isCurrentBoardSession,
+        sendPayloadWithRetry = { payload, session -> sendPayloadWithRetry(payload, session) },
+    )
+    private val connectionCoordinator = ConnectionCoordinator(
+        scheduler = scheduler,
+        isCurrentSession = ::isCurrentBoardSession,
+    )
     private val notificationController by lazy {
         VescNotificationController(
             service = this,
@@ -304,9 +288,49 @@ class VescForegroundService : Service() {
             stopAction = ACTION_EXIT_FROM_NOTIFICATION,
         )
     }
+    private val presenter by lazy {
+        NotificationPresenter(
+            controller = notificationController,
+            deviceName = { boardConfig?.deviceName },
+            appInForeground = { appInForeground },
+        )
+    }
     private val alertEngine = VescAlertEngine()
     private var activeGeigerRuleIds: Set<String> = emptySet()
     private val alertFeedback by lazy { VescAlertFeedback(this, mainHandler) }
+    private val diagnosticsRecorder: DiagnosticsRecorder by lazy {
+        DiagnosticsRecorder(
+            local = { name, props ->
+                TelemetryRepository.get(applicationContext).recordDiagnosticEvent(name, props)
+            },
+            remote = { name, props -> DiagnosticReporter.get(this).capture(name, props) },
+            context = {
+                DiagnosticContext(
+                    phaseWire = boardStatus.wireValue,
+                    connectionSeq = currentSessionId,
+                    connectAttempt = connectionCoordinator.connectAttempt,
+                    autoReconnectAttempt = reconnectScheduler.currentAttempt,
+                    canId = canId,
+                    directConnection = directConnection,
+                    lastSentCommand = lastSentCommand,
+                    lastReceivedCommandByte = lastReceivedCommandByte,
+                    lastTelemetryAt = telemetryPipeline.lastTelemetryAt,
+                )
+            },
+        )
+    }
+    private val telemetryPipeline: TelemetryPipeline = TelemetryPipeline(
+        scheduler = scheduler,
+        onTelemetryStale = ::onTelemetryStaleFired,
+        captureBuilder = { parsed, cfg, id -> parsed.toCapture(cfg, id) },
+        staleTimeoutMs = TELEMETRY_STALE_MS,
+    )
+    private val recordingCoordinator by lazy {
+        RecordingCoordinator(
+            context = applicationContext,
+            applyLiveSettings = ::applyTelemetryPipelineSettings,
+        )
+    }
     private val gpsMonitor by lazy {
         VescGpsMonitor(
             context = this,
@@ -318,10 +342,224 @@ class VescForegroundService : Service() {
         VescGattClient(
             context = this,
             handler = mainHandler,
-            recorder = { recorder },
+            recorder = { recordingCoordinator.currentRecorder() },
             listener = gattListener,
         )
     }
+
+    private val reconnectBlePort = object : ReconnectBlePort {
+        private var activeCallback: ScanCallback? = null
+
+        override fun hasScanner(): Boolean = bluetoothAdapter.bluetoothLeScanner != null
+
+        override fun startScan(
+            targetId: String,
+            onFound: (ReconnectScanMatch) -> Unit,
+            onFailed: (errorCode: Int) -> Unit,
+        ): Boolean {
+            val scanner = bluetoothAdapter.bluetoothLeScanner ?: return false
+            val cb = object : ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: ScanResult) {
+                    if (!result.device.address.equals(targetId, ignoreCase = true)) return
+                    onFound(ReconnectScanMatch(result.device.address, result.rssi))
+                }
+
+                override fun onScanFailed(errorCode: Int) {
+                    onFailed(errorCode)
+                }
+            }
+            activeCallback = cb
+            scanner.startScan(
+                null,
+                ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    .build(),
+                cb,
+            )
+            Log.d(VESC_SESSION_TAG, "Reconnect scan started for $targetId")
+            return true
+        }
+
+        override fun stopScan() {
+            val cb = activeCallback ?: return
+            activeCallback = null
+            try {
+                bluetoothAdapter.bluetoothLeScanner?.stopScan(cb)
+            } catch (e: Exception) {
+                Log.w(VESC_SESSION_TAG, "Reconnect scan stop failed: ${e.message}")
+            }
+        }
+    }
+
+    private val reconnectListener = object : ReconnectListener {
+        override fun isReconnectActive(session: BoardSession): Boolean {
+            if (!session.isActive || session !== boardSession || isStoppingService) return false
+            val cfg = boardConfig ?: return false
+            if (!cfg.autoReconnect) return false
+            return boardStatus == BoardPhase.Reconnecting || boardStatus == BoardPhase.Rescanning
+        }
+
+        override fun onAttempt(
+            session: BoardSession,
+            reason: String,
+            gattStatus: Int?,
+            nextAttempt: Int,
+        ) {
+            val cfg = boardConfig ?: return
+            flushTelemetryDiagnostics("reconnect")
+            recordingCoordinator.recordConnectionLost(
+                cfg,
+                telemetryPipeline.lastTelemetryAt,
+                reason,
+            )
+            recordLocalDiagnostic(
+                "reconnect_scheduled",
+                cfg,
+                "connect",
+                mapOf(
+                    "message" to reason,
+                    "reason" to reason,
+                    "gatt_status" to gattStatus,
+                    "auto_reconnect_next_attempt" to nextAttempt,
+                ),
+            )
+            if (reason.contains("telemetry", ignoreCase = true)) {
+                captureDiagnostic(
+                    if (reason.contains("stale", ignoreCase = true)) "telemetry_stale" else "telemetry_unavailable",
+                    diagnosticProperties(cfg, "telemetry") + mapOf(
+                        "message" to reason,
+                        "reason" to reason,
+                        "gatt_status" to gattStatus,
+                        "auto_reconnect_enabled" to cfg.autoReconnect,
+                        "last_telemetry_timestamp" to telemetryPipeline.lastTelemetryAt.takeIf { it > 0L },
+                        "telemetry_parse_failed_count" to diagnosticsRecorder.telemetryParseFailedCount(),
+                    ),
+                )
+            }
+            connectionCoordinator.clearPending()
+            cancelBoardReadyTimeout()
+            cancelCanPingTimeout()
+            stopPolling()
+            gattClient.clear(markIntentional = false)
+            telemetryPipeline.resetLastTelemetryAt()
+            boardStatus = BoardPhase.Reconnecting
+            boardError = reason
+            recordingCoordinator.recordState(
+                "reconnecting",
+                mapOf("attempt" to nextAttempt, "status" to gattStatus),
+            )
+            emitState()
+            presenter.show("Reconnecting...")
+        }
+
+        override fun onScanStart(session: BoardSession) {
+            boardStatus = BoardPhase.Rescanning
+            emitState()
+            recordLocalDiagnostic(
+                "reconnect_scan_started",
+                boardConfig,
+                "connect",
+                mapOf("message" to "Reconnect scan started"),
+            )
+        }
+
+        override fun onScanFound(session: BoardSession, match: ReconnectScanMatch) {
+            recordLocalDiagnostic(
+                "reconnect_scan_found",
+                boardConfig,
+                "connect",
+                mapOf(
+                    "message" to "Reconnect target found",
+                    "scan_result_address" to match.address,
+                    "rssi" to match.rssi,
+                ),
+            )
+        }
+
+        override fun onScanTimeout(session: BoardSession) {
+            recordLocalDiagnostic(
+                "reconnect_scan_timeout",
+                boardConfig,
+                "connect",
+                mapOf(
+                    "message" to "Reconnect scan timed out",
+                    "timeout_ms" to ReconnectPolicy.scanTimeoutMs(),
+                ),
+            )
+        }
+
+        override fun onScanFailed(session: BoardSession, errorCode: Int) {
+            Log.w(VESC_SESSION_TAG, "Reconnect scan failed errorCode=$errorCode")
+            recordLocalDiagnostic(
+                "reconnect_scan_failed",
+                boardConfig,
+                "connect",
+                mapOf(
+                    "message" to "Reconnect scan failed",
+                    "error_code" to errorCode,
+                ),
+            )
+        }
+
+        override fun onScanStartFailed(session: BoardSession, error: String?) {
+            Log.w(VESC_SESSION_TAG, "Reconnect scan start failed: $error")
+            recordLocalDiagnostic(
+                "reconnect_scan_start_failed",
+                boardConfig,
+                "connect",
+                mapOf(
+                    "message" to "Reconnect scan start failed",
+                    "error_message" to error,
+                ),
+            )
+        }
+
+        override fun onMissingTarget(session: BoardSession) {
+            // Re-schedule logs the next attempt; nothing to do here.
+        }
+
+        override fun onScannerUnavailable(session: BoardSession) {
+            // Re-schedule logs the next attempt; nothing to do here.
+        }
+
+        override fun startDirectReconnect(session: BoardSession, reason: String) {
+            val cfg = boardConfig ?: return
+            recordLocalDiagnostic(
+                "reconnect_direct_connect_started",
+                cfg,
+                "connect",
+                mapOf(
+                    "message" to "Reconnect direct connect started",
+                    "reason" to reason,
+                ),
+            )
+            connectionCoordinator.resetAttempts()
+            boardError = null
+            setStatus(BoardPhase.Connecting)
+            startBleSession(PendingStart(cfg, onSuccess = {}, onError = { _, _ -> }))
+        }
+
+        override fun onMaxAttemptsReached(session: BoardSession, reason: String) {
+            recordLocalDiagnostic(
+                "reconnect_max_attempts",
+                boardConfig,
+                "connect",
+                mapOf(
+                    "message" to "Reconnect max attempts reached",
+                    "reason" to reason,
+                ),
+            )
+            setError("Reconnect failed after $RECONNECT_MAX_ATTEMPTS attempts")
+            recordingCoordinator.finishDebugRecording("error")
+        }
+    }
+
+    private val reconnectScheduler = ReconnectScheduler(
+        scheduler = scheduler,
+        port = reconnectBlePort,
+        listener = reconnectListener,
+    )
 
     private var boardConfig: SessionConfig? = null
     @Volatile
@@ -332,44 +570,23 @@ class VescForegroundService : Service() {
     private var canId: Int? = null
     private var directConnection = false
     private var fwVersionString: String? = null
-    private var connectTimeout: Runnable? = null
-    private var boardReadyTimeout: Runnable? = null
-    private var pendingConnect: PendingStart? = null
-    private var pollRunnable: Runnable? = null
-    private var telemetryStaleRunnable: Runnable? = null
-    private var lastPollAt = 0L
-    private var lastTelemetryAt = 0L
-    private var connectAttempt = 0
-    private var recorder: VescSessionRecorder? = null
-    private var telemetryStore: TelemetryRepository? = null
+    private var boardReadyTimeoutHandle: Cancellable? = null
     private var gpsError: String? = null
     private var latestLocation: LocationSnapshot? = null
     private var latestPreciseLocation: LocationSnapshot? = null
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
-    private var autoReconnectRunnable: Runnable? = null
-    private var canPingTimeoutRunnable: Runnable? = null
-    private var reconnectScanCallback: ScanCallback? = null
-    private var reconnectScanTimeout: Runnable? = null
-    private var activeConfigRead: ActiveConfigRead? = null
-    private var activeConfigWrite: ActiveConfigWrite? = null
-    private var configTimeoutRunnable: Runnable? = null
-    private var autoReconnectAttempt = 0
-    private var telemetryParseFailedReported = false
-    private var telemetryParseFailedCount = 0
+    private var canPingTimeoutHandle: Cancellable? = null
+    private var configFsmState: ConfigRWState = ConfigRWState.Idle
+    private var configReadCallbacks: PendingConfigRead? = null
+    private var configWriteCallbacks: PendingConfigWrite? = null
+    private var configTimeoutHandle: Cancellable? = null
     private var lastSentCommand: Int? = null
     private var lastReceivedCommandByte: Int? = null
-    private var connectionLostMarkerAt: Long? = null
-    private var generation = 0L
-    private var liveHistoryLimitMinutes = requestedLiveHistoryLimitMinutes
-    private var metricSanitizerConfig = MetricSanitizerConfig()
+    private var boardSession: BoardSession? = null
+    private var sessionSequence: Long = 0L
+    private val currentSessionId: Long get() = boardSession?.id ?: sessionSequence
     private val isPollingCapable get() = isPollingCapable(canId, directConnection)
-    private val configChunkLength = 384
-    private val configSchemaTimeoutMs = 10_000L
-    private val configReadTimeoutMs = 8_000L
-    private val configWriteTimeoutMs = 10_000L
-    private val recentTelemetry = ArrayDeque<Map<String, Any?>>()
-    private val liveTelemetryPoints = ArrayDeque<LiveTelemetryPoint>()
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -435,7 +652,7 @@ class VescForegroundService : Service() {
     private fun consumePendingConfigRead() {
         val pending = pendingConfigRead ?: return
         pendingConfigRead = null
-        if (activeConfigRead != null || activeConfigWrite != null) {
+        if (configFsmState !is ConfigRWState.Idle) {
             pending.onError(
                 RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
                 "Config operation already in flight",
@@ -457,13 +674,19 @@ class VescForegroundService : Service() {
             )
             return
         }
-        val wasPolling = pollRunnable != null
+        val wasPolling = pollingLoop.isActive
         stopPolling()
-        activeConfigRead = ActiveConfigRead(
-            pending = pending,
-            wasPolling = wasPolling,
+        configReadCallbacks = pending
+        dispatchConfigEvent(
+            ConfigRWEvent.StartRead(
+                opId = newOperationId(),
+                canId = id,
+                directConnection = directConnection,
+                wasPolling = wasPolling,
+                appBoardId = boardConfig?.appBoardId,
+                fwVersion = fwVersionString,
+            ),
         )
-        sendNextConfigXmlChunk(id)
     }
 
     private fun consumePendingGpsStart() {
@@ -486,9 +709,9 @@ class VescForegroundService : Service() {
         startLocationUpdates()
         emitState()
         if (boardConfig == null) {
-            startForeground(NOTIFICATION_ID, buildNotification("Monitoring GPS"))
+            startForeground(NOTIFICATION_ID, presenter.build("Monitoring GPS"))
         } else {
-            showNotification()
+            presenter.show()
         }
     }
 
@@ -509,32 +732,24 @@ class VescForegroundService : Service() {
         refreshLiveHistoryLimit()
         VescForegroundService.reloadAlertRules(applicationContext)
         boardConfig = start.boardConfig
-        generation += 1
+        sessionSequence += 1
+        val session = BoardSession(id = sessionSequence)
+        boardSession = session
         canId = start.boardConfig.canId
         directConnection = false
         boardError = null
         telemetry = null
         loadBatteryConfig(start.boardConfig.appBoardId)
-        recentTelemetry.clear()
-        liveTelemetryPoints.clear()
+        telemetryPipeline.beginSession(session, start.boardConfig)
         packetReassembler.reset()
         gattClient.resetDiagnostics()
-        telemetryParseFailedReported = false
-        telemetryParseFailedCount = 0
-        connectAttempt = 0
-        autoReconnectAttempt = 0
-        lastTelemetryAt = 0L
-        if (start.boardConfig.recordingEnabled) {
-            recorder = VescSessionRecorder(this, start.boardConfig).also { it.start() }
-        }
-        telemetryStore = if (start.boardConfig.telemetryRecordingEnabled || requestedTelemetryRecordingEnabled) {
-            configuredTelemetryStore()
-        } else {
-            null
-        }
+        diagnosticsRecorder.resetTelemetryParseFailedCounters()
+        connectionCoordinator.reset()
+        reconnectScheduler.cancelAndReset()
+        recordingCoordinator.beginBoardSession(start.boardConfig)
         startLocationUpdates()
         setStatus(BoardPhase.Connecting)
-        startForeground(NOTIFICATION_ID, buildNotification("Connecting..."))
+        startForeground(NOTIFICATION_ID, presenter.build("Connecting..."))
 
         startBleSession(start)
     }
@@ -545,16 +760,14 @@ class VescForegroundService : Service() {
             failStart(start, "INVALID_DEVICE", "Board session requires deviceId")
             return
         }
-        pendingConnect = start
-        connectAttempt++
-        cancelConnectTimeout()
-        stopReconnectScan()
+        val attempt = connectionCoordinator.markConnectStarting(start)
+        reconnectScheduler.stopScan()
         val device = bluetoothAdapter.getRemoteDevice(deviceId)
         gattClient.connect(device)
         armConnectPhaseTimeout(start, "gatt_connect", GATT_CONNECT_TIMEOUT_MS)
         Log.d(
             VESC_SESSION_TAG,
-            "connect start device=$deviceId attempt=$connectAttempt autoReconnect=${start.boardConfig.autoReconnect}",
+            "connect start device=$deviceId attempt=$attempt autoReconnect=${start.boardConfig.autoReconnect}",
         )
         recordLocalDiagnostic(
             "ble_connect_started",
@@ -569,19 +782,21 @@ class VescForegroundService : Service() {
             Log.d(VESC_SESSION_TAG, "connect phase: gatt connected")
             recordLocalDiagnostic(
                 "gatt_connected",
-                pendingConnect?.boardConfig ?: boardConfig,
+                connectionCoordinator.pendingConnect?.boardConfig ?: boardConfig,
                 "connect",
                 mapOf("message" to "GATT connected"),
             )
             setStatus(BoardPhase.Discovering)
-            pendingConnect?.let { armConnectPhaseTimeout(it, "gatt_ready", GATT_READY_TIMEOUT_MS) }
+            connectionCoordinator.pendingConnect?.let {
+                armConnectPhaseTimeout(it, "gatt_ready", GATT_READY_TIMEOUT_MS)
+            }
         }
 
         override fun onGattSubscribing() {
             Log.d(VESC_SESSION_TAG, "connect phase: subscribing")
             recordLocalDiagnostic(
                 "gatt_subscribing",
-                pendingConnect?.boardConfig ?: boardConfig,
+                connectionCoordinator.pendingConnect?.boardConfig ?: boardConfig,
                 "connect",
                 mapOf("message" to "GATT subscribing"),
             )
@@ -589,32 +804,31 @@ class VescForegroundService : Service() {
         }
 
         override fun onGattDisconnected(status: Int, intentional: Boolean) {
-            val wasConnecting = pendingConnect
+            val wasConnecting = connectionCoordinator.pendingConnect
             Log.w(
                 VESC_SESSION_TAG,
                 "gatt disconnected status=$status intentional=$intentional wasConnecting=${wasConnecting != null} boardStatus=$boardStatus",
             )
-            cancelConnectTimeout()
+            connectionCoordinator.cancelConnectTimeout()
             stopPolling()
-            if (!intentional && activeConfigRead != null) {
-                failConfigRead(
-                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                    "Board disconnected during Refloat config read",
-                    resumePolling = false,
-                )
-            }
-            if (!intentional && activeConfigWrite != null) {
-                failConfigWrite(
-                    RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                    "Board disconnected during config write",
+            if (!intentional && configFsmState !is ConfigRWState.Idle) {
+                dispatchConfigEvent(
+                    ConfigRWEvent.SessionTerminated("Board disconnected during Refloat config op"),
                 )
             }
             if (intentional) {
                 return
             } else if (wasConnecting != null) {
-                if (status == 133 && connectAttempt < 2) {
+                if (
+                    connectionCoordinator.retryStatus133Once(
+                        status = status,
+                        wasConnecting = wasConnecting,
+                        session = boardSession,
+                        retryDelayMs = 250L,
+                        restart = ::startBleSession,
+                    )
+                ) {
                     Log.w(VESC_SESSION_TAG, "status=133 during connect, retrying once")
-                    mainHandler.postDelayed({ startBleSession(wasConnecting) }, 250)
                 } else if (wasConnecting.boardConfig.autoReconnect) {
                     captureDiagnostic(
                         "ble_connect_failed",
@@ -648,7 +862,7 @@ class VescForegroundService : Service() {
                     ),
                 )
                 setError("Board disconnected")
-                finishRecording("error")
+                recordingCoordinator.finishDebugRecording("error")
             }
         }
 
@@ -656,7 +870,7 @@ class VescForegroundService : Service() {
             Log.d(VESC_SESSION_TAG, "connect phase: gatt ready")
             recordLocalDiagnostic(
                 "gatt_ready",
-                pendingConnect?.boardConfig ?: boardConfig,
+                connectionCoordinator.pendingConnect?.boardConfig ?: boardConfig,
                 "connect",
                 mapOf("message" to "GATT ready"),
             )
@@ -674,10 +888,8 @@ class VescForegroundService : Service() {
     }
 
     private fun resolveBleConnect() {
-        cancelConnectTimeout()
-        val start = pendingConnect ?: return
-        Log.d(VESC_SESSION_TAG, "connect resolved attempt=$connectAttempt canId=$canId")
-        pendingConnect = null
+        val start = connectionCoordinator.resolvePending() ?: return
+        Log.d(VESC_SESSION_TAG, "connect resolved attempt=${connectionCoordinator.connectAttempt} canId=$canId")
         boardStatus = BoardPhase.WaitingForTelemetry
         boardError = null
         recordLocalDiagnostic(
@@ -687,28 +899,36 @@ class VescForegroundService : Service() {
             mapOf("message" to "Waiting for board telemetry"),
         )
         emitState()
-        showNotification("Discovering board...")
+        presenter.show("Discovering board...")
         start.onSuccess()
         if (canId != null) {
             startPolling()
         } else {
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte())) }, 300)
-            mainHandler.postDelayed({ sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte())) }, 1_200)
+            val session = boardSession
+            if (session != null) {
+                scheduler.postDelayedForSession(session, 300L, ::isCurrentBoardSession) {
+                    sendStartupPayload(byteArrayOf(COMM_FW_VERSION.toByte()), session)
+                }
+                scheduler.postDelayedForSession(session, 1_200L, ::isCurrentBoardSession) {
+                    sendStartupPayload(byteArrayOf(COMM_PING_CAN.toByte()), session)
+                }
+            }
             armCanPingTimeout()
         }
         armBoardReadyTimeout(start.boardConfig)
     }
 
     private fun handleFrameChunk(chunk: ByteArray) {
-        recorder?.recordChunk("rx", chunk)
+        recordingCoordinator.recordChunk("rx", chunk)
         for (payload in packetReassembler.feed(chunk)) {
             handlePayload(payload)
         }
     }
 
-    private fun sendStartupPayload(payload: ByteArray) {
-        if (activeConfigRead != null || activeConfigWrite != null) return
-        sendPayloadWithRetry(payload)
+    private fun sendStartupPayload(payload: ByteArray, session: BoardSession) {
+        if (!isCurrentBoardSession(session)) return
+        if (configFsmState !is ConfigRWState.Idle) return
+        sendPayloadWithRetry(payload, session)
     }
 
     private fun handlePayload(payload: ByteArray) {
@@ -720,6 +940,7 @@ class VescForegroundService : Service() {
                 cancelCanPingTimeout()
                 if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
+                    telemetryPipeline.updateCanId(canId)
                     emitState()
                     startPolling()
                     sendPayloadWithRetry(byteArrayOf(
@@ -730,20 +951,25 @@ class VescForegroundService : Service() {
                 } else {
                     Log.d(VESC_SESSION_TAG, "No CAN devices found, using direct connection")
                     directConnection = true
+                    telemetryPipeline.updateCanId(null)
                     emitState()
                     startPolling()
                 }
             }
-            COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
-            COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
-            COMM_SET_CUSTOM_CONFIG -> handleSetConfigResponse(payload)
+            COMM_GET_CUSTOM_CONFIG_XML -> dispatchConfigEvent(ConfigRWEvent.XmlPayloadReceived(payload))
+            COMM_GET_CUSTOM_CONFIG -> dispatchConfigEvent(
+                ConfigRWEvent.ConfigBytesPayloadReceived(payload, System.currentTimeMillis()),
+            )
+            COMM_SET_CUSTOM_CONFIG -> dispatchConfigEvent(ConfigRWEvent.SetConfigResponseReceived(payload))
             COMM_FORWARD_CAN -> {
                 if (payload.size >= 3) {
                     when (payload[2].toInt() and 0xff) {
                         COMM_FW_VERSION -> handleFwVersionPayload(payload.copyOfRange(2, payload.size))
-                        COMM_GET_CUSTOM_CONFIG_XML -> handleConfigXmlPayload(payload)
-                        COMM_GET_CUSTOM_CONFIG -> handleConfigBytesPayload(payload)
-                        COMM_SET_CUSTOM_CONFIG -> handleSetConfigResponse(payload)
+                        COMM_GET_CUSTOM_CONFIG_XML -> dispatchConfigEvent(ConfigRWEvent.XmlPayloadReceived(payload))
+                        COMM_GET_CUSTOM_CONFIG -> dispatchConfigEvent(
+                            ConfigRWEvent.ConfigBytesPayloadReceived(payload, System.currentTimeMillis()),
+                        )
+                        COMM_SET_CUSTOM_CONFIG -> dispatchConfigEvent(ConfigRWEvent.SetConfigResponseReceived(payload))
                     }
                 }
             }
@@ -758,126 +984,28 @@ class VescForegroundService : Service() {
                     captureTelemetryParseFailed(payload)
                     return
                 }
+                val sessionToken = boardSession ?: return
+                val processed = telemetryPipeline.process(parsed, sessionToken) ?: return
                 markBoardReady()
                 telemetry = parsed
-                lastTelemetryAt = parsed.lastPacketAt
-                armTelemetryStaleWatchdog()
                 val firedAlerts = evaluateAlerts(parsed)
-                val baseEventMap = parsed.toMap().toMutableMap()
-                if (firedAlerts.isNotEmpty()) baseEventMap["firedAlerts"] = firedAlerts
-                baseEventMap["generation"] = generation
-                baseEventMap["batteryPercent"] = BatterySocEstimator.estimateBatteryPercent(
+                val eventMap = processed.eventMap
+                if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
+                eventMap["generation"] = currentSessionId
+                eventMap["batteryPercent"] = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
                 )
-                val eventMap = appendLiveTelemetry(parsed, baseEventMap)
-                showNotification(
-                    formatNotificationText(parsed),
-                    shortCriticalText = formatBatteryVoltageChipText(parsed),
+                val emitMap = if (processed.metricExclusionUpdates.isNotEmpty()) {
+                    eventMap + mapOf("metricExclusionUpdates" to processed.metricExclusionUpdates)
+                } else eventMap
+                presenter.show(
+                    NotificationFormatter.formatNotificationText(parsed),
+                    shortCriticalText = NotificationFormatter.formatBatteryVoltageChipText(parsed),
                 )
-                emitEvent("onTelemetry", eventMap)
-                recordTelemetry(parsed)
+                emitEvent("onTelemetry", emitMap)
+                recordingCoordinator.recordTelemetry(processed.capture)
             }
-        }
-    }
-
-    private fun handleConfigXmlPayload(payload: ByteArray) {
-        if (activeConfigWrite != null) {
-            handleWriteXmlPayload(payload)
-            return
-        }
-        val active = activeConfigRead ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigRead(
-                    RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                    result.message,
-                )
-                return
-            }
-        }
-        clearConfigTimeout()
-        val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
-        active.xmlBytes.copyInto(merged)
-        parsed.chunk.copyInto(merged, active.xmlBytes.size)
-        val nextOffset = parsed.offset + parsed.chunk.size
-        activeConfigRead = active.copy(
-            xmlBytes = merged,
-            expectedXmlLength = parsed.totalLength,
-            nextXmlOffset = nextOffset,
-        )
-        val id = canId
-        if (id == null && !directConnection) {
-            failConfigRead(
-                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
-                "CAN id unavailable during Refloat config read",
-            )
-            return
-        }
-        if (nextOffset >= parsed.totalLength) {
-            sendConfigBytesRequest(id)
-        } else {
-            sendNextConfigXmlChunk(id)
-        }
-    }
-
-    private fun handleConfigBytesPayload(payload: ByteArray) {
-        if (activeConfigWrite != null) {
-            handleWriteConfigBytesPayload(payload)
-            return
-        }
-        val active = activeConfigRead ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigRead(
-                    RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE,
-                    result.message,
-                )
-                return
-            }
-        }
-        activeConfigRead = active.copy(rawConfig = parsed.config)
-        clearConfigTimeout()
-        val can = canId
-        if (can == null && !directConnection) {
-            failConfigRead(
-                RefloatConfigErrorCode.CAN_ID_UNAVAILABLE,
-                "CAN id unavailable during Refloat config read",
-            )
-            return
-        }
-        try {
-            val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
-            val snapshot = RefloatConfigDecoder.decode(
-                schema = schema,
-                rawConfig = parsed.config,
-                boardId = boardConfig?.appBoardId,
-                canId = can,
-                capturedAt = System.currentTimeMillis(),
-                fwVersion = fwVersionString,
-            )
-            completeConfigRead(snapshot)
-        } catch (e: RefloatConfigSchemaException) {
-            dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
-            failConfigRead(
-                RefloatConfigErrorCode.UNSUPPORTED_SCHEMA,
-                e.message ?: "Unsupported Refloat config schema",
-            )
-        } catch (e: RefloatConfigDecodeException) {
-            dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
-            failConfigRead(
-                RefloatConfigErrorCode.CONFIG_DECODE_FAILED,
-                e.message ?: "Failed to decode Refloat config",
-            )
-        } catch (e: Exception) {
-            Log.w(VESC_SESSION_TAG, "Unexpected Refloat config read failure", e)
-            dumpRefloatConfigDebug(active.xmlBytes, parsed.config)
-            failConfigRead(
-                RefloatConfigErrorCode.CONFIG_DECODE_FAILED,
-                e.message ?: "Failed to read Refloat config",
-            )
         }
     }
 
@@ -910,34 +1038,6 @@ class VescForegroundService : Service() {
         Log.d(VESC_SESSION_TAG, "FW version: $fwVersionString")
     }
 
-    private fun sendNextConfigXmlChunk(id: Int?) {
-        val active = activeConfigRead ?: return
-        val offset = active.nextXmlOffset
-        val expected = active.expectedXmlLength
-        val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
-            .coerceAtLeast(0)
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT, configSchemaTimeoutMs)
-        val sent = sendPayload(
-            RefloatConfigProtocol.buildGetCustomConfigXml(
-                canId = id,
-                confInd = 0,
-                length = length,
-                offset = offset,
-            ),
-        )
-        if (!sent) {
-            failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-        }
-    }
-
-    private fun sendConfigBytesRequest(id: Int?) {
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
-        val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
-        if (!sent) {
-            failConfigRead(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-        }
-    }
-
     private fun dumpRefloatConfigDebug(xmlBytes: ByteArray, configBytes: ByteArray) {
         try {
             val dir = File(filesDir, "refloat-debug").apply { mkdirs() }
@@ -957,71 +1057,12 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun armConfigTimeout(code: RefloatConfigErrorCode, timeoutMs: Long) {
-        clearConfigTimeout()
-        configTimeoutRunnable = Runnable {
-            failConfigRead(code, "Timed out reading Refloat config")
-        }
-        mainHandler.postDelayed(configTimeoutRunnable!!, timeoutMs)
-    }
-
-    private fun clearConfigTimeout() {
-        configTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        configTimeoutRunnable = null
-    }
-
-    private fun completeConfigRead(snapshot: RefloatConfigSnapshot) {
-        val active = activeConfigRead ?: return
-        activeConfigRead = null
-        clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        appDataScope.launch {
-            try {
-                AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
-            } catch (e: Exception) {
-                Log.w(VESC_SESSION_TAG, "Failed to auto-create main tune profile", e)
-            }
-            mainHandler.post {
-                active.pending.onSuccess(snapshot.toMap())
-            }
-        }
-    }
-
-    private fun failConfigRead(code: RefloatConfigErrorCode, message: String) {
-        failConfigRead(code, message, resumePolling = true)
-    }
-
-    private fun failConfigRead(code: RefloatConfigErrorCode, message: String, resumePolling: Boolean) {
-        val active = activeConfigRead ?: return
-        activeConfigRead = null
-        clearConfigTimeout()
-        if (resumePolling && active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        captureDiagnostic(
-            if (code == RefloatConfigErrorCode.CONFIG_DECODE_FAILED || code == RefloatConfigErrorCode.UNSUPPORTED_SCHEMA) {
-                "config_decode_failed"
-            } else {
-                "config_read_failed"
-            },
-            diagnosticProperties(boardConfig, "config_read") + mapOf(
-                "operation_id" to active.operationId,
-                "message" to message,
-                "error_code" to code.name,
-                "firmware" to fwVersionString,
-            ) + DiagnosticReporter.configBlobProperties(active.rawConfig),
-        )
-        active.pending.onError(code.name, message)
-    }
-
     // --- Config write flow (push profile to board) ---
 
     private fun consumePendingConfigWrite() {
         val pending = pendingConfigWrite ?: return
         pendingConfigWrite = null
-        if (activeConfigRead != null || activeConfigWrite != null) {
+        if (configFsmState !is ConfigRWState.Idle) {
             pending.onError(
                 RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
                 "Config operation already in flight",
@@ -1050,7 +1091,7 @@ class VescForegroundService : Service() {
                 null
             }
             if (profile == null) {
-                mainHandler.post {
+                scheduler.post {
                     pending.onError(
                         RefloatConfigErrorCode.PROFILE_NOT_FOUND.name,
                         "Tune profile not found: ${pending.profileId}",
@@ -1060,8 +1101,8 @@ class VescForegroundService : Service() {
             }
             @Suppress("UNCHECKED_CAST")
             val fields = (profile["fields"] as? Map<String, Any>) ?: emptyMap()
-            mainHandler.post {
-                if (activeConfigRead != null || activeConfigWrite != null) {
+            scheduler.post {
+                if (configFsmState !is ConfigRWState.Idle) {
                     pending.onError(
                         RefloatConfigErrorCode.CONFIG_REQUEST_IN_FLIGHT.name,
                         "Config operation already in flight",
@@ -1092,273 +1133,158 @@ class VescForegroundService : Service() {
                     )
                     return@post
                 }
-                val wasPolling = pollRunnable != null
+                val wasPolling = pollingLoop.isActive
                 stopPolling()
-                activeConfigWrite = ActiveConfigWrite(
-                    pending = pending,
-                    wasPolling = wasPolling,
-                    profileFields = fields,
+                configWriteCallbacks = pending
+                dispatchConfigEvent(
+                    ConfigRWEvent.StartWrite(
+                        opId = newOperationId(),
+                        canId = currentId,
+                        directConnection = directConnection,
+                        wasPolling = wasPolling,
+                        profileFields = fields,
+                        appBoardId = boardConfig?.appBoardId,
+                        fwVersion = fwVersionString,
+                    ),
                 )
-                sendNextWriteXmlChunk(currentId)
             }
         }
     }
 
-    private fun sendNextWriteXmlChunk(id: Int?) {
-        val active = activeConfigWrite ?: return
-        val offset = active.nextXmlOffset
-        val expected = active.expectedXmlLength
-        val length = (if (expected == null) configChunkLength else (expected - offset).coerceAtMost(configChunkLength))
-            .coerceAtLeast(0)
-        armConfigTimeout(RefloatConfigErrorCode.CONFIG_SCHEMA_TIMEOUT, configSchemaTimeoutMs)
-        val sent = sendPayload(
-            RefloatConfigProtocol.buildGetCustomConfigXml(
-                canId = id, confInd = 0, length = length, offset = offset,
-            ),
-        )
-        if (!sent) {
-            failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-        }
+    private fun dispatchConfigEvent(event: ConfigRWEvent) {
+        val (next, effects) = ConfigRWFsm.apply(configFsmState, event)
+        configFsmState = next
+        effects.forEach(::interpretConfigEffect)
     }
 
-    private fun handleWriteXmlPayload(payload: ByteArray) {
-        val active = activeConfigWrite ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigXmlResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigWrite(RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE, result.message)
-                return
+    private fun interpretConfigEffect(effect: ConfigRWEffect) {
+        when (effect) {
+            is ConfigRWEffect.SendFrame -> {
+                if (!sendPayload(effect.payload)) {
+                    dispatchConfigEvent(ConfigRWEvent.GattWriteFailed("Board GATT is not writable"))
+                }
             }
-        }
-        clearConfigTimeout()
-        val merged = ByteArray(active.xmlBytes.size + parsed.chunk.size)
-        active.xmlBytes.copyInto(merged)
-        parsed.chunk.copyInto(merged, active.xmlBytes.size)
-        val nextOffset = parsed.offset + parsed.chunk.size
-        activeConfigWrite = active.copy(
-            xmlBytes = merged,
-            expectedXmlLength = parsed.totalLength,
-            nextXmlOffset = nextOffset,
-        )
-        val id = canId
-        if (id == null && !directConnection) {
-            failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
-            return
-        }
-        if (nextOffset >= parsed.totalLength) {
-            activeConfigWrite = activeConfigWrite?.copy(phase = ConfigWritePhase.READING_CONFIG)
-            armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
-            val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
-            if (!sent) {
-                failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+            is ConfigRWEffect.ScheduleTimeout -> {
+                configTimeoutHandle?.cancel()
+                val code = effect.code
+                configTimeoutHandle = scheduler.postDelayed(effect.timeoutMs) {
+                    configTimeoutHandle = null
+                    dispatchConfigEvent(ConfigRWEvent.Timeout(code))
+                }
             }
-        } else {
-            sendNextWriteXmlChunk(id)
-        }
-    }
-
-    private fun handleWriteConfigBytesPayload(payload: ByteArray) {
-        val active = activeConfigWrite ?: return
-        val parsed = when (val result = RefloatConfigProtocol.parseCustomConfigResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> result.value
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigWrite(RefloatConfigErrorCode.UNEXPECTED_CONFIG_RESPONSE, result.message)
-                return
+            ConfigRWEffect.CancelTimeout -> {
+                configTimeoutHandle?.cancel()
+                configTimeoutHandle = null
             }
-        }
-        clearConfigTimeout()
-        val id = canId
-        if (id == null && !directConnection) {
-            failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost during write")
-            return
-        }
-
-        when (active.phase) {
-            ConfigWritePhase.READING_CONFIG -> {
-                try {
-                    val schema = RefloatConfigSchemaParser.parse(active.xmlBytes)
-                    val patched = RefloatConfigEncoder.encode(schema, parsed.config, active.profileFields)
-                    activeConfigWrite = active.copy(
-                        phase = ConfigWritePhase.SENDING_WRITE,
-                        originalConfig = parsed.config,
-                        patchedConfig = patched,
-                        schema = schema,
-                    )
-                    armConfigTimeout(RefloatConfigErrorCode.CONFIG_WRITE_TIMEOUT, configWriteTimeoutMs)
-                    val sent = sendPayload(RefloatConfigProtocol.buildSetCustomConfig(id, 0, patched))
-                    if (!sent) {
-                        failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
+            is ConfigRWEffect.EmitReadComplete -> {
+                val callbacks = configReadCallbacks
+                configReadCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                val snapshot = effect.snapshot
+                appDataScope.launch {
+                    try {
+                        AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
+                    } catch (e: Exception) {
+                        Log.w(VESC_SESSION_TAG, "Failed to auto-create main tune profile", e)
                     }
-                } catch (e: RefloatConfigSchemaException) {
-                    failConfigWrite(RefloatConfigErrorCode.UNSUPPORTED_SCHEMA, e.message ?: "Unsupported schema")
-                } catch (e: RefloatConfigEncodeException) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_ENCODE_FAILED, e.message ?: "Encode failed")
-                } catch (e: Exception) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, e.message ?: "Write failed")
+                    scheduler.post { callbacks?.onSuccess?.invoke(snapshot.toMap()) }
                 }
             }
-            ConfigWritePhase.VERIFYING -> {
-                val schema = active.schema
-                val patchedConfig = active.patchedConfig
-                if (schema == null || patchedConfig == null) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, "Missing state for verification")
-                    return
-                }
-                try {
-                    when (val verification = RefloatConfigWriteVerifier.verifyExactBytes(patchedConfig, parsed.config)) {
-                        is RefloatConfigWriteVerification.Success -> Unit
-                        is RefloatConfigWriteVerification.Failure -> {
-                            Log.w(VESC_SESSION_TAG, verification.message)
-                            failConfigWrite(
-                                RefloatConfigErrorCode.CONFIG_VERIFY_FAILED,
-                                verification.message,
-                            )
-                            return
-                        }
+            is ConfigRWEffect.EmitReadFailure -> {
+                val callbacks = configReadCallbacks
+                configReadCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                val eventName = if (
+                    effect.code == RefloatConfigErrorCode.CONFIG_DECODE_FAILED ||
+                    effect.code == RefloatConfigErrorCode.UNSUPPORTED_SCHEMA
+                ) "config_decode_failed" else "config_read_failed"
+                captureDiagnostic(
+                    eventName,
+                    diagnosticProperties(boardConfig, "config_read") + mapOf(
+                        "operation_id" to effect.opId,
+                        "message" to effect.message,
+                        "error_code" to effect.code.name,
+                        "firmware" to fwVersionString,
+                    ) + DiagnosticReporter.configBlobProperties(effect.rawConfig),
+                )
+                callbacks?.onError?.invoke(effect.code.name, effect.message)
+            }
+            is ConfigRWEffect.EmitWriteComplete -> {
+                val callbacks = configWriteCallbacks
+                configWriteCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                val snapshot = effect.snapshot
+                appDataScope.launch {
+                    try {
+                        AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(snapshot)
+                    } catch (e: Exception) {
+                        Log.w(VESC_SESSION_TAG, "Failed to update profile after push", e)
                     }
-                    val actualSnapshot = RefloatConfigDecoder.decode(schema, parsed.config, boardConfig?.appBoardId, id, System.currentTimeMillis(), fwVersionString)
-                    completeConfigWrite(actualSnapshot)
-                } catch (e: RefloatConfigDecodeException) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
-                } catch (e: Exception) {
-                    failConfigWrite(RefloatConfigErrorCode.CONFIG_VERIFY_FAILED, e.message ?: "Verification failed")
+                    scheduler.post { callbacks?.onSuccess?.invoke(snapshot.toMap()) }
                 }
             }
-            else -> {
-                failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, "Unexpected config bytes in phase ${active.phase}")
+            is ConfigRWEffect.EmitWriteFailure -> {
+                val callbacks = configWriteCallbacks
+                configWriteCallbacks = null
+                if (effect.resumePolling && boardConfig != null && isPollingCapable) startPolling()
+                captureDiagnostic(
+                    "profile_push_failed",
+                    diagnosticProperties(boardConfig, "profile_push") + mapOf(
+                        "operation_id" to effect.opId,
+                        "message" to effect.message,
+                        "error_code" to effect.code.name,
+                        "phase" to effect.phase.name,
+                        "firmware" to fwVersionString,
+                    ) + DiagnosticReporter.configBlobProperties(effect.rawConfig),
+                )
+                callbacks?.onError?.invoke(effect.code.name, effect.message)
             }
+            is ConfigRWEffect.DumpDebugBytes -> dumpRefloatConfigDebug(effect.xmlBytes, effect.configBytes)
         }
-    }
-
-    private fun handleSetConfigResponse(payload: ByteArray) {
-        val active = activeConfigWrite ?: return
-        when (val result = RefloatConfigProtocol.parseSetCustomConfigResponse(payload)) {
-            is RefloatConfigProtocolResult.Success -> {
-                clearConfigTimeout()
-                val id = canId
-                if (id == null && !directConnection) {
-                    failConfigWrite(RefloatConfigErrorCode.CAN_ID_UNAVAILABLE, "CAN id lost after write")
-                    return
-                }
-                activeConfigWrite = active.copy(phase = ConfigWritePhase.VERIFYING)
-                armConfigTimeout(RefloatConfigErrorCode.CONFIG_READ_TIMEOUT, configReadTimeoutMs)
-                val sent = sendPayload(RefloatConfigProtocol.buildGetCustomConfig(canId = id, confInd = 0))
-                if (!sent) {
-                    failConfigWrite(RefloatConfigErrorCode.GATT_NOT_WRITABLE, "Board GATT is not writable")
-                }
-            }
-            is RefloatConfigProtocolResult.Failure -> {
-                failConfigWrite(RefloatConfigErrorCode.CONFIG_WRITE_FAILED, result.message)
-            }
-        }
-    }
-
-    private fun completeConfigWrite(verifiedSnapshot: RefloatConfigSnapshot) {
-        val active = activeConfigWrite ?: return
-        activeConfigWrite = null
-        clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        appDataScope.launch {
-            try {
-                AppDataRepository.get(applicationContext).createMainTuneProfileIfMissing(verifiedSnapshot)
-            } catch (e: Exception) {
-                Log.w(VESC_SESSION_TAG, "Failed to update profile after push", e)
-            }
-            mainHandler.post {
-                active.pending.onSuccess(verifiedSnapshot.toMap())
-            }
-        }
-    }
-
-    private fun failConfigWrite(code: RefloatConfigErrorCode, message: String) {
-        val active = activeConfigWrite ?: return
-        activeConfigWrite = null
-        clearConfigTimeout()
-        if (active.wasPolling && boardConfig != null && isPollingCapable) {
-            startPolling()
-        }
-        captureDiagnostic(
-            "profile_push_failed",
-            diagnosticProperties(boardConfig, "profile_push") + mapOf(
-                "operation_id" to active.operationId,
-                "message" to message,
-                "error_code" to code.name,
-                "phase" to active.phase.name,
-                "firmware" to fwVersionString,
-            ) + DiagnosticReporter.configBlobProperties(active.originalConfig ?: active.patchedConfig),
-        )
-        active.pending.onError(code.name, message)
     }
 
     private fun startPolling() {
         val session = boardConfig ?: return
-        val id = canId
-        if (id == null && !directConnection) return
-        stopPolling()
-        armTelemetryStaleWatchdog()
-        val pollPayload = if (id != null) {
-            byteArrayOf(
-                COMM_FORWARD_CAN.toByte(),
-                id.toByte(),
-                COMM_CUSTOM_APP_DATA.toByte(),
-                REFLOAT_MAGIC.toByte(),
-                REFLOAT_GET_ALLDATA.toByte(),
-                2,
-            )
-        } else {
-            byteArrayOf(
-                COMM_CUSTOM_APP_DATA.toByte(),
-                REFLOAT_MAGIC.toByte(),
-                REFLOAT_GET_ALLDATA.toByte(),
-                2,
-            )
-        }
-        pollRunnable = object : Runnable {
-            override fun run() {
-                lastPollAt = System.currentTimeMillis()
-                sendPayloadWithRetry(pollPayload)
-                mainHandler.postDelayed(this, session.pollIntervalMs)
-            }
-        }
-        mainHandler.post(pollRunnable!!)
+        val sessionToken = boardSession ?: return
+        telemetryPipeline.armStaleWatchdog()
+        pollingLoop.start(session, sessionToken, canId, directConnection)
     }
 
     private fun stopPolling() {
-        pollRunnable?.let { mainHandler.removeCallbacks(it) }
-        pollRunnable = null
-        telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
-        telemetryStaleRunnable = null
+        pollingLoop.stop()
+        telemetryPipeline.cancelStaleWatchdog()
     }
 
     private fun armCanPingTimeout() {
         cancelCanPingTimeout()
-        canPingTimeoutRunnable = Runnable {
-            canPingTimeoutRunnable = null
+        val session = boardSession ?: return
+        canPingTimeoutHandle = scheduler.postDelayedForSession(session, CAN_PING_TIMEOUT, ::isCurrentBoardSession) {
+            canPingTimeoutHandle = null
             if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
                 Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
                 directConnection = true
+                telemetryPipeline.updateCanId(null)
                 emitState()
                 startPolling()
             }
         }
-        mainHandler.postDelayed(canPingTimeoutRunnable!!, CAN_PING_TIMEOUT)
     }
 
     private fun cancelCanPingTimeout() {
-        canPingTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        canPingTimeoutRunnable = null
+        canPingTimeoutHandle?.cancel()
+        canPingTimeoutHandle = null
     }
 
-    private fun boardReadyTimeoutMs(): Long = boardReadyTimeoutMs(autoReconnectAttempt)
+    private fun boardReadyTimeoutMs(): Long =
+        ReconnectPolicy.boardReadyTimeoutMs(reconnectScheduler.currentAttempt)
 
     private fun armBoardReadyTimeout(session: SessionConfig) {
         if (!session.autoReconnect) return
         cancelBoardReadyTimeout()
+        val sessionToken = boardSession ?: return
         val timeoutMs = boardReadyTimeoutMs()
-        boardReadyTimeout = Runnable {
-            boardReadyTimeout = null
+        boardReadyTimeoutHandle = scheduler.postDelayedForSession(sessionToken, timeoutMs, ::isCurrentBoardSession) {
+            boardReadyTimeoutHandle = null
             if (
                 (boardStatus == BoardPhase.Connecting || boardStatus == BoardPhase.WaitingForTelemetry) &&
                 boardConfig?.autoReconnect == true &&
@@ -1376,12 +1302,11 @@ class VescForegroundService : Service() {
                 scheduleAutoReconnect(session, null, "board telemetry unavailable")
             }
         }
-        mainHandler.postDelayed(boardReadyTimeout!!, timeoutMs)
     }
 
     private fun cancelBoardReadyTimeout() {
-        boardReadyTimeout?.let { mainHandler.removeCallbacks(it) }
-        boardReadyTimeout = null
+        boardReadyTimeoutHandle?.cancel()
+        boardReadyTimeoutHandle = null
     }
 
     private fun markBoardReady() {
@@ -1390,13 +1315,13 @@ class VescForegroundService : Service() {
         if (shouldSetDirectOnReady(canId, directConnection)) {
             Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
             directConnection = true
+            telemetryPipeline.updateCanId(null)
         }
-        if (shouldStartPollingOnReady(canId, directConnection, pollRunnable)) {
+        if (shouldStartPollingOnReady(canId, directConnection, pollingLoop.takeIf { it.isActive })) {
             startPolling()
         }
         if (boardStatus == BoardPhase.Connected) return
-        autoReconnectAttempt = 0
-        connectionLostMarkerAt = null
+        reconnectScheduler.resetAttempts()
         boardStatus = BoardPhase.Connected
         recordLocalDiagnostic(
             "board_ready",
@@ -1404,37 +1329,18 @@ class VescForegroundService : Service() {
             "connect",
             mapOf("message" to "Board telemetry received"),
         )
-        val autoRecording = try {
-            kotlinx.coroutines.runBlocking {
-                AppDataRepository.get(applicationContext).getTypedSettings().autoRecording
-            }
-        } catch (_: Exception) {
-            false
-        }
-        if (autoRecording && telemetryStore == null) {
-            telemetryStore = configuredTelemetryStore()
-        }
         boardError = null
-        telemetryStore?.recordMarker("connected", boardConfig?.deviceId, boardConfig?.deviceName)
+        boardConfig?.let { recordingCoordinator.markBoardReady(it) }
         emitState()
     }
 
-    private fun armTelemetryStaleWatchdog() {
+    private fun onTelemetryStaleFired() {
         val session = boardConfig ?: return
-        if (!session.autoReconnect) return
-        telemetryStaleRunnable?.let { mainHandler.removeCallbacks(it) }
-        val armedAt = lastTelemetryAt
-        telemetryStaleRunnable = Runnable {
-            telemetryStaleRunnable = null
-            val stillStale = lastTelemetryAt == armedAt ||
-                System.currentTimeMillis() - lastTelemetryAt >= TELEMETRY_STALE_MS
-            if (boardStatus == BoardPhase.Connected && boardConfig?.autoReconnect == true && stillStale) {
-                boardStatus = BoardPhase.Stale
-                emitState()
-                scheduleAutoReconnect(session, null, "telemetry stale")
-            }
+        if (boardStatus == BoardPhase.Connected && session.autoReconnect) {
+            boardStatus = BoardPhase.Stale
+            emitState()
+            scheduleAutoReconnect(session, null, "telemetry stale")
         }
-        mainHandler.postDelayed(telemetryStaleRunnable!!, TELEMETRY_STALE_MS)
     }
 
     private fun sendPayload(payload: ByteArray): Boolean {
@@ -1442,78 +1348,64 @@ class VescForegroundService : Service() {
         return gattClient.sendPayload(payload)
     }
 
-    private fun sendPayloadWithRetry(payload: ByteArray): Boolean {
+    private fun sendPayloadWithRetry(payload: ByteArray, session: BoardSession? = boardSession): Boolean {
+        if (session != null && !isCurrentBoardSession(session)) return false
         val sent = sendPayload(payload)
         if (!sent) {
-            mainHandler.postDelayed({ sendPayload(payload) }, 120)
+            if (session != null) {
+                scheduler.postDelayedForSession(session, 120L, ::isCurrentBoardSession) {
+                    sendPayload(payload)
+                }
+            }
         }
         return sent
     }
 
+    private fun isCurrentBoardSession(session: BoardSession): Boolean =
+        session.isActive && session === boardSession && !isStoppingService
+
     private fun updateLatency(now: Long): Int? {
-        if (lastPollAt <= 0) return null
-        rttHistory.addLast(max(0, now - lastPollAt))
-        while (rttHistory.size > 5) rttHistory.removeFirst()
-        return rttHistory.average().roundToInt()
+        return pollingLoop.updateLatency(now)
     }
 
     private fun stopCurrentBoardSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
         flushTelemetryDiagnostics("stop")
-        if (activeConfigRead != null) {
-            failConfigRead(
-                RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                "Board session stopped during Refloat config read",
-                resumePolling = false,
-            )
-        }
-        if (activeConfigWrite != null) {
-            failConfigWrite(
-                RefloatConfigErrorCode.BOARD_NOT_CONNECTED,
-                "Board session stopped during config write",
+        if (configFsmState !is ConfigRWState.Idle) {
+            dispatchConfigEvent(
+                ConfigRWEvent.SessionTerminated("Board session stopped during Refloat config op"),
             )
         }
         val stoppedConfig = boardConfig
-        autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
-        autoReconnectRunnable = null
-        stopReconnectScan()
-        cancelConnectTimeout()
+        reconnectScheduler.cancelAndReset()
         cancelBoardReadyTimeout()
         cancelCanPingTimeout()
         stopPolling()
         gattClient.clear(markIntentional = true)
         alertFeedback.stopAllGeiger()
         activeGeigerRuleIds = emptySet()
-        finishRecording(if (emitDisconnected) "disconnected" else "stopped")
-        telemetryStore?.recordMarker(
-            if (emitDisconnected) "disconnected" else "app_stop",
-            stoppedConfig?.deviceId,
-            stoppedConfig?.deviceName,
+        recordingCoordinator.finishBoardSession(
+            status = if (emitDisconnected) "disconnected" else "stopped",
+            markerType = if (emitDisconnected) "disconnected" else "app_stop",
+            config = stoppedConfig,
         )
-        telemetryStore?.flushBlocking()
-        telemetryStore = null
-        pendingConnect = null
-        connectionLostMarkerAt = null
+        connectionCoordinator.clearPending()
         canId = null
         directConnection = false
         fwVersionString = null
         telemetry = null
-        recentTelemetry.clear()
-        liveTelemetryPoints.clear()
-        generation += 1
+        boardSession?.invalidate()
+        boardSession = null
+        telemetryPipeline.endSession()
+        sessionSequence += 1
         boardError = null
         boardStatus = BoardPhase.Idle
         boardConfig = null
-        if (updateNotification && !isStoppingService && stoppedConfig != null) showNotification()
+        if (updateNotification && !isStoppingService && stoppedConfig != null) presenter.show()
         emitState()
     }
 
-    private fun finishRecording(status: String) {
-        recorder?.finish(status = status)
-        recorder = null
-    }
-
     private fun failPendingConnect(code: String, message: String) {
-        pendingConnect?.let { failStart(it, code, message) }
+        connectionCoordinator.pendingConnect?.let { failStart(it, code, message) }
     }
 
     private fun failStart(start: PendingStart, code: String, message: String) {
@@ -1529,224 +1421,37 @@ class VescForegroundService : Service() {
             start.onError(code, message)
             return
         }
-        pendingConnect = null
-        cancelConnectTimeout()
+        connectionCoordinator.clearPending()
         cancelBoardReadyTimeout()
         stopPolling()
         gattClient.clear(markIntentional = true)
         setError(message)
-        showNotification(message)
-        finishRecording("error")
-        telemetryStore?.flushBlocking()
-        telemetryStore = null
+        presenter.show(message)
+        recordingCoordinator.failSession()
         start.onError(code, message)
     }
 
     private fun setStatus(next: BoardPhase) {
         boardStatus = next
-        recorder?.recordState(next.recordName())
+        recordingCoordinator.recordState(next.recordName())
         emitState()
     }
 
     private fun scheduleAutoReconnect(session: SessionConfig, gattStatus: Int?, reason: String) {
         if (!session.autoReconnect || isStoppingService) return
-        flushTelemetryDiagnostics("reconnect")
-        recordConnectionLostMarker(session, reason)
-        recordLocalDiagnostic(
-            "reconnect_scheduled",
-            session,
-            "connect",
-            mapOf(
-                "message" to reason,
-                "reason" to reason,
-                "gatt_status" to gattStatus,
-                "auto_reconnect_next_attempt" to (autoReconnectAttempt + 1),
-            ),
+        val reconnectSession = boardSession ?: return
+        reconnectScheduler.schedule(
+            session = reconnectSession,
+            targetDeviceId = session.deviceId,
+            reason = reason,
+            gattStatus = gattStatus,
         )
-        if (reason.contains("telemetry", ignoreCase = true)) {
-            captureDiagnostic(
-                if (reason.contains("stale", ignoreCase = true)) "telemetry_stale" else "telemetry_unavailable",
-                diagnosticProperties(session, "telemetry") + mapOf(
-                    "message" to reason,
-                    "reason" to reason,
-                    "gatt_status" to gattStatus,
-                    "auto_reconnect_enabled" to session.autoReconnect,
-                    "last_telemetry_timestamp" to lastTelemetryAt.takeIf { it > 0L },
-                    "telemetry_parse_failed_count" to telemetryParseFailedCount,
-                ),
-            )
-        }
-        pendingConnect = null
-        cancelConnectTimeout()
-        cancelBoardReadyTimeout()
-        cancelCanPingTimeout()
-        stopPolling()
-        gattClient.clear(markIntentional = false)
-        lastTelemetryAt = 0L
-        boardStatus = BoardPhase.Reconnecting
-        boardError = reason
-        autoReconnectAttempt += 1
-        recorder?.recordState(
-            "reconnecting",
-            mapOf("attempt" to autoReconnectAttempt, "status" to gattStatus),
-        )
-        emitState()
-        showNotification("Reconnecting...")
-
-        autoReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
-        val delayMs = minOf(250L * autoReconnectAttempt, 2_000L)
-        val retry = Runnable {
-            autoReconnectRunnable = null
-            if (boardConfig?.autoReconnect == true && boardStatus == BoardPhase.Reconnecting) {
-                startReconnectScan(session)
-            }
-        }
-        autoReconnectRunnable = retry
-        mainHandler.postDelayed(retry, delayMs)
-    }
-
-    private fun startReconnectScan(session: SessionConfig) {
-        val targetId = session.deviceId
-        if (targetId.isNullOrBlank()) {
-            scheduleAutoReconnect(session, null, "missing reconnect target")
-            return
-        }
-        stopReconnectScan()
-        val scanner = bluetoothAdapter.bluetoothLeScanner
-        if (scanner == null) {
-            scheduleAutoReconnect(session, null, "BLE scanner unavailable")
-            return
-        }
-
-        val callback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                if (!result.device.address.equals(targetId, ignoreCase = true)) return
-                recordLocalDiagnostic(
-                    "reconnect_scan_found",
-                    session,
-                    "connect",
-                    mapOf(
-                        "message" to "Reconnect target found",
-                        "scan_result_address" to result.device.address,
-                        "rssi" to result.rssi,
-                    ),
-                )
-                stopReconnectScan()
-                if (boardConfig?.autoReconnect == true && boardStatus == BoardPhase.Rescanning) {
-                    startReconnectDirectConnect(session, "scan_found")
-                }
-            }
-
-            override fun onScanFailed(errorCode: Int) {
-                Log.w(VESC_SESSION_TAG, "Reconnect scan failed errorCode=$errorCode")
-                recordLocalDiagnostic(
-                    "reconnect_scan_failed",
-                    session,
-                    "connect",
-                    mapOf(
-                        "message" to "Reconnect scan failed",
-                        "error_code" to errorCode,
-                    ),
-                )
-                stopReconnectScan()
-                scheduleAutoReconnect(session, null, "reconnect scan failed ($errorCode)")
-            }
-        }
-
-        reconnectScanCallback = callback
-        try {
-            scanner.startScan(
-                null,
-                ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                    .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                    .build(),
-                callback,
-            )
-            Log.d(VESC_SESSION_TAG, "Reconnect scan started for $targetId")
-            boardStatus = BoardPhase.Rescanning
-            emitState()
-            recordLocalDiagnostic(
-                "reconnect_scan_started",
-                session,
-                "connect",
-                mapOf("message" to "Reconnect scan started"),
-            )
-            armReconnectScanTimeout(session, callback)
-        } catch (e: Exception) {
-            reconnectScanCallback = null
-            Log.w(VESC_SESSION_TAG, "Reconnect scan start failed: ${e.message}")
-            recordLocalDiagnostic(
-                "reconnect_scan_start_failed",
-                session,
-                "connect",
-                mapOf(
-                    "message" to "Reconnect scan start failed",
-                    "error_message" to e.message,
-                ),
-            )
-            scheduleAutoReconnect(session, null, "reconnect scan start failed")
-        }
-    }
-
-    private fun stopReconnectScan() {
-        reconnectScanTimeout?.let { mainHandler.removeCallbacks(it) }
-        reconnectScanTimeout = null
-        val callback = reconnectScanCallback ?: return
-        reconnectScanCallback = null
-        try {
-            bluetoothAdapter.bluetoothLeScanner?.stopScan(callback)
-        } catch (e: Exception) {
-            Log.w(VESC_SESSION_TAG, "Reconnect scan stop failed: ${e.message}")
-        }
-    }
-
-    private fun armReconnectScanTimeout(session: SessionConfig, callback: ScanCallback) {
-        reconnectScanTimeout?.let { mainHandler.removeCallbacks(it) }
-        reconnectScanTimeout = Runnable {
-            reconnectScanTimeout = null
-            if (
-                reconnectScanCallback == callback &&
-                boardConfig?.autoReconnect == true &&
-                boardStatus == BoardPhase.Rescanning
-            ) {
-                recordLocalDiagnostic(
-                    "reconnect_scan_timeout",
-                    session,
-                    "connect",
-                    mapOf(
-                        "message" to "Reconnect scan timed out",
-                        "timeout_ms" to RECONNECT_SCAN_TIMEOUT_MS,
-                    ),
-                )
-                stopReconnectScan()
-                startReconnectDirectConnect(session, "scan_timeout")
-            }
-        }
-        mainHandler.postDelayed(reconnectScanTimeout!!, RECONNECT_SCAN_TIMEOUT_MS)
-    }
-
-    private fun startReconnectDirectConnect(session: SessionConfig, reason: String) {
-        recordLocalDiagnostic(
-            "reconnect_direct_connect_started",
-            session,
-            "connect",
-            mapOf(
-                "message" to "Reconnect direct connect started",
-                "reason" to reason,
-            ),
-        )
-        connectAttempt = 0
-        boardError = null
-        setStatus(BoardPhase.Connecting)
-        startBleSession(PendingStart(session, onSuccess = {}, onError = { _, _ -> }))
     }
 
     private fun setError(message: String) {
         boardStatus = BoardPhase.Error
         boardError = message
-        recorder?.recordState("error", mapOf("message" to message))
-        telemetryStore?.recordMarker("error", boardConfig?.deviceId, boardConfig?.deviceName, message)
+        recordingCoordinator.recordError(boardConfig, message)
         emitEvent("onError", mapOf("message" to message))
         emitState()
     }
@@ -1780,51 +1485,18 @@ class VescForegroundService : Service() {
                 boardStatus == BoardPhase.Disconnecting ||
                 boardStatus == BoardPhase.Error
             ) {
-                requestedTelemetryRecordingEnabled = false
+                RecordingCoordinator.requestTelemetryRecording(false)
                 emitEvent("onError", mapOf("message" to "Recording requires a connected board"))
                 emitState()
                 return
             }
-            if (telemetryStore == null) {
-                telemetryStore = configuredTelemetryStore()
-                telemetryStore?.recordMarker("connected", session.deviceId, session.deviceName, null)
-            }
+            recordingCoordinator.enableTelemetryRecording(session)
             emitState()
             return
         }
 
-        telemetryStore?.recordMarker(
-            "app_stop",
-            session?.deviceId,
-            session?.deviceName,
-            "Recording stopped",
-        )
-        telemetryStore?.flushBlocking()
-        telemetryStore = null
+        recordingCoordinator.disableTelemetryRecording(session)
         emitState()
-    }
-
-    private fun configuredTelemetryStore(): TelemetryRepository {
-        val store = TelemetryRepository.get(applicationContext)
-        val settings = try {
-            kotlinx.coroutines.runBlocking {
-                AppDataRepository.get(applicationContext).getTypedSettings()
-            }
-        } catch (_: Exception) {
-            null
-        }
-        val resolvedSettings = settings ?: AppSettings()
-        applyTelemetrySettings(resolvedSettings)
-        store.applySettings(resolvedSettings)
-        val zones = try {
-            kotlinx.coroutines.runBlocking {
-                AppDataRepository.get(applicationContext).getEnabledPrivacyZoneEntities()
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-        store.reloadPrivacyZones(zones)
-        return store
     }
 
     private fun onLocationUpdated(location: Location) {
@@ -1847,7 +1519,7 @@ class VescForegroundService : Service() {
         if (!precise) {
             emitEvent("onLocation", snapshot.toMap())
             if (boardConfig == null) {
-                showNotification(formatGpsNotificationText(snapshot))
+                presenter.show(NotificationFormatter.formatGpsNotificationText(snapshot))
             }
             return
         }
@@ -1856,8 +1528,8 @@ class VescForegroundService : Service() {
         persistLastGpsLocation(snapshot)
         appendRecentLocation(snapshot)
         emitEvent("onLocation", snapshot.toMap())
-        if (boardConfig == null) showNotification(formatGpsNotificationText(snapshot))
-        recorder?.recordLocation(snapshot)
+        if (boardConfig == null) presenter.show(NotificationFormatter.formatGpsNotificationText(snapshot))
+        recordingCoordinator.recordLocation(snapshot)
     }
 
     private fun persistLastGpsLocation(location: LocationSnapshot) {
@@ -1881,12 +1553,13 @@ class VescForegroundService : Service() {
         }
         applyTelemetrySettings(settings)
         val now = System.currentTimeMillis()
+        val lastTelemetryAt = telemetryPipeline.lastTelemetryAt
         val phase = if (
             boardStatus == BoardPhase.Connected &&
             lastTelemetryAt > 0L &&
             now - lastTelemetryAt >= TELEMETRY_STALE_MS
         ) BoardPhase.Stale else boardStatus
-        val recentTelemetryValue = if (includeRecent) recentTelemetry.toList() else emptyList()
+        val recentTelemetryValue = if (includeRecent) telemetryPipeline.recentSnapshot() else emptyList()
         val recentLocationsValue = if (includeRecent) recentLocations.toList() else emptyList()
 
         return buildLiveState(
@@ -1894,7 +1567,7 @@ class VescForegroundService : Service() {
                 boardPhase = phase,
                 boardConfig = boardConfig,
                 boardError = boardError,
-                connectionSeq = generation,
+                connectionSeq = currentSessionId,
                 lastTelemetryAt = telemetry?.lastPacketAt,
                 recentTelemetry = recentTelemetryValue,
                 gpsActive = gpsMonitor.active,
@@ -1902,7 +1575,7 @@ class VescForegroundService : Service() {
                 latestPreciseLocation = latestPreciseLocation,
                 recentLocations = recentLocationsValue,
                 gpsError = gpsError,
-                recordingEnabled = telemetryStore != null,
+                recordingEnabled = recordingCoordinator.telemetryRecordingEnabled,
                 settings = settings,
             )
         )
@@ -1960,90 +1633,24 @@ class VescForegroundService : Service() {
         return fired.map { it.toMap() }
     }
 
-    private fun appendRecentTelemetry(point: Map<String, Any?>, packetAt: Long) {
-        recentTelemetry.addLast(point)
-        pruneRecent(recentTelemetry, packetAt)
-    }
-
-    private fun appendLiveTelemetry(
-        parsed: RefloatTelemetry,
-        eventMap: MutableMap<String, Any?>,
-    ): Map<String, Any?> {
-        val session = boardConfig
-        if (session == null) {
-            appendRecentTelemetry(eventMap, parsed.lastPacketAt)
-            return eventMap
-        }
-
-        val bucketPoint = FullTelemetryState.from(parsed.toCapture(session, canId)).toBucketPoint()
-        liveTelemetryPoints.addLast(LiveTelemetryPoint(bucketPoint, eventMap))
-        pruneLiveTelemetryPoints(parsed.lastPacketAt)
-        val updates = sanitizeLiveTelemetryPoints()
-        appendRecentTelemetry(eventMap, parsed.lastPacketAt)
-        return if (updates.isNotEmpty()) eventMap + mapOf("metricExclusionUpdates" to updates) else eventMap
-    }
-
-    private fun pruneLiveTelemetryPoints(nowMs: Long) {
-        val oldest = nowMs - recentWindowMs()
-        while (liveTelemetryPoints.isNotEmpty() && liveTelemetryPoints.first().bucketPoint.capturedAtMs < oldest) {
-            liveTelemetryPoints.removeFirst()
-        }
-    }
-
-    private fun sanitizeLiveTelemetryPoints(): List<Map<String, Any?>> {
-        if (liveTelemetryPoints.isEmpty()) return emptyList()
-        val points = liveTelemetryPoints.map { it.bucketPoint }
-        val sanitization = sanitizeTelemetrySamples(points, metricSanitizerConfig)
-        val updates = mutableListOf<Map<String, Any?>>()
-        val lastIndex = liveTelemetryPoints.size - 1
-        liveTelemetryPoints.forEachIndexed { index, point ->
-            val exclusions = sanitization.samples[index].toLiveMetricExclusions()
-            val previous = point.eventMap["metricExclusions"] as? Map<*, *>
-            point.eventMap["metricExclusions"] = exclusions
-            if (index != lastIndex && previous != exclusions) updates.add(
-                mapOf(
-                    "lastPacketAt" to point.bucketPoint.capturedAtMs,
-                    "metricExclusions" to exclusions,
-                ),
-            )
-        }
-        return updates
-    }
-
-    private fun SanitizedSample.toLiveMetricExclusions(): Map<String, Boolean> =
-        buildMap {
-            if (excludedFromAvgSpeed) put(METRIC_AVG_SPEED, true)
-            if (excludedFromMaxSpeed) put(METRIC_MAX_SPEED, true)
-            if (excludedFromMaxDuty) put(METRIC_MAX_DUTY, true)
-        }
-
     private fun appendRecentLocation(location: LocationSnapshot) {
         val point = location.toMap()
         recentLocations.addLast(point)
-        pruneRecent(recentLocations, location.timestamp)
+        pruneRecentLocations(location.timestamp)
     }
 
-    private fun pruneRecent(points: ArrayDeque<Map<String, Any?>>, nowMs: Long) {
-        val oldest = nowMs - recentWindowMs()
-        while (points.isNotEmpty()) {
-            val timestamp = (points.first()["lastPacketAt"] as? Number)?.toLong()
-                ?: (points.first()["timestamp"] as? Number)?.toLong()
-                ?: break
-            if (timestamp >= oldest) break
-            points.removeFirst()
+    private fun pruneRecentLocations(nowMs: Long) {
+        val oldest = nowMs - telemetryPipeline.recentWindowMs()
+        while (recentLocations.isNotEmpty()) {
+            val ts = (recentLocations.first()["timestamp"] as? Number)?.toLong() ?: break
+            if (ts >= oldest) break
+            recentLocations.removeFirst()
         }
     }
 
-    private fun recentWindowMs(): Long = liveHistoryLimitMinutes.toLong() * 60_000L
-
-    private fun setLiveHistoryLimitMinutes(minutes: Int) {
-        liveHistoryLimitMinutes = minutes.coerceIn(
-            MIN_LIVE_HISTORY_LIMIT_MINUTES,
-            MAX_LIVE_HISTORY_LIMIT_MINUTES,
-        )
-        pruneRecent(recentTelemetry, System.currentTimeMillis())
-        pruneLiveTelemetryPoints(System.currentTimeMillis())
-        pruneRecent(recentLocations, System.currentTimeMillis())
+    private fun applyLiveHistoryLimitMinutes(minutes: Int) {
+        telemetryPipeline.setLiveHistoryLimitMinutes(minutes)
+        pruneRecentLocations(System.currentTimeMillis())
     }
 
     private fun refreshLiveHistoryLimit() {
@@ -2058,157 +1665,66 @@ class VescForegroundService : Service() {
     }
 
     private fun applyTelemetrySettings(settings: AppSettings) {
-        setLiveHistoryLimitMinutes(settings.liveHistoryLimit)
-        metricSanitizerConfig = settings.toMetricSanitizerConfig()
-        telemetryStore?.applySettings(settings)
+        applyTelemetryPipelineSettings(settings)
+        recordingCoordinator.applySettings(settings)
     }
 
-    private fun showNotification(
-        text: String = "Monitoring board in background",
-        shortCriticalText: String? = null,
-    ) {
-        notificationController.show(text, boardConfig?.deviceName, appInForeground, shortCriticalText)
-    }
-
-    private fun buildNotification(text: String = "Monitoring board in background"): Notification {
-        return notificationController.build(text, boardConfig?.deviceName, appInForeground, null)
+    private fun applyTelemetryPipelineSettings(settings: AppSettings) {
+        applyLiveHistoryLimitMinutes(settings.liveHistoryLimit)
+        telemetryPipeline.metricSanitizerConfig = settings.toMetricSanitizerConfig()
     }
 
     private fun closeAppTask() {
         notificationController.closeAppTask()
     }
 
-    private fun cancelConnectTimeout() {
-        connectTimeout?.let { mainHandler.removeCallbacks(it) }
-        connectTimeout = null
-    }
-
     private fun armConnectPhaseTimeout(start: PendingStart, phase: String, timeoutMs: Long) {
-        cancelConnectTimeout()
-        val startedAt = System.currentTimeMillis()
-        connectTimeout = Runnable {
-            if (pendingConnect == start) {
-                val elapsedMs = System.currentTimeMillis() - startedAt
-                Log.w(
-                    VESC_SESSION_TAG,
-                    "connect phase timeout phase=$phase device=${start.boardConfig.deviceId} attempt=$connectAttempt elapsedMs=$elapsedMs status=$boardStatus canId=$canId",
-                )
-                recordLocalDiagnostic(
-                    "connect_phase_timeout",
-                    start.boardConfig,
-                    "connect",
-                    mapOf(
-                        "message" to "BLE connect phase timed out",
-                        "connect_phase" to phase,
-                        "elapsed_ms" to elapsedMs,
-                        "timeout_ms" to timeoutMs,
-                    ),
-                )
-                failStart(start, "CONNECT_TIMEOUT", "Timed out connecting to board")
-            }
-        }
-        mainHandler.postDelayed(connectTimeout!!, timeoutMs)
-    }
-
-    private fun formatNotificationText(values: RefloatTelemetry): String {
-        if (values.hasFault) return "Fault ${values.faultCode}"
-        val dutyPercent = if (abs(values.dutyCycle) <= 0.01) 0.0 else values.dutyCycle * 100.0
-        return String.format(
-            "%.1f km/h | %.0f%% duty | %.1fV",
-            abs(values.speed),
-            dutyPercent,
-            values.batteryVoltage,
+        connectionCoordinator.armConnectPhaseTimeout(
+            start = start,
+            phase = phase,
+            timeoutMs = timeoutMs,
+            status = { boardStatus },
+            canId = { canId },
+            onTimeout = ::onConnectPhaseTimeout,
         )
     }
 
-    private fun formatBatteryVoltageChipText(values: RefloatTelemetry): String =
-        if (values.hasFault) "FAULT" else String.format("%.1fV", values.batteryVoltage)
-
-    private fun formatGpsNotificationText(location: LocationSnapshot): String {
-        val speedKmh = (location.speedMps ?: 0.0) * 3.6
-        return String.format("GPS %.1f km/h", abs(speedKmh))
-    }
-
-    private fun recordTelemetry(values: RefloatTelemetry) {
-        val session = boardConfig ?: return
-        telemetryStore?.recordTelemetry(values.toCapture(session, canId))
-    }
-
-    private fun captureTelemetryParseFailed(payload: ByteArray) {
-        telemetryParseFailedCount += 1
-        if (telemetryParseFailedReported) return
-        telemetryParseFailedReported = true
-        captureDiagnostic(
-            "telemetry_parse_failed",
-            diagnosticProperties(boardConfig, "telemetry") + DiagnosticReporter.telemetryPayloadProperties(payload) + mapOf(
-                "message" to "Invalid Refloat telemetry payload",
-                "telemetry_parse_failed_count" to telemetryParseFailedCount,
+    private fun onConnectPhaseTimeout(timeout: ConnectPhaseTimeout) {
+        Log.w(
+            VESC_SESSION_TAG,
+            "connect phase timeout phase=${timeout.phase} device=${timeout.start.boardConfig.deviceId} attempt=${timeout.attempt} elapsedMs=${timeout.elapsedMs} status=${timeout.boardStatus} canId=${timeout.canId}",
+        )
+        recordLocalDiagnostic(
+            "connect_phase_timeout",
+            timeout.start.boardConfig,
+            "connect",
+            mapOf(
+                "message" to "BLE connect phase timed out",
+                "connect_phase" to timeout.phase,
+                "elapsed_ms" to timeout.elapsedMs,
+                "timeout_ms" to timeout.timeoutMs,
             ),
         )
+        failStart(timeout.start, "CONNECT_TIMEOUT", "Timed out connecting to board")
     }
 
-    private fun flushTelemetryDiagnostics(reason: String) {
-        if (telemetryParseFailedCount <= 0) return
-        captureDiagnostic(
-            "telemetry_parse_failed",
-            diagnosticProperties(boardConfig, "telemetry") + mapOf(
-                "message" to "Telemetry parse failures aggregated",
-                "reason" to reason,
-                "telemetry_parse_failed_count" to telemetryParseFailedCount,
-            ),
-        )
-        telemetryParseFailedReported = false
-        telemetryParseFailedCount = 0
-    }
+    private fun captureTelemetryParseFailed(payload: ByteArray): Unit =
+        diagnosticsRecorder.captureTelemetryParseFailed(payload, boardConfig)
 
-    private fun captureDiagnostic(eventName: String, properties: Map<String, Any?>) {
-        TelemetryRepository.get(applicationContext).recordDiagnosticEvent(eventName, properties)
-        DiagnosticReporter.get(this).capture(eventName, properties)
-    }
+    private fun flushTelemetryDiagnostics(reason: String): Unit =
+        diagnosticsRecorder.flushTelemetryDiagnostics(reason, boardConfig)
+
+    private fun captureDiagnostic(eventName: String, properties: Map<String, Any?>): Unit =
+        diagnosticsRecorder.captureDiagnostic(eventName, properties)
 
     private fun recordLocalDiagnostic(
         eventName: String,
         session: SessionConfig?,
         operation: String,
         properties: Map<String, Any?> = emptyMap(),
-    ) {
-        TelemetryRepository.get(applicationContext).recordDiagnosticEvent(
-            eventName,
-            diagnosticProperties(session, operation) + properties,
-        )
-    }
-
-    private fun recordConnectionLostMarker(session: SessionConfig, reason: String) {
-        val store = telemetryStore ?: return
-        val markerAt = lastTelemetryAt.takeIf { it > 0L } ?: return
-        if (connectionLostMarkerAt == markerAt) return
-        connectionLostMarkerAt = markerAt
-        store.recordMarker(
-            type = "connection_lost",
-            deviceId = session.deviceId,
-            deviceName = session.deviceName,
-            message = reason,
-            occurredAtMs = markerAt,
-        )
-    }
+    ): Unit = diagnosticsRecorder.recordLocalDiagnostic(eventName, session, operation, properties)
 
     private fun diagnosticProperties(session: SessionConfig?, operation: String): Map<String, Any?> =
-        mapOf(
-            "board_id" to session?.appBoardId,
-            "ble_id" to session?.deviceId,
-            "board_nickname" to session?.deviceName,
-            "operation" to operation,
-            "phase" to boardStatus.wireValue,
-            "previous_board_phase" to boardStatus.wireValue,
-            "current_board_phase" to boardStatus.wireValue,
-            "connection_seq" to generation,
-            "connect_attempt" to connectAttempt,
-            "auto_reconnect_attempt" to autoReconnectAttempt,
-            "auto_reconnect_enabled" to session?.autoReconnect,
-            "can_id" to canId,
-            "direct_connection" to directConnection,
-            "last_sent_command" to lastSentCommand,
-            "last_received_command_byte" to lastReceivedCommandByte,
-            "last_telemetry_timestamp" to lastTelemetryAt.takeIf { it > 0L },
-        )
+        diagnosticsRecorder.diagnosticProperties(session, operation)
+
 }
