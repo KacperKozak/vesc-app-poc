@@ -139,6 +139,23 @@ Starting points for implementation. Include repo-relative paths and one short re
 
 - `src/or/modules/path.ts` - why this file is probably relevant
 
+## Implementation hints
+
+Code-level hints to help AFK agents navigate the implementation without guessing. Include when the codebase exploration revealed non-obvious integration points. Skip this section for trivial slices.
+
+Good hints:
+
+- Exact code patterns to follow or replace (with file + line reference)
+- Existing call sites that need modification (quote the current code)
+- Data shapes, sign conventions, or direction flags that are easy to get wrong
+- Helper functions or patterns already in the codebase that should be reused
+
+Bad hints:
+
+- Restating what "What to build" already says
+- Full implementation code (that belongs in the PR, not the issue)
+- Guesses about code you haven't actually read
+
 ## Acceptance criteria
 
 - [ ] Criterion 1

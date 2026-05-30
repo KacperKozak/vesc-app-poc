@@ -72,6 +72,7 @@ Use one or more app-area labels for filtering:
 | `area:telemetry`  | `[Telemetry]`  | live telemetry ingest/display                                     |
 | `area:tunes`      | `[Tunes]`      | VESC tune read/write flows                                        |
 | `area:alerts`     | `[Alerts]`     | alert rules, alert feedback, audio/TTS                            |
+| `area:battery`    | `[Battery]`    | battery config, SoC estimation, voltage compensation              |
 | `area:tech`       | `[Tech]`       | internal refactor, tech upgrades, no user-visible behavior change |
 
 When a PRD or issue-planning skill creates or starts using a new app-area label, update this table in the same turn. Add the label, title prefix, and a short "Use for" description so future PRDs and implementation issues can reuse the prefix consistently.
