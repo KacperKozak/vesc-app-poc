@@ -4,9 +4,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class BatterySocEstimatorTest {
+
+    @Before
+    fun setUp() {
+        val json = javaClass.classLoader!!.getResourceAsStream("data/cell-presets.json")!!
+            .bufferedReader().readText()
+        BatterySocEstimator.loadPresets(json)
+    }
 
     @Test
     fun `preset config estimates state of charge from per-cell curve`() {

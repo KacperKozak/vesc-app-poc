@@ -595,6 +595,7 @@ class VescForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        BatterySocEstimator.init(this)
         DiagnosticReporter.initialize(this)
         notificationController.createChannel()
     }

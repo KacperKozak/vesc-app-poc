@@ -1,5 +1,8 @@
 package expo.modules.vescble.telemetry
 
+import android.content.Context
+import org.json.JSONArray
+
 object BatterySocEstimator {
 
     data class SocPoint(val voltage: Double, val soc: Double)
@@ -39,18 +42,26 @@ object BatterySocEstimator {
 
     private const val DEFAULT_INTERNAL_RESISTANCE_MILLIOHM = 18
 
-    private fun buildCellPresets(): List<CellPreset> = listOf(
-        CellPreset("molicel:21700:p45b", PRESET_CURVE, 18),
-        CellPreset("molicel:21700:p50b", PRESET_CURVE, 20),
-        CellPreset("molicel:18650:p30b", PRESET_CURVE, 22),
-        CellPreset("samsung:21700:50s", PRESET_CURVE, 18),
-        CellPreset("reliance:21700:rs50", PRESET_CURVE, 8),
-        CellPreset("murata:18650:us18650vtc6", PRESET_CURVE, 18),
-    )
+    private var presetById: Map<String, CellPreset> = emptyMap()
 
-    private val PRESET_BY_ID: Map<String, CellPreset> = buildCellPresets().associateBy { it.id }
+    fun init(context: Context) {
+        val json = context.assets.open("data/cell-presets.json").bufferedReader().readText()
+        loadPresets(json)
+    }
 
-    fun getCellPreset(id: String): CellPreset? = PRESET_BY_ID[id]
+    fun loadPresets(json: String) {
+        val arr = JSONArray(json)
+        val map = mutableMapOf<String, CellPreset>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val id = obj.getString("id")
+            val ir = obj.getInt("internalResistanceMilliOhm")
+            map[id] = CellPreset(id, PRESET_CURVE, ir)
+        }
+        presetById = map
+    }
+
+    fun getCellPreset(id: String): CellPreset? = presetById[id]
 
     private fun interpolateCurve(voltage: Double, curve: List<SocPoint>): Double {
         val first = curve.first()
@@ -110,7 +121,7 @@ object BatterySocEstimator {
                 val cellPresetId = normalized["cellPresetId"] as? String ?: return null
                 val seriesCount = (normalized["seriesCount"] as? Number)?.toInt() ?: return null
                 val parallelCount = (normalized["parallelCount"] as? Number)?.toInt() ?: return null
-                val preset = PRESET_BY_ID[cellPresetId] ?: return null
+                val preset = presetById[cellPresetId] ?: return null
                 val rPackOhm = computeRPackOhm(preset.internalResistanceMilliOhm, seriesCount, parallelCount)
                 val correctedV = voltageV + batteryCurrentA * rPackOhm
                 interpolateCurve(correctedV / seriesCount, preset.socCurve)
