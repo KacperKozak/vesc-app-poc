@@ -990,6 +990,7 @@ class VescForegroundService : Service() {
                 val batteryPct = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
+                    parsed.batteryCurrent,
                 )
                 val firedAlerts = evaluateAlerts(parsed, batteryPct)
                 val eventMap = processed.eventMap
@@ -1458,7 +1459,7 @@ class VescForegroundService : Service() {
             phase = boardStatus,
             telemetry = telemetry,
             batteryPercent = telemetry?.let {
-                BatterySocEstimator.estimateBatteryPercent(it.batteryVoltage, batteryConfigCache)
+                BatterySocEstimator.estimateBatteryPercent(it.batteryVoltage, batteryConfigCache, it.batteryCurrent)
             },
             errorMessage = boardError,
         )

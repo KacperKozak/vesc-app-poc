@@ -11,6 +11,7 @@ export interface BatteryCellPreset {
   datasheetEmptyVoltage: number
   recommendedEmptyVoltage: number
   capacityAh: number
+  internalResistanceMilliOhm: number
   maxContinuousDischargeA?: number
   verified: boolean
 }

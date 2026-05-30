@@ -34,15 +34,18 @@ object BatterySocEstimator {
     data class CellPreset(
         val id: String,
         val socCurve: List<SocPoint>,
+        val internalResistanceMilliOhm: Int,
     )
 
+    private const val DEFAULT_INTERNAL_RESISTANCE_MILLIOHM = 18
+
     private fun buildCellPresets(): List<CellPreset> = listOf(
-        CellPreset("molicel:21700:p45b", PRESET_CURVE),
-        CellPreset("molicel:21700:p50b", PRESET_CURVE),
-        CellPreset("molicel:18650:p30b", PRESET_CURVE),
-        CellPreset("samsung:21700:50s", PRESET_CURVE),
-        CellPreset("reliance:21700:rs50", PRESET_CURVE),
-        CellPreset("murata:18650:us18650vtc6", PRESET_CURVE),
+        CellPreset("molicel:21700:p45b", PRESET_CURVE, 18),
+        CellPreset("molicel:21700:p50b", PRESET_CURVE, 20),
+        CellPreset("molicel:18650:p30b", PRESET_CURVE, 22),
+        CellPreset("samsung:21700:50s", PRESET_CURVE, 18),
+        CellPreset("reliance:21700:rs50", PRESET_CURVE, 8),
+        CellPreset("murata:18650:us18650vtc6", PRESET_CURVE, 18),
     )
 
     private val PRESET_BY_ID: Map<String, CellPreset> = buildCellPresets().associateBy { it.id }
@@ -91,9 +94,13 @@ object BatterySocEstimator {
         return 0.0
     }
 
+    private fun computeRPackOhm(resistanceMilliOhm: Int, seriesCount: Int, parallelCount: Int): Double =
+        resistanceMilliOhm / 1000.0 * seriesCount / parallelCount
+
     fun estimateBatteryPercent(
         voltageV: Double,
         config: Map<String, Any?>?,
+        batteryCurrentA: Double = 0.0,
     ): Double? {
         val normalized = normalizeBatteryConfig(config) ?: return null
         val mode = normalized["mode"] as? String ?: return null
@@ -102,13 +109,19 @@ object BatterySocEstimator {
             "preset" -> {
                 val cellPresetId = normalized["cellPresetId"] as? String ?: return null
                 val seriesCount = (normalized["seriesCount"] as? Number)?.toInt() ?: return null
+                val parallelCount = (normalized["parallelCount"] as? Number)?.toInt() ?: return null
                 val preset = PRESET_BY_ID[cellPresetId] ?: return null
-                interpolateCurve(voltageV / seriesCount, preset.socCurve)
+                val rPackOhm = computeRPackOhm(preset.internalResistanceMilliOhm, seriesCount, parallelCount)
+                val correctedV = voltageV + batteryCurrentA * rPackOhm
+                interpolateCurve(correctedV / seriesCount, preset.socCurve)
             }
             "manual" -> {
                 val minV = (normalized["minVoltage"] as? Number)?.toDouble() ?: return null
                 val maxV = (normalized["maxVoltage"] as? Number)?.toDouble() ?: return null
-                estimateManualBatteryPercent(voltageV, minV, maxV)
+                val estimatedSeries = kotlin.math.round(maxV / 4.2).toInt().coerceAtLeast(1)
+                val rPackOhm = computeRPackOhm(DEFAULT_INTERNAL_RESISTANCE_MILLIOHM, estimatedSeries, 2)
+                val correctedV = voltageV + batteryCurrentA * rPackOhm
+                estimateManualBatteryPercent(correctedV, minV, maxV)
             }
             else -> null
         }
