@@ -987,14 +987,14 @@ class VescForegroundService : Service() {
                 val processed = telemetryPipeline.process(parsed, sessionToken) ?: return
                 markBoardReady()
                 telemetry = parsed
-                val firedAlerts = evaluateAlerts(parsed)
-                val eventMap = processed.eventMap
-                if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
-                eventMap["generation"] = currentSessionId
                 val batteryPct = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
                 )
+                val firedAlerts = evaluateAlerts(parsed, batteryPct)
+                val eventMap = processed.eventMap
+                if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
+                eventMap["generation"] = currentSessionId
                 eventMap["batteryPercent"] = batteryPct
                 val emitMap = if (processed.metricExclusionUpdates.isNotEmpty()) {
                     eventMap + mapOf("metricExclusionUpdates" to processed.metricExclusionUpdates)
@@ -1615,7 +1615,7 @@ class VescForegroundService : Service() {
         }
     }
 
-    private fun evaluateAlerts(t: RefloatTelemetry): List<Map<String, Any?>> {
+    private fun evaluateAlerts(t: RefloatTelemetry, batteryPercent: Double?): List<Map<String, Any?>> {
         val fired = alertEngine.evaluate(alertRules, t)
         val geiger = fired.filter { it.rangeDepth != null }
         val geigerRuleIds = geiger.mapTo(HashSet()) { it.ruleId }
@@ -1629,8 +1629,18 @@ class VescForegroundService : Service() {
 
         val single = fired.filter { it.rangeDepth == null }
         if (single.isNotEmpty()) {
+            val ttsAlert = single.firstOrNull { it.soundType.startsWith("tts:") && it.thresholdMax == null }
+            if (ttsAlert != null) {
+                val template = ttsAlert.soundType.removePrefix("tts:")
+                val text = renderAlertMessageTemplate(template, ttsAlert, batteryPercent) { name, props ->
+                    recordLocalDiagnostic(name, boardConfig, "alert", props)
+                }
+                if (text.isNotEmpty()) alertFeedback.speakMessage(text)
+            }
             for (alert in single) {
-                alertFeedback.playSingle(alert.soundType)
+                if (!alert.soundType.startsWith("tts:")) {
+                    alertFeedback.playSingle(alert.soundType)
+                }
             }
             alertFeedback.vibrate(null)
         }

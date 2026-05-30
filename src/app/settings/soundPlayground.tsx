@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { PlayIcon, StopIcon } from 'phosphor-react-native'
+import { PlayIcon, SpeakerHighIcon, StopIcon } from 'phosphor-react-native'
 
 import { TuneDial } from '@/components/ui/tune/TuneDial'
 
@@ -30,6 +30,7 @@ export default function SoundPlaygroundScreen() {
   const [mode, setMode] = useState<PlaybackMode>('single')
   const [rangeDepth, setRangeDepth] = useState(0.5)
   const [geigerActive, setGeigerActive] = useState(false)
+  const [ttsTemplate, setTtsTemplate] = useState('Battery {voltage} volts, {percent}%')
 
   const visiblePresets = mode === 'single' ? singlePresets : geigerPresets
   const selectedPreset = visiblePresets.find((p) => p.uri === selectedUri) ?? visiblePresets[0]
@@ -66,6 +67,10 @@ export default function SoundPlaygroundScreen() {
     stopGeigerSimulation()
     setGeigerActive(false)
   }, [])
+
+  const handleSpeakTts = useCallback(() => {
+    previewAlertSound(`tts:${ttsTemplate}`)
+  }, [ttsTemplate])
 
   function selectMode(next: PlaybackMode) {
     if (geigerActive) handleStopGeiger()
@@ -162,10 +167,49 @@ export default function SoundPlaygroundScreen() {
             </View>
           </>
         )}
+        <Text style={styles.sectionTitle}>Message Alert (TTS)</Text>
+        <View style={styles.card}>
+          <Text style={styles.ttsHint}>
+            Placeholders: {'{value}'} {'{threshold}'} {'{unit}'} — battery only: {'{voltage}'}{' '}
+            {'{percent}'}
+          </Text>
+          <View style={styles.ttsExamples}>
+            {TTS_EXAMPLES.map((ex) => (
+              <Pressable
+                key={ex}
+                style={[styles.ttsChip, ttsTemplate === ex && styles.ttsChipActive]}
+                onPress={() => setTtsTemplate(ex)}
+              >
+                <Text style={[styles.ttsChipText, ttsTemplate === ex && styles.ttsChipTextActive]}>
+                  {ex}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            style={styles.ttsInput}
+            value={ttsTemplate}
+            onChangeText={setTtsTemplate}
+            placeholder="Enter template…"
+            placeholderTextColor={theme.neutral.textDim}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Pressable style={styles.playButton} onPress={handleSpeakTts}>
+            <SpeakerHighIcon size={20} color="#0c2a3f" weight="fill" />
+            <Text style={styles.playButtonText}>Speak</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   )
 }
+
+const TTS_EXAMPLES = [
+  'Battery {voltage} volts, {percent}%',
+  '{value} {unit}',
+  'Warning! {value} {unit}',
+]
 
 interface PresetButtonProps {
   preset: AlertPreset
@@ -288,6 +332,50 @@ const styles = StyleSheet.create({
   },
   stopButtonText: {
     color: theme.neutral.textPrimary,
+  },
+  ttsHint: {
+    color: theme.neutral.textDim,
+    fontSize: 11,
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  ttsExamples: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  ttsChip: {
+    backgroundColor: theme.neutral.surfaceDeep,
+    borderWidth: 1,
+    borderColor: theme.neutral.border,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ttsChipActive: {
+    borderColor: theme.wheel.color,
+    backgroundColor: theme.wheel.bg,
+  },
+  ttsChipText: {
+    color: theme.neutral.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  ttsChipTextActive: {
+    color: theme.neutral.textPrimary,
+  },
+  ttsInput: {
+    backgroundColor: theme.neutral.surfaceDeep,
+    borderWidth: 1,
+    borderColor: theme.neutral.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: theme.neutral.textPrimary,
+    fontSize: 13,
+    marginBottom: 12,
+    fontFamily: 'monospace',
   },
   dialSection: {
     gap: 8,
