@@ -99,6 +99,7 @@ Present the proposed breakdown as a numbered list. For each slice, show:
 
 - **Title**: short descriptive name
 - **Type**: HITL / AFK
+- **Complexity**: low / medium / high (see `docs/agents/issue-tracker.md` for definitions)
 - **Blocked by**: which other slices (if any) must complete first
 - **User stories covered**: which user stories this addresses (if the source material has them)
 
@@ -114,7 +115,7 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to the issue tracker
 
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise. If the confirmed prefix uses a new area label, update `docs/agents/issue-tracker.md` before or alongside publishing.
+For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise. Every issue must also have exactly one `complexity:low`, `complexity:medium`, or `complexity:high` label (see `docs/agents/issue-tracker.md` for definitions). If the confirmed prefix uses a new area label, update `docs/agents/issue-tracker.md` before or alongside publishing.
 
 Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field. Do not publish concurrently when blocker references are needed.
 

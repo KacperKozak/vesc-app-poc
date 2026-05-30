@@ -79,6 +79,16 @@ When a PRD or issue-planning skill creates or starts using a new app-area label,
 
 If a user writes a typo for a known area, normalize it in metadata. For example, use `area:sanitizers` and `[Sanitizers]` for `sanatizers`.
 
+## Complexity labels
+
+Every implementation issue must have exactly one complexity label. Complexity reflects **risk and precision needed**, not size. A 5-line native pipeline change can be `complexity:high`; a 100-line UI component can be `complexity:low`.
+
+| Label               | When to use                                                          | Recommended model |
+| ------------------- | -------------------------------------------------------------------- | ----------------- |
+| `complexity:low`    | Isolated changes, hard to break other things (UI, docs, config)      | sonnet / haiku    |
+| `complexity:medium` | Moderate integration surface, needs care but not safety-critical     | sonnet            |
+| `complexity:high`   | Critical paths, subtle correctness, native pipelines, data integrity | opus              |
+
 ## When a skill says "fetch the relevant ticket"
 
 Run:
