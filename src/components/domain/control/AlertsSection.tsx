@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import {
+  ChatTextIcon,
   PlusIcon,
   RadioactiveIcon,
   SpeakerHighIcon,
@@ -68,7 +69,8 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
     <>
       {rules.map((rule) => {
         const isGeiger = rule.thresholdMax != null
-        const TypeIcon = isGeiger ? RadioactiveIcon : WaveformIcon
+        const isTts = rule.soundType.startsWith('tts:')
+        const TypeIcon = isGeiger ? RadioactiveIcon : isTts ? ChatTextIcon : WaveformIcon
 
         return (
           <TouchableOpacity
@@ -91,6 +93,14 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
                   ? `${rule.threshold} – ${rule.thresholdMax}${unit ? ` ${unit}` : ''}`
                   : `${rule.threshold}${unit ? ` ${unit}` : ''}`}
               </Text>
+              {isTts && (
+                <Text
+                  style={[styles.ruleTtsTemplate, !rule.enabled && styles.ruleTextDisabled]}
+                  numberOfLines={1}
+                >
+                  {rule.soundType.slice(4)}
+                </Text>
+              )}
             </View>
 
             <TouchableOpacity
@@ -181,6 +191,12 @@ const styles = StyleSheet.create({
     color: theme.neutral.textPrimary,
     fontSize: 14,
     fontWeight: '500',
+  },
+  ruleTtsTemplate: {
+    color: theme.neutral.textMuted,
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 1,
   },
   ruleTextDisabled: {
     color: theme.neutral.textDim,

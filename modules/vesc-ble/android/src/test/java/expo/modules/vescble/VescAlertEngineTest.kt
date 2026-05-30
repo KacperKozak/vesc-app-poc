@@ -337,7 +337,7 @@ class VescAlertTemplateTest {
             batteryPercent = 80.0,
             onDiagnostic = { name, _ -> diagnostics.add(name) },
         )
-        assertEquals("Speed 25.0 km/h voltage= pct=", result)
+        assertEquals("Speed 25 km/h voltage= pct=", result)
         assertEquals(2, diagnostics.count { it == "alert_template_placeholder_unavailable" })
     }
 
@@ -350,7 +350,7 @@ class VescAlertTemplateTest {
             batteryPercent = null,
             onDiagnostic = { name, _ -> diagnostics.add(name) },
         )
-        assertEquals("Alert 25.0", result)
+        assertEquals("Alert 25", result)
         assertTrue(diagnostics.any { it == "alert_template_unknown_placeholder" })
     }
 

@@ -8,20 +8,58 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { RadioactiveIcon, WaveformIcon } from 'phosphor-react-native'
+import { ChatTextIcon, RadioactiveIcon, WaveformIcon } from 'phosphor-react-native'
 
+import { Input } from '@/components/ui/forms/Input'
 import { SoundPicker } from '@/components/ui/forms/SoundPicker'
 
 import { TuneDial } from '@/components/ui/tune/TuneDial'
 import { telemetryByControlId } from '@/constants/telemetry'
 import { theme } from '@/constants/theme'
 import { type AlertRule, type AlertSoundType } from '@/store/alertsStore'
-import { type AlertPreset, type AlertPresetCategory, getAlertPresets } from 'vesc-ble'
+import {
+  type AlertPreset,
+  type AlertPresetCategory,
+  getAlertPresets,
+  previewAlertSound,
+} from 'vesc-ble'
 
-type AlertTab = 'single' | 'geiger'
+type AlertTab = 'single' | 'geiger' | 'message'
 
 function getPresetsForCategory(category: AlertPresetCategory): AlertPreset[] {
   return getAlertPresets().filter((p) => p.category === category)
+}
+
+function getDefaultMessageTemplate(controlId: string): string {
+  if (controlId === 'battery') return 'Battery {percent}%, {voltage}V'
+  const metric = telemetryByControlId[controlId]
+  if (metric) return `${metric.label} {value} {unit}`
+  return '{value} {unit}'
+}
+
+function getMessagePlaceholders(controlId: string): string[] {
+  const base = ['{value}', '{threshold}', '{unit}']
+  if (controlId === 'battery') return [...base, '{voltage}', '{percent}']
+  return base
+}
+
+function renderPreviewTemplate(
+  template: string,
+  threshold: number,
+  unit: string,
+  dialConfig: ReturnType<typeof getAlertDialConfig>,
+  controlId: string,
+): string {
+  const formatted = dialConfig.format(threshold)
+  let result = template
+    .replace(/\{value\}/g, formatted)
+    .replace(/\{threshold\}/g, formatted)
+    .replace(/\{unit\}/g, unit)
+  if (controlId === 'battery') {
+    // threshold IS voltage for battery; percent not available at form time
+    result = result.replace(/\{voltage\}/g, formatted).replace(/\{percent\}/g, '80')
+  }
+  return result
 }
 
 function getAlertDialConfig(controlId: string) {
@@ -51,17 +89,22 @@ function getEditFormDefaults(
   editRule: AlertRule,
   dialConfig: ReturnType<typeof getAlertDialConfig>,
 ) {
+  const isTts = editRule.soundType.startsWith('tts:')
   return {
-    tab: (editRule.thresholdMax != null ? 'geiger' : 'single') as AlertTab,
+    tab: (isTts ? 'message' : editRule.thresholdMax != null ? 'geiger' : 'single') as AlertTab,
     threshold: editRule.threshold,
     thresholdMax: editRule.thresholdMax ?? dialConfig.max,
     soundType: editRule.soundType,
+    messageTemplate: isTts
+      ? editRule.soundType.slice(4)
+      : getDefaultMessageTemplate(editRule.controlId),
   }
 }
 
 function getNewFormDefaults(
   dialConfig: ReturnType<typeof getAlertDialConfig>,
   defaultSoundType: AlertSoundType,
+  controlId: string,
 ) {
   const mid =
     Math.round(((dialConfig.min + dialConfig.max) / 2) * (1 / dialConfig.step)) * dialConfig.step
@@ -73,6 +116,7 @@ function getNewFormDefaults(
         (dialConfig.min + (dialConfig.max - dialConfig.min) * 0.75) * (1 / dialConfig.step),
       ) * dialConfig.step,
     soundType: defaultSoundType,
+    messageTemplate: getDefaultMessageTemplate(controlId),
   }
 }
 
@@ -95,16 +139,18 @@ export function AlertFormModal({
   const [threshold, setThreshold] = useState(dialConfig.min)
   const [thresholdMax, setThresholdMax] = useState(dialConfig.max)
   const [soundType, setSoundType] = useState<AlertSoundType>(defaultSoundType)
+  const [messageTemplate, setMessageTemplate] = useState(getDefaultMessageTemplate(controlId))
   const [prevVisible, setPrevVisible] = useState(visible)
 
   if (visible && !prevVisible) {
     const defaults = editRule
       ? getEditFormDefaults(editRule, dialConfig)
-      : getNewFormDefaults(dialConfig, defaultSoundType)
+      : getNewFormDefaults(dialConfig, defaultSoundType, controlId)
     setTab(defaults.tab)
     setThreshold(defaults.threshold)
     setThresholdMax(defaults.thresholdMax)
     setSoundType(defaults.soundType)
+    setMessageTemplate(defaults.messageTemplate)
   }
   if (visible !== prevVisible) {
     setPrevVisible(visible)
@@ -113,15 +159,20 @@ export function AlertFormModal({
   const handleTabSwitch = useCallback(
     (next: AlertTab) => {
       setTab(next)
-      const presets = next === 'single' ? singlePresets : geigerPresets
-      setSoundType(presets[0]?.uri ?? 'preset:beep')
+      if (next === 'message') {
+        setMessageTemplate(getDefaultMessageTemplate(controlId))
+      } else {
+        const presets = next === 'single' ? singlePresets : geigerPresets
+        setSoundType(presets[0]?.uri ?? 'preset:beep')
+      }
     },
-    [singlePresets, geigerPresets],
+    [singlePresets, geigerPresets, controlId],
   )
 
   const handleSave = useCallback(() => {
-    onSave(threshold, tab === 'geiger' ? thresholdMax : null, soundType)
-  }, [tab, threshold, thresholdMax, soundType, onSave])
+    const finalSoundType = tab === 'message' ? `tts:${messageTemplate}` : soundType
+    onSave(threshold, tab === 'geiger' ? thresholdMax : null, finalSoundType)
+  }, [tab, threshold, thresholdMax, soundType, messageTemplate, onSave])
 
   return (
     <Modal
@@ -152,7 +203,7 @@ export function AlertFormModal({
                   weight="fill"
                 />
                 <Text style={[styles.tabText, tab === 'single' && styles.tabTextActive]}>
-                  Single
+                  Alert
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -166,6 +217,19 @@ export function AlertFormModal({
                 />
                 <Text style={[styles.tabText, tab === 'geiger' && styles.tabTextActive]}>
                   Geiger
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, tab === 'message' && styles.tabActive]}
+                onPress={() => handleTabSwitch('message')}
+              >
+                <ChatTextIcon
+                  size={14}
+                  color={tab === 'message' ? theme.neutral.textPrimary : theme.neutral.textMuted}
+                  weight="fill"
+                />
+                <Text style={[styles.tabText, tab === 'message' && styles.tabTextActive]}>
+                  Message
                 </Text>
               </TouchableOpacity>
             </View>
@@ -204,11 +268,46 @@ export function AlertFormModal({
               </View>
             )}
 
-            <SoundPicker
-              presets={tab === 'single' ? singlePresets : geigerPresets}
-              selected={soundType}
-              onSelect={setSoundType}
-            />
+            {tab === 'message' ? (
+              <View style={styles.messageField}>
+                <Text style={styles.fieldLabel}>TEMPLATE</Text>
+                <Input
+                  value={messageTemplate}
+                  onChangeText={setMessageTemplate}
+                  multiline
+                  placeholder="e.g. Speed {value} {unit}"
+                  placeholderTextColor={theme.neutral.textDim}
+                  style={styles.templateInput}
+                />
+                <View style={styles.placeholderRow}>
+                  {getMessagePlaceholders(controlId).map((ph) => (
+                    <TouchableOpacity
+                      key={ph}
+                      style={styles.placeholderChip}
+                      onPress={() => setMessageTemplate((t) => t + ph)}
+                    >
+                      <Text style={styles.placeholderChipText}>{ph}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={styles.previewButton}
+                  onPress={() =>
+                    previewAlertSound(
+                      `tts:${renderPreviewTemplate(messageTemplate, threshold, unit, dialConfig, controlId)}`,
+                    )
+                  }
+                >
+                  <Text style={styles.previewButtonText}>Preview</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <SoundPicker
+                presets={tab === 'single' ? singlePresets : geigerPresets}
+                selected={soundType}
+                onSelect={setSoundType}
+              />
+            )}
 
             <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
               <Text style={styles.saveButtonText}>{isEditing ? 'Save' : 'Add'}</Text>
@@ -299,5 +398,39 @@ const styles = StyleSheet.create({
     color: theme.wheel.bg,
     fontSize: 15,
     fontWeight: '700',
+  },
+  messageField: {
+    gap: 8,
+  },
+  templateInput: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  placeholderRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  placeholderChip: {
+    backgroundColor: theme.neutral.surface,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  placeholderChipText: {
+    color: theme.neutral.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  previewButton: {
+    backgroundColor: theme.neutral.surface,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  previewButtonText: {
+    color: theme.neutral.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
   },
 })

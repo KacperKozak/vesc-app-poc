@@ -14,22 +14,11 @@ import kotlin.math.abs
 
 private const val TTS_PREFIX = "tts:"
 
-internal fun alertControlUnit(controlId: String): String = when (controlId) {
-    "speed" -> "km/h"
-    "battery" -> "V"
-    "duty" -> "%"
-    "motor-temp" -> "°C"
-    "motor-current" -> "A"
-    "controller-temp" -> "°C"
-    "batt-current" -> "A"
-    "imu" -> "°"
-    else -> ""
-}
+internal fun alertControlUnit(controlId: String): String =
+    telemetryMetricByControlId[controlId]?.unit ?: ""
 
-private fun formatAlertValue(value: Double, controlId: String): String = when (controlId) {
-    "duty" -> "%.0f".format(value)
-    else -> "%.1f".format(value)
-}
+private fun formatAlertValue(value: Double, controlId: String): String =
+    telemetryMetricByControlId[controlId]?.formatValue(value) ?: "%.0f".format(value)
 
 internal fun renderAlertMessageTemplate(
     template: String,
@@ -43,7 +32,7 @@ internal fun renderAlertMessageTemplate(
     text = text.replace("{threshold}", formatAlertValue(alert.threshold, alert.controlId))
     text = text.replace("{unit}", alertControlUnit(alert.controlId))
     if (isBattery) {
-        text = text.replace("{voltage}", "%.1f".format(alert.value))
+        text = text.replace("{voltage}", formatAlertValue(alert.value, alert.controlId))
         if (batteryPercent != null) {
             text = text.replace("{percent}", "%.0f".format(batteryPercent))
         } else if (text.contains("{percent}")) {
@@ -156,7 +145,8 @@ internal class VescAlertEngine {
         )
     }
 
-    private fun alertDirectionIsAbove(controlId: String): Boolean = controlId != "battery"
+    private fun alertDirectionIsAbove(controlId: String): Boolean =
+        telemetryMetricByControlId[controlId]?.alertAbove ?: true
 
     private fun alertRangeDepth(
         value: Double,
