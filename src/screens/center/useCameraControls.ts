@@ -144,7 +144,9 @@ export function useCameraControls({
   const previousGpsHeadingModeRef = useRef(gpsHeadingMode && !phoneHeadingMode)
   const previousPhoneHeadingModeRef = useRef(phoneHeadingMode)
   const phoneHeadingAppliedRef = useRef(false)
-  const recenterLiveRef = useRef<((options?: { resetPadding?: boolean }) => void) | null>(null)
+  const recenterLiveRef = useRef<
+    ((options?: { resetPadding?: boolean; animationDuration?: number }) => void) | null
+  >(null)
   const cameraModeRef = useRef<CameraMode>({ kind: 'liveFollow' })
   const [cameraMode, setCameraModeState] = useState<CameraMode>({ kind: 'liveFollow' })
   const followGps = cameraMode.kind === 'liveFollow'
@@ -276,15 +278,17 @@ export function useCameraControls({
   )
 
   const recenterLive = useCallback(
-    (options?: { resetPadding?: boolean }) => {
+    (options?: { resetPadding?: boolean; animationDuration?: number }) => {
       enterCameraMode({ kind: 'liveFollow' })
       if (!cameraFix) return
       const followCamera = getLiveFollowCamera()
       lastFollowKeyRef.current = liveFollowKey(cameraFix.timestamp, followCamera)
-      const duration = cameraMoveDuration(
-        cameraDistanceTo(currentCameraRef.current, cameraFix),
-        MAP_DEFAULTS.animationDuration,
-      )
+      const duration =
+        options?.animationDuration ??
+        cameraMoveDuration(
+          cameraDistanceTo(currentCameraRef.current, cameraFix),
+          MAP_DEFAULTS.animationDuration,
+        )
       currentCameraRef.current = followCamera
       cameraRef.current?.setCamera({
         ...followCamera,

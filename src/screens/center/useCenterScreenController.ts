@@ -163,13 +163,15 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
 
   const exitWeatherMode = useCallback(() => {
     enterTelemetry()
-    mapRef.current?.recenterLive()
+    requestAnimationFrame(() => mapRef.current?.recenterLive())
   }, [enterTelemetry, mapRef])
 
   const exitHistory = useCallback(() => {
     void selectSession(null)
     enterTelemetry()
-    requestAnimationFrame(() => mapRef.current?.recenterLive({ resetPadding: true }))
+    requestAnimationFrame(() =>
+      mapRef.current?.recenterLive({ resetPadding: true, animationDuration: 0 }),
+    )
   }, [enterTelemetry, mapRef, selectSession])
 
   const loadOlderHistoryPages = useCallback(

@@ -88,7 +88,6 @@ interface CenterHistoryOverlayProps {
   exitHistory: () => void
   removeSession: () => void
   onSeek: (timeMs: number) => void
-  onBottomInsetChange: (height: number) => void
 }
 
 interface CenterOverlaysProps {
@@ -156,7 +155,6 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
   const telemetryReturnOpacity = useSharedValue(mode === 'telemetry' ? 1 : 0)
   const weatherLoading = useWeatherStore((s) => s.loading)
   const historyBusy = history.loadingSession || history.historyLoading
-  const onHistoryBottomInsetChange = history.onBottomInsetChange
   const telemetryInteractive = mode === 'telemetry' && !revealGestureActive
   const interfaceFadeStyle = useAnimatedStyle(
     () => ({
@@ -235,14 +233,6 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
       telemetryReturnOpacity.value = 0
     }
   }, [dragOpacity, mode, revealProgress, telemetryReturnOpacity])
-
-  useEffect(() => {
-    if (mode !== 'history') {
-      onHistoryBottomInsetChange(0)
-      return
-    }
-    onHistoryBottomInsetChange(historyPanelBottom + panelHeight)
-  }, [historyPanelBottom, mode, onHistoryBottomInsetChange, panelHeight])
 
   return (
     <>

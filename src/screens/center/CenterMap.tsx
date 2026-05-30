@@ -70,7 +70,7 @@ import { usePhoneHeading } from './usePhoneHeading'
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
-  recenterLive: (options?: { resetPadding?: boolean }) => void
+  recenterLive: (options?: { resetPadding?: boolean; animationDuration?: number }) => void
   previewHistorySession: (preview: HistoryPreviewTarget) => void
   beginPreviewPan: () => void
   previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
@@ -726,7 +726,6 @@ interface CenterMapProps {
   rideGpsSamples: HistoryGpsSample[]
   rideMarkers: HistoryMarker[]
   historyActive: boolean
-  historyBottomInset: number
   mapStyleKey: MapStyleKey
   mapNavigationMode: MapNavigationMode
   rotationLocked: boolean
@@ -754,7 +753,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     rideGpsSamples,
     rideMarkers,
     historyActive,
-    historyBottomInset,
     mapStyleKey,
     mapNavigationMode,
     rotationLocked,
@@ -893,11 +891,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
     [rideGpsSamples],
   )
-  const historyMapViewport = useMemo(
-    () => ({ ...mapLayout, bottomInset: historyBottomInset }),
-    [historyBottomInset, mapLayout],
-  )
-
   const {
     cameraRef,
     currentCameraRef,
@@ -916,7 +909,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     historyActive,
     historyPreview,
     rideRoute,
-    mapViewport: historyMapViewport,
+    mapViewport: mapLayout,
     gpsHeadingMode: headingFollowMode,
     phoneHeadingMode,
     phoneHeadingReady: phoneHeadingDeg != null,
