@@ -180,3 +180,4 @@ Or "None" if this is a standalone issue with no group siblings.
 </issue-template>
 
 Do NOT close or modify any parent issue.
+Predict the next issue id after creating first one to speed up issue creation with "related" inside. Then update first issue. If IDs differ, update them.
