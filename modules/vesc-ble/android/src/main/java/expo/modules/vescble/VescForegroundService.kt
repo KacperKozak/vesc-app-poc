@@ -939,10 +939,11 @@ class VescForegroundService : Service() {
             COMM_FW_VERSION -> handleFwVersionPayload(payload)
             COMM_PING_CAN -> {
                 cancelCanPingTimeout()
-                if (payload.size > 1) {
+                if (boardStatus == BoardPhase.Connected) {
+                    Log.d(VESC_SESSION_TAG, "Ignoring late CAN ping response, board already connected")
+                } else if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
                     telemetryPipeline.updateCanId(canId)
-                    persistCanId(boardConfig?.deviceId, canId)
                     emitState()
                     startPolling()
                     sendPayloadWithRetry(byteArrayOf(
@@ -1340,6 +1341,7 @@ class VescForegroundService : Service() {
         if (boardStatus == BoardPhase.Connected) return
         reconnectScheduler.resetAttempts()
         boardStatus = BoardPhase.Connected
+        persistCanId(boardConfig?.deviceId, canId)
         recordLocalDiagnostic(
             "board_ready",
             boardConfig,
