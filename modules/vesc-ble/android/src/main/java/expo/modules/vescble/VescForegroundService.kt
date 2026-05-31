@@ -1618,7 +1618,7 @@ class VescForegroundService : Service() {
     }
 
     private fun evaluateAlerts(t: RefloatTelemetry, batteryPercent: Double?): List<Map<String, Any?>> {
-        val fired = alertEngine.evaluate(alertRules, t, batteryConfigCache)
+        val fired = alertEngine.evaluate(alertRules, t, batteryPercent)
         val geiger = fired.filter { it.rangeDepth != null }
         val geigerRuleIds = geiger.mapTo(HashSet()) { it.ruleId }
         for (ruleId in activeGeigerRuleIds - geigerRuleIds) {

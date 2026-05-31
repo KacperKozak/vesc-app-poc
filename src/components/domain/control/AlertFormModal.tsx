@@ -16,7 +16,6 @@ import { SoundPicker } from '@/components/ui/forms/SoundPicker'
 import { TuneDial } from '@/components/ui/tune/TuneDial'
 import { telemetryByControlId } from '@/constants/telemetry'
 import { theme } from '@/constants/theme'
-import { voltageToPercent, percentToVoltage } from '@/lib/battery'
 import { type DerivedBatteryConfig } from '@/lib/battery/types'
 import { type AlertRule, type AlertSoundType } from '@/store/alertsStore'
 import {
@@ -117,17 +116,10 @@ function getEditFormDefaults(
   batteryConfig: DerivedBatteryConfig | null,
 ) {
   const isTts = editRule.soundType.startsWith('tts:')
-  const threshold = batteryConfig
-    ? voltageToPercent(editRule.threshold, batteryConfig.minVoltage, batteryConfig.maxVoltage)
-    : editRule.threshold
-  const thresholdMax =
-    batteryConfig && editRule.thresholdMax != null
-      ? voltageToPercent(editRule.thresholdMax, batteryConfig.minVoltage, batteryConfig.maxVoltage)
-      : (editRule.thresholdMax ?? dialConfig.max)
   return {
     tab: (isTts ? 'message' : editRule.thresholdMax != null ? 'geiger' : 'single') as AlertTab,
-    threshold,
-    thresholdMax,
+    threshold: editRule.threshold,
+    thresholdMax: editRule.thresholdMax ?? dialConfig.max,
     soundType: editRule.soundType,
     messageTemplate: isTts
       ? editRule.soundType.slice(4)
@@ -212,17 +204,8 @@ export function AlertFormModal({
 
   const handleSave = useCallback(() => {
     const finalSoundType = tab === 'message' ? `tts:${messageTemplate}` : soundType
-    const savedThreshold = batteryConfig
-      ? percentToVoltage(threshold, batteryConfig.minVoltage, batteryConfig.maxVoltage)
-      : threshold
-    const savedThresholdMax =
-      tab === 'geiger'
-        ? batteryConfig
-          ? percentToVoltage(thresholdMax, batteryConfig.minVoltage, batteryConfig.maxVoltage)
-          : thresholdMax
-        : null
-    onSave(savedThreshold, savedThresholdMax, finalSoundType)
-  }, [tab, threshold, thresholdMax, soundType, messageTemplate, onSave, batteryConfig])
+    onSave(threshold, tab === 'geiger' ? thresholdMax : null, finalSoundType)
+  }, [tab, threshold, thresholdMax, soundType, messageTemplate, onSave])
 
   return (
     <Modal
@@ -292,17 +275,7 @@ export function AlertFormModal({
               </Text>
               <TuneDial
                 value={threshold}
-                previousValue={
-                  editRule?.threshold != null
-                    ? batteryConfig
-                      ? voltageToPercent(
-                          editRule.threshold,
-                          batteryConfig.minVoltage,
-                          batteryConfig.maxVoltage,
-                        )
-                      : editRule.threshold
-                    : undefined
-                }
+                previousValue={editRule?.threshold ?? undefined}
                 min={dialConfig.min}
                 max={dialConfig.max}
                 step={dialConfig.step}
@@ -319,17 +292,7 @@ export function AlertFormModal({
                 </Text>
                 <TuneDial
                   value={thresholdMax}
-                  previousValue={
-                    editRule?.thresholdMax != null
-                      ? batteryConfig
-                        ? voltageToPercent(
-                            editRule.thresholdMax,
-                            batteryConfig.minVoltage,
-                            batteryConfig.maxVoltage,
-                          )
-                        : editRule.thresholdMax
-                      : undefined
-                  }
+                  previousValue={editRule?.thresholdMax ?? undefined}
                   min={dialConfig.min}
                   max={dialConfig.max}
                   step={dialConfig.step}

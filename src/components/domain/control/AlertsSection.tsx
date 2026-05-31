@@ -14,7 +14,7 @@ import { AlertFormModal } from './AlertFormModal'
 
 import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
 import { theme } from '@/constants/theme'
-import { deriveBatteryConfig, voltageToPercent } from '@/lib/battery'
+import { deriveBatteryConfig } from '@/lib/battery'
 import { type DerivedBatteryConfig } from '@/lib/battery/types'
 import { type AlertRule, type AlertSoundType, useAlertsStore } from '@/store/alertsStore'
 import { useBoardStore } from '@/store/boardStore'
@@ -51,10 +51,7 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
   }
 
   function formatAlertValue(value: number, bc: DerivedBatteryConfig | null, unit: string) {
-    if (bc) {
-      const pct = voltageToPercent(value, bc.minVoltage, bc.maxVoltage).toFixed(0)
-      return `${pct}%`
-    }
+    if (bc) return `${Math.round(value)}%`
     return `${value}${unit ? ` ${unit}` : ''}`
   }
 
