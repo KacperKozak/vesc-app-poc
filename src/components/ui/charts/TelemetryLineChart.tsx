@@ -25,6 +25,7 @@ import {
 const DEFAULT_HEIGHT = 54
 const Y_AXIS_WIDTH = 34
 const TOOLTIP_WIDTH = 94
+const CARD_HORIZONTAL_PADDING = 8
 const EXCLUSION_MARKER_HEIGHT = 1
 const EXCLUSION_MARKER_INSET = 1
 
@@ -266,13 +267,16 @@ export function TelemetryLineChart({
   const tooltipLeft = useMemo(() => {
     if (!markerPosition || chartWidth <= 0) return 0
     const half = TOOLTIP_WIDTH / 2
-    let left = markerPosition.x - half
-    if (left < 0) left = 0
-    if (left + TOOLTIP_WIDTH > chartWidth) left = chartWidth - TOOLTIP_WIDTH
+    const cardChartLeft = CARD_HORIZONTAL_PADDING + Y_AXIS_WIDTH
+    const cardChartRight = cardChartLeft + chartWidth
+    let left = cardChartLeft + markerPosition.x - half
+    if (left < CARD_HORIZONTAL_PADDING) left = CARD_HORIZONTAL_PADDING
+    if (left + TOOLTIP_WIDTH > cardChartRight) left = cardChartRight - TOOLTIP_WIDTH
     return left
   }, [chartWidth, markerPosition])
 
   const activeColor = resolveActiveChartColor(currentPoint, color, getPointColor)
+  const valueColorStyle = getPointColor && currentPoint ? { color: activeColor } : undefined
 
   return (
     <View style={[styles.card, containerStyle]}>
@@ -282,9 +286,18 @@ export function TelemetryLineChart({
           {isDragging && currentPoint && (
             <Text style={styles.headerTime}>{formatTime(currentPoint.date)}</Text>
           )}
-          <Text style={[styles.value, isDragging && { color: activeColor }]}>{value}</Text>
+          <Text style={[styles.value, valueColorStyle]}>{value}</Text>
         </View>
       </View>
+
+      {isDragging && currentPoint && markerPosition && (
+        <View style={[styles.tooltip, { left: tooltipLeft }]}>
+          <Text style={styles.tooltipValue}>
+            {formatValue ? formatValue(currentPoint.value) : currentPoint.value.toFixed(1)}
+          </Text>
+          <Text style={styles.tooltipTime}>{formatTime(currentPoint.date)}</Text>
+        </View>
+      )}
 
       <View style={styles.chartBody}>
         <View style={[styles.yAxis, { height }]}>
@@ -379,15 +392,6 @@ export function TelemetryLineChart({
               />
             )}
           </Svg>
-
-          {isDragging && currentPoint && markerPosition && (
-            <View style={[styles.tooltip, { left: tooltipLeft }]}>
-              <Text style={styles.tooltipValue}>
-                {formatValue ? formatValue(currentPoint.value) : currentPoint.value.toFixed(1)}
-              </Text>
-              <Text style={styles.tooltipTime}>{formatTime(currentPoint.date)}</Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -406,7 +410,8 @@ export function TelemetryLineChart({
 const styles = StyleSheet.create({
   card: {
     overflow: 'hidden',
-    paddingHorizontal: 8,
+    position: 'relative',
+    paddingHorizontal: CARD_HORIZONTAL_PADDING,
     paddingTop: 6,
     paddingBottom: 4,
   },
@@ -470,14 +475,14 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: 'absolute',
-    top: 4,
+    top: 2,
     width: TOOLTIP_WIDTH,
     backgroundColor: theme.neutral.surfaceDeep,
     borderRadius: 4,
     borderWidth: 1,
     borderColor: theme.neutral.border,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
