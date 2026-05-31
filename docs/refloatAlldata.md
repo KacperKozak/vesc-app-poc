@@ -11,7 +11,7 @@ Source: [`lukash/refloat`](https://github.com/lukash/refloat) `src/main.c` → `
 ```
 
 Modes: `1` = RT data only, `2` += odometer + temps, `3` += energy counters, `4` += charging.
-We use mode 4.
+We use mode 2. Mode 4 was tried for charging detection but reverted — see [chargingDetection.md](./chargingDetection.md).
 
 ## Response payload layout (mode = 2, normal — no fault)
 
@@ -97,3 +97,96 @@ Source: `buffer_get_float32_auto()` in `lukash/refloat/src/conf/buffer.c`.
 | 13    | FAULT_QUICKSTOP |
 | 14    | CHARGING        |
 | 15    | DISABLED        |
+
+## Other read commands (not wired up yet)
+
+All Refloat read commands share the same outer frame: `[CUSTOM_APP_DATA=0x24] [magic=101] [command]`.
+
+### GET_INFO (0) — Board identity + capabilities
+
+Request: `[101] [0] [version]`
+
+Response version 1:
+
+- Package version number (major × 10 + minor)
+- Build number
+- LED type
+
+Response version 2:
+
+- Protocol version byte (= 2)
+- Flags (echoed from request)
+- Package name (20 chars, e.g. `"refloat"`)
+- `MAJOR_VERSION`, `MINOR_VERSION`, `PATCH_VERSION` (3 bytes)
+- Version suffix string (20 chars)
+- Git hash (uint32)
+- System tick rate (uint32, Hz)
+- Capabilities bitmask (uint32): bit 0 = LED present, bit 1 = external LED, bit 31 = data recorder
+- Extra flags (uint8)
+
+Useful for connection handshake — check board capabilities before enabling UI features.
+
+### GET_RTDATA (1) — Full-precision runtime data
+
+Same fields as `GET_ALLDATA` but encoded as **float32_auto** instead of packed float16/uint8.
+Additional fields not in `GET_ALLDATA`:
+
+| Field             | Description                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| all 6 setpoints   | ATR, brake_tilt, torque_tilt, turn_tilt, remote                                                 |
+| atr.accel_diff    | ATR acceleration difference                                                                     |
+| charge or booster | `charging.current`/`charging.voltage` if charging, else `booster.current` + `motor.dir_current` |
+| remote.input      | Raw throttle input value (−1..1)                                                                |
+
+~48 bytes, float32 precision. Better for debugging/diagnostics than production polling.
+
+### REALTIME_DATA (31) + REALTIME_DATA_IDS (32) — High-resolution telemetry
+
+The richest data channel. Header:
+
+| Field       | Encoding | Description                                                                 |
+| ----------- | -------- | --------------------------------------------------------------------------- |
+| mask        | uint8    | bit 0 = running, bit 1 = charging, bit 2 = alerts                           |
+| extra_flags | uint8    | bit 0 = recording, bit 1 = autostart, bit 2 = autostop, bit 3 = fatal_error |
+| timestamp   | uint32   | Board time (ticks)                                                          |
+| mode/state  | uint8    | `mode << 4 \| state`                                                        |
+| flags       | uint8    | `footpad_state << 6 \| charging << 5 \| darkride << 1 \| wheelslip`         |
+| sat/stop    | uint8    | `sat << 4 \| stop_condition`                                                |
+| beep_reason | uint8    | Active beep reason                                                          |
+
+Always-sent fields (all float16_auto):
+
+```
+main_frequency, main_recalcs, main_fltr_freq, imu_dt, imu_frequency,
+imu_recalcs, imu_fltr_freq, speed, erpm, current, dir_current,
+filt_current, duty_cycle, batt_voltage, batt_current, mosfet_temp,
+motor_temp, pitch, balance_pitch, roll, adc1, adc2, remote.input
+```
+
+Runtime-only fields (only when the board is running, STATE_RUNNING):
+
+```
+setpoint, atr.setpoint, brake_tilt.setpoint, torque_tilt.setpoint,
+turn_tilt.setpoint, remote.setpoint, balance_current, atr.accel_diff,
+atr.speed_boost, booster.current
+```
+
+Footer:
+
+- Active alert mask (uint32)
+- Extra flags (uint32, reserved)
+- FW fault code (uint8)
+
+`REALTIME_DATA_IDS` returns the string field names for all items so clients can discover the schema dynamically without hardcoding the field order.
+
+### LCM reads — Lighting controller
+
+| Command         |  ID | Returns                                                                                                          |
+| --------------- | --: | ---------------------------------------------------------------------------------------------------------------- |
+| LCM_LIGHT_INFO  |  25 | Light config: enabled, brightness, idle brightness, status brightness, lights-off-when-lifted, LCM name, payload |
+| LCM_DEVICE_INFO |  27 | LCM hardware/firmware info                                                                                       |
+| LCM_GET_BATTERY |  29 | Battery info from external light module                                                                          |
+
+### ALERTS_LIST (35)
+
+Returns the currently configured alert thresholds from the board's alert tracker.
