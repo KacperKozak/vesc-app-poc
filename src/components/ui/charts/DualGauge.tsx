@@ -8,13 +8,19 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { type ReactNode, useId } from 'react'
-import Animated, { useAnimatedProps, type SharedValue } from 'react-native-reanimated'
+import Animated, {
+  interpolateColor,
+  useAnimatedProps,
+  useAnimatedStyle,
+  type SharedValue,
+} from 'react-native-reanimated'
 import { useRouter } from 'expo-router'
 import Svg, { Defs, Line, Path, RadialGradient, Stop } from 'react-native-svg'
 
 import { Sparkline, type SparklinePoint } from '@/components/ui/charts/Sparkline'
 import { telemetry } from '@/constants/telemetry'
 import { interaction, theme } from '@/constants/theme'
+import { getHistoryMetricHotRange, type MetricHotRange } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
 
 export interface DualGaugeAlert {
@@ -31,6 +37,8 @@ interface DualGaugeProps {
   windowMs?: number
   speedMax?: number
   dutyMax?: number
+  speedHotRange?: MetricHotRange | null
+  dutyHotRange?: MetricHotRange | null
   speedAlerts?: DualGaugeAlert[]
   dutyAlerts?: DualGaugeAlert[]
   compact?: boolean
@@ -49,6 +57,7 @@ interface SingleGaugeProps {
   decimals?: number
   label?: string
   alerts?: DualGaugeAlert[]
+  hotRange?: MetricHotRange | null
   containerStyle?: StyleProp<ViewStyle>
 }
 
@@ -80,10 +89,25 @@ const VB_CROP_RIGHT_X = RIGHT_CX - CROP_PAD
 const AnimatedPath = Animated.createAnimatedComponent(Path)
 const AnimatedLine = Animated.createAnimatedComponent(Line)
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput)
+const GAUGE_HOT_COLOR = theme.error.color
 
 function clamp01(f: number) {
   'worklet'
   return Math.min(1, Math.max(0, f))
+}
+
+function gaugeRampColor(
+  current: number | null,
+  baseColor: string,
+  hotRange: MetricHotRange | null | undefined,
+) {
+  'worklet'
+  if (current == null || hotRange == null) return baseColor
+  const start = Math.min(hotRange.start, hotRange.end)
+  const end = Math.max(hotRange.start, hotRange.end)
+  const span = end - start
+  const fraction = span <= 0 ? 0 : clamp01((current - start) / span)
+  return interpolateColor(fraction, [0, 1], [baseColor, GAUGE_HOT_COLOR])
 }
 
 // Left arc: angle sweeps from π (f=0) to π/2 (f=1)
@@ -323,8 +347,9 @@ function HalfArc({
   unit,
   decimals = 0,
   alerts = [],
+  hotRange,
 }: Required<Pick<SingleGaugeProps, 'value' | 'min' | 'max' | 'color' | 'unit'>> &
-  Pick<SingleGaugeProps, 'decimals' | 'alerts'>) {
+  Pick<SingleGaugeProps, 'decimals' | 'alerts' | 'hotRange'>) {
   const idSuffix = useId().replace(/:/g, '')
   const glowGradientId = `singleGaugeGlow${idSuffix}`
   const alertRangeGradientId = `singleGaugeAlertRange${idSuffix}`
@@ -342,7 +367,10 @@ function HalfArc({
 
   const animatedArcProps = useAnimatedProps(() => {
     const current = value.value ?? min
-    return { d: halfArcPath(normalizeFraction(current, min, max)) }
+    return {
+      d: halfArcPath(normalizeFraction(current, min, max)),
+      stroke: gaugeRampColor(current, color, hotRange),
+    }
   })
 
   const animatedWedgeProps = useAnimatedProps(() => {
@@ -355,7 +383,17 @@ function HalfArc({
     const fraction = normalizeFraction(current, min, max)
     const inner = polarHalf(HALF_R - MARKER_INSET, fraction)
     const outer = polarHalf(HALF_R + STROKE / 2, fraction)
-    return { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y }
+    return {
+      x1: inner.x,
+      y1: inner.y,
+      x2: outer.x,
+      y2: outer.y,
+      stroke: gaugeRampColor(current, color, hotRange),
+    }
+  })
+
+  const animatedValueStyle = useAnimatedStyle(() => {
+    return { color: gaugeRampColor(value.value, color, hotRange) }
   })
 
   return (
@@ -399,7 +437,6 @@ function HalfArc({
         />
         <AnimatedPath
           animatedProps={animatedArcProps}
-          stroke={color}
           strokeWidth={STROKE}
           strokeLinecap="butt"
           fill="none"
@@ -413,19 +450,14 @@ function HalfArc({
             rangeGradientId={alertRangeGradientId}
           />
         ))}
-        <AnimatedLine
-          animatedProps={animatedMarkerProps}
-          stroke={color}
-          strokeWidth={1.7}
-          strokeLinecap="butt"
-        />
+        <AnimatedLine animatedProps={animatedMarkerProps} strokeWidth={1.7} strokeLinecap="butt" />
       </Svg>
 
       <View style={styles.halfBowl} pointerEvents="none">
         <AnimatedTextInput
           editable={false}
           animatedProps={animatedValueProps}
-          style={styles.halfValue}
+          style={[styles.halfValue, animatedValueStyle]}
         />
         <Text style={styles.halfUnit}>{unit}</Text>
       </View>
@@ -442,9 +474,10 @@ interface QuarterArcProps {
   color: string
   unit: string
   alerts?: DualGaugeAlert[]
+  hotRange?: MetricHotRange | null
 }
 
-function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcProps) {
+function QuarterArc({ side, value, max, color, unit, alerts = [], hotRange }: QuarterArcProps) {
   const isLeft = side === 'left'
   const glowId = isLeft ? GLOW_GRADIENT_ID_LEFT : GLOW_GRADIENT_ID_RIGHT
   const alertRangeGradientId = isLeft ? ALERT_RANGE_GRADIENT_ID : ALERT_RANGE_GRADIENT_ID_RIGHT
@@ -460,7 +493,10 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
   const animatedArcProps = useAnimatedProps(() => {
     const current = value.value ?? 0
     const f = clamp01(current / max)
-    return { d: isLeft ? arcPathLeft(f) : arcPathRight(f) }
+    return {
+      d: isLeft ? arcPathLeft(f) : arcPathRight(f),
+      stroke: gaugeRampColor(current, color, hotRange),
+    }
   })
 
   const animatedWedgeProps = useAnimatedProps(() => {
@@ -478,7 +514,17 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
     const outer = isLeft
       ? polarLeft(R + STROKE / 2, fraction)
       : polarRight(R + STROKE / 2, fraction)
-    return { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y }
+    return {
+      x1: inner.x,
+      y1: inner.y,
+      x2: outer.x,
+      y2: outer.y,
+      stroke: gaugeRampColor(current, color, hotRange),
+    }
+  })
+
+  const animatedValueStyle = useAnimatedStyle(() => {
+    return { color: gaugeRampColor(value.value, color, hotRange) }
   })
 
   const bgArc = isLeft ? BG_ARC_LEFT : BG_ARC_RIGHT
@@ -520,7 +566,6 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
         {/* Animated colored arc overlay */}
         <AnimatedPath
           animatedProps={animatedArcProps}
-          stroke={color}
           strokeWidth={STROKE}
           strokeLinecap="butt"
           fill="none"
@@ -532,12 +577,7 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
         ))}
 
         {/* Position marker */}
-        <AnimatedLine
-          animatedProps={animatedMarkerProps}
-          stroke={color}
-          strokeWidth={1.5}
-          strokeLinecap="butt"
-        />
+        <AnimatedLine animatedProps={animatedMarkerProps} strokeWidth={1.5} strokeLinecap="butt" />
       </Svg>
 
       {/* Value bowl — absolutely positioned over the SVG */}
@@ -545,7 +585,7 @@ function QuarterArc({ side, value, max, color, unit, alerts = [] }: QuarterArcPr
         <AnimatedTextInput
           editable={false}
           animatedProps={animatedValueProps}
-          style={styles.value}
+          style={[styles.value, animatedValueStyle]}
         />
         <Text style={styles.unit}>{unit}</Text>
       </View>
@@ -564,6 +604,7 @@ export function SingleGauge({
   decimals,
   label,
   alerts = [],
+  hotRange,
   containerStyle,
 }: SingleGaugeProps) {
   return (
@@ -577,6 +618,7 @@ export function SingleGauge({
         unit={unit}
         decimals={decimals}
         alerts={alerts}
+        hotRange={hotRange}
       />
     </View>
   )
@@ -590,6 +632,8 @@ export function DualGauge({
   windowMs,
   speedMax = 50,
   dutyMax = 100,
+  speedHotRange = getHistoryMetricHotRange('speed'),
+  dutyHotRange = getHistoryMetricHotRange('duty'),
   speedAlerts = [],
   dutyAlerts = [],
   compact = false,
@@ -630,6 +674,7 @@ export function DualGauge({
             color={telemetry.speed.color}
             unit="km/h"
             alerts={speedAlerts}
+            hotRange={speedHotRange}
           />
         </Pressable>
 
@@ -653,6 +698,7 @@ export function DualGauge({
             color={telemetry.duty.color}
             unit="%"
             alerts={dutyAlerts}
+            hotRange={dutyHotRange}
           />
         </Pressable>
       </View>

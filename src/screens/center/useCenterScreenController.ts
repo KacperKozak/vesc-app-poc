@@ -33,6 +33,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     mapSelector,
     perspectiveEnabled,
     seekTimeMs,
+    activeHistoryMapMetric,
     enterTelemetry,
     enterMap,
     enterWeather,
@@ -42,6 +43,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     dismissMapSelector,
     setPerspectiveEnabled,
     setSeekTimeMs,
+    setActiveHistoryMapMetric,
   } = useCenterScreenStore(
     useShallow((s) => ({
       mode: s.mode,
@@ -49,6 +51,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       mapSelector: s.mapSelector,
       perspectiveEnabled: s.perspectiveEnabled,
       seekTimeMs: s.seekTimeMs,
+      activeHistoryMapMetric: s.activeHistoryMapMetric,
       enterTelemetry: s.enterTelemetry,
       enterMap: s.enterMap,
       enterWeather: s.enterWeather,
@@ -58,6 +61,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       dismissMapSelector: s.dismissMapSelector,
       setPerspectiveEnabled: s.setPerspectiveEnabled,
       setSeekTimeMs: s.setSeekTimeMs,
+      setActiveHistoryMapMetric: s.setActiveHistoryMapMetric,
     })),
   )
   const liveLocations = useBleStore((s) => s.liveLocationHistory)
@@ -341,5 +345,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     exitMapFocus,
     seekGpsPosition,
     onSeek: setSeekTimeMs,
+    activeHistoryMapMetric,
+    setActiveHistoryMapMetric,
   }
 }

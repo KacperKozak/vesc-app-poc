@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 
+import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import type { CenterViewState } from '@/screens/center/centerViewState'
 
 export type MapSelector = 'navigation' | 'style' | null
@@ -10,6 +11,7 @@ interface CenterScreenState {
   mapSelector: MapSelector
   perspectiveEnabled: boolean
   seekTimeMs: number | null
+  activeHistoryMapMetric: HistoryMetricKey
 }
 
 interface CenterScreenActions {
@@ -23,6 +25,7 @@ interface CenterScreenActions {
   dismissMapSelector: () => void
   setPerspectiveEnabled: (enabled: boolean) => void
   setSeekTimeMs: (timeMs: number | null) => void
+  setActiveHistoryMapMetric: (metric: HistoryMetricKey) => void
 }
 
 const initialState: CenterScreenState = {
@@ -31,6 +34,7 @@ const initialState: CenterScreenState = {
   mapSelector: null,
   perspectiveEnabled: true,
   seekTimeMs: null,
+  activeHistoryMapMetric: 'speed',
 }
 
 export const useCenterScreenStore = create<CenterScreenState & CenterScreenActions>((set) => ({
@@ -74,5 +78,9 @@ export const useCenterScreenStore = create<CenterScreenState & CenterScreenActio
 
   setSeekTimeMs(timeMs) {
     set({ seekTimeMs: timeMs })
+  },
+
+  setActiveHistoryMapMetric(metric) {
+    set({ activeHistoryMapMetric: metric })
   },
 }))

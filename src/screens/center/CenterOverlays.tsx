@@ -19,6 +19,7 @@ import { MapNavigationSelector } from '@/components/ui/menus/MapNavigationSelect
 import { MapStyleSwitch } from '@/components/ui/menus/MapStyleSwitch'
 import type { MapNavigationMode, MapStyleKey } from '@/constants/mapStyles'
 import { theme } from '@/constants/theme'
+import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
 import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
 import type { CenterMapHandle } from '@/screens/center/CenterMap'
@@ -88,6 +89,7 @@ interface CenterHistoryOverlayProps {
   exitHistory: () => void
   removeSession: () => void
   onSeek: (timeMs: number) => void
+  setActiveHistoryMapMetric: (metric: HistoryMetricKey) => void
 }
 
 interface CenterOverlaysProps {
@@ -359,6 +361,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             }}
             onOpenList={() => history.setHistorySheetVisible(true)}
             onSeek={history.onSeek}
+            onMetricInteraction={history.setActiveHistoryMapMetric}
             onHeightChange={setPanelHeight}
           />
           <HistoryStatsBar session={history.selectedSession} />
@@ -394,6 +397,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             onNext={() => undefined}
             onOpenList={() => history.setHistorySheetVisible(true)}
             onSeek={history.onSeek}
+            onMetricInteraction={history.setActiveHistoryMapMetric}
             onHeightChange={setPanelHeight}
           />
           <HistoryStatsBar session={null} />

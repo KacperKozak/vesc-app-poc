@@ -44,14 +44,21 @@ import {
 } from '@/constants/mapStyles'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { theme } from '@/constants/theme'
+import { telemetry } from '@/constants/telemetry'
 import {
   getLiveGpsPresentation,
   getReliableGpsBearingFromFixes,
 } from '@/helpers/liveGpsPresentation'
 import { distanceMeters, makeCircleFeature, makeTrailLineString } from '@/helpers/mapGeometry'
 import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
+import {
+  getHistoryMetricColorRange,
+  getMetricRampColor,
+  getTelemetrySampleMetricValue,
+  type HistoryMetricKey,
+} from '@/lib/history/metricColorScale'
 import { getNavigationFallbackReason } from '@/lib/map/navigationDiagnostics'
-import type { HistoryGpsSample, HistoryMarker } from '@/store/historyStore'
+import type { HistoryGpsSample, HistoryMarker, TelemetrySample } from '@/store/historyStore'
 import { useNavigationDiagnosticsStore } from '@/store/navigationDiagnosticsStore'
 import { useSettingsStore } from '@/store/settingsStore'
 
@@ -356,6 +363,8 @@ interface CenterMapLayersProps {
   gpsBearingDeg: number | null
   rideRoute: [number, number][]
   seekPosition: HistoryGpsSample | null
+  rideTelemetrySamples: TelemetrySample[]
+  activeHistoryMapMetric: HistoryMetricKey
   rideMarkers: HistoryMarker[]
   rideGpsSamples: HistoryGpsSample[]
   targetLocation: { latitude: number; longitude: number } | null
@@ -428,6 +437,8 @@ function HistoryMapLayers({
   rideRouteShape,
   rideRoute,
   seekPosition,
+  rideTelemetrySamples,
+  activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
   onSelectMarker,
@@ -435,6 +446,8 @@ function HistoryMapLayers({
   rideRouteShape: CenterMapLayersProps['rideRouteShape']
   rideRoute: CenterMapLayersProps['rideRoute']
   seekPosition: CenterMapLayersProps['seekPosition']
+  rideTelemetrySamples: CenterMapLayersProps['rideTelemetrySamples']
+  activeHistoryMapMetric: CenterMapLayersProps['activeHistoryMapMetric']
   rideMarkers: CenterMapLayersProps['rideMarkers']
   rideGpsSamples: CenterMapLayersProps['rideGpsSamples']
   onSelectMarker: CenterMapLayersProps['onSelectMarker']
@@ -460,6 +473,15 @@ function HistoryMapLayers({
     () => getHistoryRouteHighlightGradient(highlightProgress),
     [highlightProgress],
   )
+  const routeMetricGradient = useMemo(
+    () =>
+      getHistoryRouteMetricGradient({
+        gpsSamples: rideGpsSamples,
+        telemetrySamples: rideTelemetrySamples,
+        metric: activeHistoryMapMetric,
+      }),
+    [activeHistoryMapMetric, rideGpsSamples, rideTelemetrySamples],
+  )
 
   return (
     <>
@@ -468,10 +490,11 @@ function HistoryMapLayers({
           <LineLayer
             id="center-ride-route-line"
             style={{
-              lineColor: theme.target.color,
+              lineColor: getHistoryMetricBaseColor(activeHistoryMapMetric),
               lineWidth: 4,
               lineCap: 'round',
               lineJoin: 'round',
+              ...(routeMetricGradient ? { lineGradient: routeMetricGradient } : {}),
             }}
           />
           <LineLayer
@@ -620,6 +643,111 @@ function getHistoryRouteHighlightGradient(
   ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
 }
 
+function getHistoryMetricBaseColor(metric: HistoryMetricKey): string {
+  switch (metric) {
+    case 'speed':
+      return telemetry.speed.color
+    case 'duty':
+      return telemetry.duty.color
+    case 'battery':
+      return telemetry.battVoltage.color
+    case 'tempMotor':
+      return telemetry.motorTemp.color
+    case 'tempController':
+      return telemetry.controllerTemp.color
+    case 'motorCurrent':
+      return telemetry.motorCurrent.color
+    case 'batteryCurrent':
+      return telemetry.battCurrent.color
+  }
+}
+
+function getNearestTelemetrySample(
+  samples: readonly TelemetrySample[],
+  targetMs: number,
+): TelemetrySample | null {
+  if (samples.length === 0) return null
+  let lo = 0
+  let hi = samples.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const at = samples[mid].capturedAtMs
+    if (at === targetMs) return samples[mid]
+    if (at < targetMs) lo = mid + 1
+    else hi = mid - 1
+  }
+  if (hi < 0) return samples[0]
+  if (lo >= samples.length) return samples[samples.length - 1]
+  const before = samples[hi]
+  const after = samples[lo]
+  return targetMs - before.capturedAtMs <= after.capturedAtMs - targetMs ? before : after
+}
+
+function advanceNearestTelemetryIndex(
+  samples: readonly TelemetrySample[],
+  currentIndex: number,
+  targetMs: number,
+): number {
+  let index = Math.max(0, Math.min(currentIndex, samples.length - 1))
+  while (
+    index + 1 < samples.length &&
+    Math.abs(samples[index + 1].capturedAtMs - targetMs) <=
+      Math.abs(samples[index].capturedAtMs - targetMs)
+  ) {
+    index += 1
+  }
+  return index
+}
+
+function getHistoryRouteMetricGradient({
+  gpsSamples,
+  telemetrySamples,
+  metric,
+}: {
+  gpsSamples: readonly HistoryGpsSample[]
+  telemetrySamples: readonly TelemetrySample[]
+  metric: HistoryMetricKey
+}): NonNullable<LineLayerStyle['lineGradient']> | null {
+  if (gpsSamples.length < 2 || telemetrySamples.length === 0) return null
+  const baseColor = getHistoryMetricBaseColor(metric)
+  const range = getHistoryMetricColorRange(metric, baseColor)
+  if (!range) return null
+
+  const lastIndex = gpsSamples.length - 1
+  const maxStops = 160
+  const step = Math.max(1, Math.floor(lastIndex / (maxStops - 1)))
+  const expression: unknown[] = ['interpolate', ['linear'], ['line-progress']]
+
+  let lastProgress = -1
+  let telemetryIndex = 0
+  for (let index = 0; index < gpsSamples.length; index += step) {
+    const gpsSample = gpsSamples[index]
+    telemetryIndex = advanceNearestTelemetryIndex(
+      telemetrySamples,
+      telemetryIndex,
+      gpsSample.capturedAtMs,
+    )
+    const telemetrySample = telemetrySamples[telemetryIndex]
+    const value = telemetrySample ? getTelemetrySampleMetricValue(telemetrySample, metric) : null
+    lastProgress = index / lastIndex
+    expression.push(lastProgress, value == null ? baseColor : getMetricRampColor(value, range))
+  }
+
+  if (lastProgress < 1) {
+    const lastGpsSample = gpsSamples[lastIndex]
+    const lastTelemetrySample = getNearestTelemetrySample(
+      telemetrySamples,
+      lastGpsSample.capturedAtMs,
+    )
+    const lastValue = lastTelemetrySample
+      ? getTelemetrySampleMetricValue(lastTelemetrySample, metric)
+      : null
+    expression.push(1, lastValue == null ? baseColor : getMetricRampColor(lastValue, range))
+  }
+
+  return expression as unknown as NonNullable<LineLayerStyle['lineGradient']>
+}
+
 function getHistoryRouteHighlightDurationMs(route: [number, number][]) {
   if (route.length < 2) return HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS
   let distanceM = 0
@@ -655,6 +783,8 @@ function CenterMapLayers({
   gpsBearingDeg,
   rideRoute,
   seekPosition,
+  rideTelemetrySamples,
+  activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
   targetLocation,
@@ -694,6 +824,8 @@ function CenterMapLayers({
           rideRouteShape={rideRouteShape}
           rideRoute={rideRoute}
           seekPosition={seekPosition}
+          rideTelemetrySamples={rideTelemetrySamples}
+          activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
           onSelectMarker={onSelectMarker}
@@ -724,7 +856,9 @@ interface CenterMapProps {
   liveLocations: LocationEvent[]
   latestApproximateLocation: LocationEvent | null
   rideGpsSamples: HistoryGpsSample[]
+  rideTelemetrySamples: TelemetrySample[]
   rideMarkers: HistoryMarker[]
+  activeHistoryMapMetric: HistoryMetricKey
   historyActive: boolean
   mapStyleKey: MapStyleKey
   mapNavigationMode: MapNavigationMode
@@ -751,7 +885,9 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     liveLocations,
     latestApproximateLocation,
     rideGpsSamples,
+    rideTelemetrySamples,
     rideMarkers,
+    activeHistoryMapMetric,
     historyActive,
     mapStyleKey,
     mapNavigationMode,
@@ -1308,6 +1444,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           gpsBearingDeg={gpsPinBearingDeg}
           rideRoute={rideRoute}
           seekPosition={seekPosition}
+          rideTelemetrySamples={rideTelemetrySamples}
+          activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
           targetLocation={targetLocation}

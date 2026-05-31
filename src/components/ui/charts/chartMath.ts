@@ -211,3 +211,37 @@ export function splitChartLineSegments(
   if (current.length >= 2) segments.push(current)
   return segments
 }
+
+export function splitChartPointSegments(
+  points: TelemetryChartPoint[],
+  range: { y: { min: number; max: number } },
+  width: number,
+  height: number,
+  windowMs?: number,
+  gapMultiplier = DEFAULT_GAP_MULTIPLIER,
+): { x: number; y: number; point: TelemetryChartPoint }[][] {
+  if (points.length === 0 || width <= 0) return []
+  const gapThresholdMs = resolveGapThresholdMs(points, gapMultiplier)
+  const segments: { x: number; y: number; point: TelemetryChartPoint }[][] = []
+  let current: { x: number; y: number; point: TelemetryChartPoint }[] = []
+
+  for (let i = 0; i < points.length; i += 1) {
+    const point = points[i]
+    const position = getChartPosition(points, point, range, width, height, windowMs)
+    if (!position) continue
+
+    if (i > 0) {
+      const prev = points[i - 1]
+      const deltaMs = point.date.getTime() - prev.date.getTime()
+      if (deltaMs > gapThresholdMs && current.length > 0) {
+        if (current.length >= 2) segments.push(current)
+        current = []
+      }
+    }
+
+    current.push({ ...position, point })
+  }
+
+  if (current.length >= 2) segments.push(current)
+  return segments
+}

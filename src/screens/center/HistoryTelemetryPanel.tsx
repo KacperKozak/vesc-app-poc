@@ -18,6 +18,11 @@ import {
 import { IconButton } from '@/components/ui/base/IconButton'
 import { telemetry } from '@/constants/telemetry'
 import { downsampleTimeSeries, findNearestSampleIndexByTime } from '@/lib/history/playback'
+import {
+  getHistoryMetricColorRange,
+  getMetricRampColor,
+  type HistoryMetricKey,
+} from '@/lib/history/metricColorScale'
 import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
 import { useHistoryStore, type TelemetrySample } from '@/store/historyStore'
 import { theme } from '@/constants/theme'
@@ -33,6 +38,7 @@ interface HistoryTelemetryPanelProps {
   onNext: () => void
   onOpenList: () => void
   onSeek?: (timeMs: number) => void
+  onMetricInteraction?: (metric: HistoryMetricKey) => void
   onHeightChange?: (height: number) => void
 }
 
@@ -92,6 +98,7 @@ export function HistoryTelemetryPanel({
   onNext,
   onOpenList,
   onSeek,
+  onMetricInteraction,
   onHeightChange,
 }: HistoryTelemetryPanelProps) {
   const insets = useSafeAreaInsets()
@@ -163,6 +170,10 @@ export function HistoryTelemetryPanel({
       }),
     [speedPoints],
   )
+  const speedColorRange = useMemo(
+    () => getHistoryMetricColorRange('speed', telemetry.speed.color),
+    [],
+  )
   const batteryRange = useMemo(
     () =>
       computeAutoRange(batteryVoltagePoints, {
@@ -233,7 +244,8 @@ export function HistoryTelemetryPanel({
 
   const hasChartData = headSample != null && sortedSamples.length >= 2
 
-  const handlePointSelected = (point: TelemetryChartPoint) => {
+  const handlePointSelected = (metric: HistoryMetricKey, point: TelemetryChartPoint) => {
+    onMetricInteraction?.(metric)
     const ms = point.date.getTime()
     setHeadTimeMs(ms)
     onSeek?.(ms)
@@ -258,6 +270,7 @@ export function HistoryTelemetryPanel({
           value: fmtDutyPercent(headSample.dutyCycle, false),
           headValue: dutyPercent(headSample.dutyCycle, false),
           color: telemetry.duty.color,
+          colorRange: getHistoryMetricColorRange('duty', telemetry.duty.color),
           formatValue: (v: number) => `${v.toFixed(1)}%`,
           excludedRanges: dutyExcludedRanges,
         },
@@ -268,6 +281,7 @@ export function HistoryTelemetryPanel({
           value: telemetry.battVoltage.formatWithUnit(headSample.batteryVoltage),
           headValue: headSample.batteryVoltage,
           color: telemetry.battVoltage.color,
+          colorRange: getHistoryMetricColorRange('battery', telemetry.battVoltage.color),
           formatValue: (v: number) => telemetry.battVoltage.formatWithUnit(v),
         },
         tempMotor: {
@@ -280,6 +294,7 @@ export function HistoryTelemetryPanel({
               : telemetry.motorTemp.formatWithUnit(headSample.tempMotor),
           headValue: headSample.tempMotor ?? 0,
           color: telemetry.motorTemp.color,
+          colorRange: getHistoryMetricColorRange('tempMotor', telemetry.motorTemp.color),
           formatValue: (v: number) => telemetry.motorTemp.formatWithUnit(v),
         },
         tempController: {
@@ -292,6 +307,7 @@ export function HistoryTelemetryPanel({
               : telemetry.controllerTemp.formatWithUnit(headSample.tempMosfet),
           headValue: headSample.tempMosfet ?? 0,
           color: telemetry.controllerTemp.color,
+          colorRange: getHistoryMetricColorRange('tempController', telemetry.controllerTemp.color),
           formatValue: (v: number) => telemetry.controllerTemp.formatWithUnit(v),
         },
         motorCurrent: {
@@ -301,6 +317,7 @@ export function HistoryTelemetryPanel({
           value: telemetry.motorCurrent.formatWithUnit(headSample.motorCurrent),
           headValue: headSample.motorCurrent,
           color: telemetry.motorCurrent.color,
+          colorRange: getHistoryMetricColorRange('motorCurrent', telemetry.motorCurrent.color),
           formatValue: (v: number) => telemetry.motorCurrent.formatWithUnit(v),
         },
         batteryCurrent: {
@@ -310,6 +327,7 @@ export function HistoryTelemetryPanel({
           value: telemetry.battCurrent.formatWithUnit(headSample.batteryCurrent),
           headValue: headSample.batteryCurrent,
           color: telemetry.battCurrent.color,
+          colorRange: getHistoryMetricColorRange('batteryCurrent', telemetry.battCurrent.color),
           formatValue: (v: number) => telemetry.battCurrent.formatWithUnit(v),
         },
       } satisfies Record<
@@ -321,6 +339,7 @@ export function HistoryTelemetryPanel({
           value: string
           headValue: number
           color: string
+          colorRange: ReturnType<typeof getHistoryMetricColorRange>
           formatValue: (v: number) => string
           excludedRanges?: ExcludedRange[]
         }
@@ -359,7 +378,11 @@ export function HistoryTelemetryPanel({
             height={48}
             containerStyle={styles.chart}
             formatValue={(v) => telemetry.speed.formatWithUnit(v)}
-            onPointSelected={(point) => handlePointSelected(point)}
+            getPointColor={
+              speedColorRange ? (value) => getMetricRampColor(value, speedColorRange) : undefined
+            }
+            onGestureStart={() => onMetricInteraction?.('speed')}
+            onPointSelected={(point) => handlePointSelected('speed', point)}
             excludedRanges={speedExcludedRanges}
           />
 
@@ -377,7 +400,11 @@ export function HistoryTelemetryPanel({
                 height={40}
                 containerStyle={styles.chart}
                 formatValue={cfg.formatValue}
-                onPointSelected={(point) => handlePointSelected(point)}
+                getPointColor={
+                  cfg.colorRange ? (value) => getMetricRampColor(value, cfg.colorRange) : undefined
+                }
+                onGestureStart={() => onMetricInteraction?.(metric.key)}
+                onPointSelected={(point) => handlePointSelected(metric.key, point)}
                 excludedRanges={
                   'excludedRanges' in cfg
                     ? (cfg.excludedRanges as ExcludedRange[] | undefined)
@@ -399,9 +426,10 @@ export function HistoryTelemetryPanel({
                     index < OPTIONAL_CHART_METRICS.length - 1 && styles.metricTabDivider,
                     active && styles.metricTabActive,
                   ]}
-                  onPress={() =>
+                  onPress={() => {
+                    onMetricInteraction?.(metric.key)
                     setActiveCharts((prev) => toggleOptionalChartMetric(prev, metric.key))
-                  }
+                  }}
                 >
                   <View
                     style={[

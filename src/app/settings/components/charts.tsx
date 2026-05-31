@@ -1,23 +1,72 @@
 import { ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useCallback, useMemo, useState } from 'react'
-import { useSharedValue } from 'react-native-reanimated'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Easing, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 
+import { TelemetryLineChart } from '@/components/ui/charts/TelemetryLineChart'
+import { computeAutoRange, type TelemetryChartPoint } from '@/components/ui/charts/chartMath'
 import { SingleGauge } from '@/components/ui/charts/DualGauge'
 import { Sparkline, type SparklinePoint } from '@/components/ui/charts/Sparkline'
 import { ShowcaseCard } from '@/components/ui/dev/ShowcaseCard'
 import { ChipRow, ToggleRow } from '@/components/ui/dev/ShowcaseControls'
 import { theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
+import {
+  getHistoryMetricHotRange,
+  getHistoryMetricColorRange,
+  getMetricRampColor,
+  type HistoryMetricKey,
+} from '@/lib/history/metricColorScale'
 
-function generateSparklineData(count: number, base: number, variance: number): SparklinePoint[] {
+function seededRandom(seed: number) {
+  let state = seed
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 0xffffffff
+  }
+}
+
+function generateSparklineData(
+  count: number,
+  base: number,
+  variance: number,
+  seed: number,
+): SparklinePoint[] {
   const now = Date.now()
+  const random = seededRandom(seed)
   const points: SparklinePoint[] = []
   let value = base
   for (let i = 0; i < count; i++) {
-    value += (Math.random() - 0.48) * variance
+    value += (random() - 0.48) * variance
     value = Math.max(base - variance * 3, Math.min(base + variance * 3, value))
     points.push({ ts: now - (count - i) * 1000, value })
+  }
+  return points
+}
+
+function generateChartData({
+  count,
+  base,
+  variance,
+  seed,
+  drift = 0,
+  spikeEvery = 0,
+}: {
+  count: number
+  base: number
+  variance: number
+  seed: number
+  drift?: number
+  spikeEvery?: number
+}): TelemetryChartPoint[] {
+  const now = Date.now()
+  const random = seededRandom(seed)
+  const points: TelemetryChartPoint[] = []
+  let value = base
+  for (let i = 0; i < count; i += 1) {
+    value += (random() - 0.5) * variance + drift
+    if (spikeEvery > 0 && i % spikeEvery === 0) value += variance * (1.8 + random())
+    points.push({ date: new Date(now - (count - i) * 1000), value: Math.max(0, value) })
   }
   return points
 }
@@ -25,8 +74,8 @@ function generateSparklineData(count: number, base: number, variance: number): S
 function SparklineShowcase() {
   const [showMax, setShowMax] = useState(true)
   const [maxPosition, setMaxPosition] = useState<'left' | 'right'>('right')
-  const [color, setColor] = useState('#38bdf8')
-  const points = useMemo(() => generateSparklineData(120, 42, 2), [])
+  const [color, setColor] = useState(telemetry.speed.color)
+  const points = useMemo(() => generateSparklineData(120, 42, 2, 11), [])
 
   return (
     <ShowcaseCard
@@ -42,7 +91,12 @@ function SparklineShowcase() {
           />
           <ChipRow
             label="color"
-            options={['#38bdf8', '#4ade80', '#f87171', '#facc15']}
+            options={[
+              telemetry.speed.color,
+              telemetry.duty.color,
+              telemetry.controllerTemp.color,
+              theme.highlight.color,
+            ]}
             selected={color}
             onSelect={setColor}
           />
@@ -61,28 +115,44 @@ function SparklineShowcase() {
   )
 }
 
-function SingleGaugeShowcase() {
-  const [metricKey, setMetricKey] = useState<'speed' | 'duty' | 'battVoltage'>('speed')
+function AnimatedSingleGaugeShowcase() {
+  const [metricKey, setMetricKey] = useState<'speed' | 'duty' | 'motorTemp' | 'controllerTemp'>(
+    'speed',
+  )
   const value = useSharedValue<number | null>(34)
   const metric = telemetry[metricKey]
+  const hotMetricKey: HistoryMetricKey =
+    metricKey === 'motorTemp'
+      ? 'tempMotor'
+      : metricKey === 'controllerTemp'
+        ? 'tempController'
+        : metricKey
+  const hotRange = getHistoryMetricHotRange(hotMetricKey)
 
-  const handleMetricChange = useCallback(
-    (next: string) => {
-      const key = next as typeof metricKey
-      setMetricKey(key)
-      // eslint-disable-next-line react-hooks/immutability
-      value.value = key === 'speed' ? 34 : key === 'duty' ? 68 : 42.5
-    },
-    [value],
-  )
+  useEffect(() => {
+    value.value = 0
+    value.value = withRepeat(
+      withTiming(metric.chartRange.max, {
+        duration: 1800,
+        easing: Easing.inOut(Easing.quad),
+      }),
+      -1,
+      true,
+    )
+  }, [metric.chartRange.max, value])
+
+  const handleMetricChange = useCallback((next: string) => {
+    const key = next as typeof metricKey
+    setMetricKey(key)
+  }, [])
 
   return (
     <ShowcaseCard
-      name="SingleGauge"
+      name="SingleGauge / animated ramp"
       controls={
         <ChipRow
           label="metric"
-          options={['speed', 'duty', 'battVoltage']}
+          options={['speed', 'duty', 'motorTemp', 'controllerTemp']}
           selected={metricKey}
           onSelect={handleMetricChange}
         />
@@ -96,6 +166,7 @@ function SingleGaugeShowcase() {
         unit={metric.unit}
         decimals={metric.decimals}
         label={metric.label.toUpperCase()}
+        hotRange={hotRange}
         alerts={[
           { id: 'warn', threshold: metric.chartRange.max * 0.75, thresholdMax: null },
           {
@@ -109,12 +180,74 @@ function SingleGaugeShowcase() {
   )
 }
 
+function RandomLineChartsShowcase() {
+  const charts = useMemo(
+    () => [
+      {
+        key: 'speed',
+        metricKey: 'speed' as HistoryMetricKey,
+        label: 'Speed / noisy ride',
+        metric: telemetry.speed,
+        points: generateChartData({ count: 160, base: 18, variance: 5, seed: 21, spikeEvery: 29 }),
+      },
+      {
+        key: 'duty',
+        metricKey: 'duty' as HistoryMetricKey,
+        label: 'Duty / punchy acceleration',
+        metric: telemetry.duty,
+        points: generateChartData({ count: 160, base: 40, variance: 8, seed: 37, spikeEvery: 17 }),
+      },
+      {
+        key: 'controller',
+        metricKey: 'tempController' as HistoryMetricKey,
+        label: 'Controller temp / slow climb',
+        metric: telemetry.controllerTemp,
+        points: generateChartData({ count: 160, base: 32, variance: 1.8, seed: 53, drift: 0.16 }),
+      },
+    ],
+    [],
+  )
+
+  return (
+    <ShowcaseCard name="TelemetryLineChart / random samples">
+      {charts.map((chart) => {
+        const range = computeAutoRange(chart.points, {
+          includeZero: chart.key !== 'controller',
+          minSpan: chart.metric.minSpan ?? 10,
+          paddingRatio: 0.1,
+          baseline: chart.key === 'controller' ? chart.metric.chartRange : undefined,
+        })
+        const colorRange = getHistoryMetricColorRange(chart.metricKey, chart.metric.color)
+        const currentPoint = chart.points.at(-1) ?? null
+        return (
+          <TelemetryLineChart
+            key={chart.key}
+            label={chart.label}
+            value={currentPoint ? chart.metric.formatWithUnit(currentPoint.value) : '-'}
+            points={chart.points}
+            currentPoint={currentPoint}
+            color={chart.metric.color}
+            range={range}
+            height={70}
+            formatValue={chart.metric.formatWithUnit}
+            getPointColor={
+              colorRange ? (value) => getMetricRampColor(value, colorRange) : undefined
+            }
+            containerStyle={styles.chartExample}
+          />
+        )
+      })}
+    </ShowcaseCard>
+  )
+}
+
 export default function ChartsPage() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <SparklineShowcase />
-        <SingleGaugeShowcase />
+        <AnimatedSingleGaugeShowcase />
+        <RandomLineChartsShowcase />
       </ScrollView>
     </SafeAreaView>
   )
@@ -123,4 +256,5 @@ export default function ChartsPage() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.neutral.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
+  chartExample: { marginBottom: 10 },
 })
