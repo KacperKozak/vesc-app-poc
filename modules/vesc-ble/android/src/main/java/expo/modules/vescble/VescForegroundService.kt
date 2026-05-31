@@ -200,6 +200,36 @@ class VescForegroundService : Service() {
             }
         }
 
+        fun startRateTest(onResult: (Map<String, Any?>) -> Unit) {
+            instance?.startRateTest { result ->
+                onResult(
+                    mapOf(
+                        "steps" to result.steps.map { step ->
+                            mapOf(
+                                "intervalMs" to step.intervalMs,
+                                "pollsSent" to step.pollsSent,
+                                "responsesReceived" to step.responsesReceived,
+                                "successRate" to step.successRate,
+                                "avgLatencyMs" to step.avgLatencyMs,
+                            )
+                        },
+                        "recommendedIntervalMs" to result.recommendedIntervalMs,
+                        "maxStableRate" to result.maxStableRate,
+                    )
+                )
+            } ?: onResult(
+                mapOf(
+                    "steps" to emptyList<Map<String, Any?>>(),
+                    "recommendedIntervalMs" to 0L,
+                    "maxStableRate" to 0,
+                )
+            )
+        }
+
+        fun stopRateTest() {
+            instance?.stopRateTest()
+        }
+
         fun previewAlertSound(context: Context, soundType: String) {
             instance?.alertFeedback?.preview(soundType) ?: VescAlertFeedback.preview(context, soundType)
         }
@@ -274,6 +304,10 @@ class VescForegroundService : Service() {
         isCurrentSession = ::isCurrentBoardSession,
         sendPayloadWithRetry = { payload, session -> sendPayloadWithRetry(payload, session) },
     )
+    private var rateProbe: RateProbe? = null
+    private val rateTestSteps = mutableListOf<RateTestStep>()
+    private var rateTestCompleteCallback: ((RateTestResult) -> Unit)? = null
+    private var rateTestPollPayload: ByteArray? = null
     private val connectionCoordinator = ConnectionCoordinator(
         scheduler = scheduler,
         isCurrentSession = ::isCurrentBoardSession,
@@ -975,6 +1009,22 @@ class VescForegroundService : Service() {
             }
             COMM_CUSTOM_APP_DATA -> {
                 val now = System.currentTimeMillis()
+                // Route to rate probe if active — skip normal telemetry pipeline
+                val probe = rateProbe
+                if (probe != null && probe.isActive) {
+                    val parsed = parseRefloatGetAllData(
+                        payload = payload,
+                        avgLatency = null,
+                        packetAt = now,
+                        location = latestLocation,
+                    ) ?: run {
+                        captureTelemetryParseFailed(payload)
+                        return
+                    }
+                    probe.onResponse(parsed)
+                    return
+                }
+
                 val parsed = parseRefloatGetAllData(
                     payload = payload,
                     avgLatency = updateLatency(now),
@@ -1252,6 +1302,99 @@ class VescForegroundService : Service() {
     private fun stopPolling() {
         pollingLoop.stop()
         telemetryPipeline.cancelStaleWatchdog()
+    }
+
+    fun startRateTest(callback: (RateTestResult) -> Unit) {
+        if (rateProbe?.isActive == true) return
+        val boardConfig = boardConfig ?: run {
+            callback(RateTestResult(emptyList(), 0, 0))
+            return
+        }
+        val boardSession = boardSession ?: run {
+            callback(RateTestResult(emptyList(), 0, 0))
+            return
+        }
+        if (boardStatus != BoardPhase.Connected) {
+            callback(RateTestResult(emptyList(), 0, 0))
+            return
+        }
+
+        // Pause normal polling
+        stopPolling()
+
+        // Build compact poll payload (mode 1 — smallest, no odometer/temps)
+        val pollPayload = if (canId != null) {
+            byteArrayOf(
+                COMM_FORWARD_CAN.toByte(),
+                canId!!.toByte(),
+                COMM_CUSTOM_APP_DATA.toByte(),
+                REFLOAT_MAGIC.toByte(),
+                REFLOAT_GET_ALLDATA.toByte(),
+                1,
+            )
+        } else if (directConnection) {
+            byteArrayOf(
+                COMM_CUSTOM_APP_DATA.toByte(),
+                REFLOAT_MAGIC.toByte(),
+                REFLOAT_GET_ALLDATA.toByte(),
+                1,
+            )
+        } else {
+            callback(RateTestResult(emptyList(), 0, 0))
+            return
+        }
+
+        rateTestCompleteCallback = callback
+        rateTestSteps.clear()
+
+        val probe = RateProbe(
+            sendPayload = { payload -> sendPayloadWithRetry(payload, boardSession) },
+            buildPollPayload = { pollPayload },
+        )
+
+        probe.start(
+            onProgress = { step ->
+                rateTestSteps.add(step)
+                val latencyMs = step.avgLatencyMs?.toInt() ?: 0
+                Log.d(VESC_SESSION_TAG,
+                    "RateTest: interval=${step.intervalMs}ms sent=${step.pollsSent} " +
+                    "received=${step.responsesReceived} success=${(step.successRate * 100).toInt()}% " +
+                    "latency=${latencyMs}ms")
+                emitEvent?.invoke("onRateTestProgress", mapOf(
+                    "intervalMs" to step.intervalMs,
+                    "pollsSent" to step.pollsSent,
+                    "responsesReceived" to step.responsesReceived,
+                    "successRate" to step.successRate,
+                    "avgLatencyMs" to step.avgLatencyMs,
+                ))
+            },
+            onComplete = { _ ->
+                val result = RateProbe.computeResult(rateTestSteps)
+                Log.d(VESC_SESSION_TAG,
+                    "RateTest finished: recommended=${result.recommendedIntervalMs}ms " +
+                    "maxRate=${result.maxStableRate}hz")
+                rateProbe = null
+                rateTestCompleteCallback?.invoke(result)
+                rateTestCompleteCallback = null
+
+                // Resume normal polling
+                val session = boardConfig
+                val token = boardSession
+                if (session != null && token != null) {
+                    telemetryPipeline.armStaleWatchdog()
+                    pollingLoop.start(session, token, canId, directConnection)
+                }
+            },
+        )
+
+        rateProbe = probe
+    }
+
+    fun stopRateTest() {
+        rateProbe?.stop()
+        rateProbe = null
+        rateTestSteps.clear()
+        rateTestCompleteCallback = null
     }
 
     private fun armCanPingTimeout() {

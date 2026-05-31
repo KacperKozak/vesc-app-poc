@@ -5,6 +5,7 @@ import {
   ChartLineUpIcon,
   CompassIcon,
   ListIcon,
+  PulseIcon,
   SpeakerHighIcon,
   SwatchesIcon,
   ToolboxIcon,
@@ -34,6 +35,12 @@ const devPages = [
     hint: 'PostHog status and manual events',
     route: routes.settingsDiagnostic,
     icon: ChartLineUpIcon,
+  },
+  {
+    label: 'Telemetry test',
+    hint: 'Burst-poll board at adaptive rates to find stable poll interval',
+    route: routes.rateTest,
+    icon: PulseIcon,
   },
   {
     label: 'Navigation diagnostics',

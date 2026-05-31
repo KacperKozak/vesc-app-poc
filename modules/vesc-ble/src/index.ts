@@ -142,6 +142,20 @@ export interface TelemetryEvent {
   firedAlerts?: FiredAlert[]
 }
 
+export interface RateTestStep {
+  intervalMs: number
+  pollsSent: number
+  responsesReceived: number
+  successRate: number
+  avgLatencyMs: number | null
+}
+
+export interface RateTestResultEvent {
+  steps: RateTestStep[]
+  recommendedIntervalMs: number
+  maxStableRate: number
+}
+
 export interface LiveMetricExclusionUpdate {
   lastPacketAt: number
   metricExclusions: Record<string, boolean>
@@ -454,6 +468,8 @@ type VescBleEvents = {
   onTelemetry: (event: TelemetryEvent) => void
   onLocation: (event: LocationEvent) => void
   onTelemetryRebuildProgress: (event: TelemetryRebuildProgressEvent) => void
+  onRateTestProgress: (event: RateTestStep) => void
+  onRateTestResult: (event: RateTestResultEvent) => void
 }
 
 interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
@@ -479,6 +495,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   previewAlertSound(soundType: AlertSoundType): void
   startGeigerSimulation(soundType: string, rangeDepth: number): void
   stopGeigerSimulation(): void
+  startRateTest(): Promise<RateTestResultEvent>
+  stopRateTest(): void
   selectBoard(boardId: string): Promise<void>
   stopBoard(): Promise<void>
   setDebugRecordingEnabled(enabled: boolean): void
@@ -620,11 +638,15 @@ export function startGeigerSimulation(soundType: string, rangeDepth: number): vo
 }
 
 export function stopGeigerSimulation(): void {
-  try {
-    native.stopGeigerSimulation()
-  } catch {
-    // Native geiger simulation not yet available
-  }
+  native.stopGeigerSimulation()
+}
+
+export async function startRateTest(): Promise<RateTestResultEvent> {
+  return native.startRateTest()
+}
+
+export function stopRateTest(): void {
+  native.stopRateTest()
 }
 
 /** Select saved board by app board id. Native reads BLE id/name from its DB and owns connect. */
@@ -890,4 +912,14 @@ export function addTelemetryRebuildProgressListener(
   cb: (event: TelemetryRebuildProgressEvent) => void,
 ): EventSubscription {
   return emitter.addListener('onTelemetryRebuildProgress', cb)
+}
+
+export function addRateTestProgressListener(cb: (event: RateTestStep) => void): EventSubscription {
+  return emitter.addListener('onRateTestProgress', cb)
+}
+
+export function addRateTestResultListener(
+  cb: (event: RateTestResultEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onRateTestResult', cb)
 }

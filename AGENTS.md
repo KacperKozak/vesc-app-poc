@@ -10,6 +10,7 @@ Always use **bun** for all package management and script execution:
 - Run scripts: `bun run <script>`
 - Execute binaries: `bunx <binary>`
 - Run tests: `bun test`
+- TypeScript check: `bun ts`
 
 Do **not** use `npm`, `yarn`, `npx`, or `pnpm`.
 

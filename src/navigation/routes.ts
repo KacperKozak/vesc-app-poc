@@ -25,6 +25,7 @@ export const routes = {
   settingsSoundPlayground: '/settings/soundPlayground' as Href,
   settingsDiagnosticEvents: '/settings/eventLog' as Href,
   settingsPrivacyZones: '/settings/privacy-zones' as Href,
+  rateTest: '/rate-test' as Href,
 } as const
 
 export const stackScreens = {
@@ -44,4 +45,5 @@ export const stackScreens = {
   editBoard: 'editBoard/[boardId]',
   settingsSoundPlayground: 'settings/soundPlayground',
   settingsPrivacyZones: 'settings/privacy-zones',
+  rateTest: 'rate-test',
 } as const

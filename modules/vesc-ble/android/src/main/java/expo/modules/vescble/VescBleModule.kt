@@ -71,6 +71,8 @@ class VescBleModule : Module() {
       "onTelemetry",
       "onLocation",
       "onTelemetryRebuildProgress",
+      "onRateTestProgress",
+      "onRateTestResult",
     )
 
     OnStartObserving("onDevice") { startObserving("onDevice") }
@@ -85,6 +87,10 @@ class VescBleModule : Module() {
     OnStopObserving("onLocation") { stopObserving("onLocation") }
     OnStartObserving("onTelemetryRebuildProgress") { startObserving("onTelemetryRebuildProgress") }
     OnStopObserving("onTelemetryRebuildProgress") { stopObserving("onTelemetryRebuildProgress") }
+    OnStartObserving("onRateTestProgress") { startObserving("onRateTestProgress") }
+    OnStopObserving("onRateTestProgress") { stopObserving("onRateTestProgress") }
+    OnStartObserving("onRateTestResult") { startObserving("onRateTestResult") }
+    OnStopObserving("onRateTestResult") { stopObserving("onRateTestResult") }
 
     OnActivityEntersForeground {
       frontendActive = true
@@ -126,6 +132,14 @@ class VescBleModule : Module() {
     }
     Function("stopGeigerSimulation") {
       previewAlertFeedback?.stopGeiger("preview")
+    }
+    AsyncFunction("startRateTest") { promise: Promise ->
+      VescForegroundService.startRateTest { result ->
+        promise.resolve(result)
+      }
+    }
+    Function("stopRateTest") {
+      VescForegroundService.stopRateTest()
     }
     Function("getLiveState") {
       liveStateWithScan(VescForegroundService.currentLiveState(context.applicationContext))
