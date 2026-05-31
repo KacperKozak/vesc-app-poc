@@ -23,7 +23,9 @@ export interface MetricHotRange {
   end: number
 }
 
-const HISTORY_METRIC_HOT_RANGES: Partial<Record<HistoryMetricKey, MetricHotRange>> = {
+export type HistoryMetricHotRanges = Partial<Record<HistoryMetricKey, MetricHotRange>>
+
+export const DEFAULT_HISTORY_METRIC_HOT_RANGES: HistoryMetricHotRanges = {
   speed: { start: 30, end: 40 },
   duty: { start: 60, end: 80 },
   tempMotor: { start: 70, end: 90 },
@@ -92,15 +94,32 @@ export function makeMetricColorRange(
   return { min, max, baseColor, hotColor: theme.error.color }
 }
 
-export function getHistoryMetricHotRange(metric: HistoryMetricKey): MetricHotRange | null {
-  return HISTORY_METRIC_HOT_RANGES[metric] ?? null
+function isFiniteHotRange(value: MetricHotRange | undefined): value is MetricHotRange {
+  return (
+    value != null &&
+    Number.isFinite(value.start) &&
+    Number.isFinite(value.end) &&
+    value.start !== value.end
+  )
+}
+
+export function getHistoryMetricHotRange(
+  metric: HistoryMetricKey,
+  hotRanges: HistoryMetricHotRanges = DEFAULT_HISTORY_METRIC_HOT_RANGES,
+  enabled = true,
+): MetricHotRange | null {
+  if (!enabled) return null
+  const range = hotRanges[metric]
+  return isFiniteHotRange(range) ? range : null
 }
 
 export function getHistoryMetricColorRange(
   metric: HistoryMetricKey,
   baseColor: string,
+  hotRanges?: HistoryMetricHotRanges,
+  enabled = true,
 ): MetricColorRange | null {
-  return makeMetricColorRange(baseColor, getHistoryMetricHotRange(metric))
+  return makeMetricColorRange(baseColor, getHistoryMetricHotRange(metric, hotRanges, enabled))
 }
 
 export function getHistoryMetricKeyForControlId(

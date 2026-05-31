@@ -396,6 +396,19 @@ export interface AppSettings {
   freeSpinStationaryBoardCapKmh: number
   mapStyleKey: 'onedark' | 'outdoors' | 'satellite' | 'mapy'
   mapNavigationMode: 'northUp' | 'gpsHeading' | 'phoneHeading' | 'freeRotate'
+  historyMetricGradientsEnabled: boolean
+  historyMetricHotRanges: Partial<
+    Record<
+      | 'speed'
+      | 'duty'
+      | 'battery'
+      | 'tempMotor'
+      | 'tempController'
+      | 'motorCurrent'
+      | 'batteryCurrent',
+      { start: number; end: number }
+    >
+  >
 }
 
 export interface DiagnosticStatus {
@@ -534,7 +547,10 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   setPrivacyZoneEnabled(id: string, enabled: boolean): Promise<void>
   deletePrivacyZone(id: string): Promise<void>
   getSettings(): Promise<AppSettings>
-  updateSetting(key: string, value: number | boolean | string | null): Promise<void>
+  updateSetting(
+    key: string,
+    value: number | boolean | string | Record<string, unknown> | null,
+  ): Promise<void>
 }
 
 const native = requireNativeModule<VescBleNativeModule>('VescBle')
@@ -841,7 +857,7 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function updateSetting(
   key: string,
-  value: number | boolean | string | null,
+  value: number | boolean | string | Record<string, unknown> | null,
 ): Promise<void> {
   return native.updateSetting(key, value)
 }

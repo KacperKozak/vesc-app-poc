@@ -8,6 +8,7 @@ import {
   getHistoryMetricKeyForControlId,
 } from '@/lib/history/metricColorScale'
 import { useAlertsStore } from '@/store/alertsStore'
+import { useSettingsStore } from '@/store/settingsStore'
 
 interface MetricDetailGaugeProps {
   metric: TelemetryMetricConfig
@@ -25,8 +26,12 @@ export function MetricDetailGauge({
   label = metric.label.toUpperCase(),
 }: MetricDetailGaugeProps) {
   const alertRules = useAlertsStore((s) => s.rules)
+  const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)
+  const hotRanges = useSettingsStore((s) => s.historyMetricHotRanges)
   const hotMetric = getHistoryMetricKeyForControlId(metric.controlId)
-  const hotRange = hotMetric ? getHistoryMetricHotRange(hotMetric) : null
+  const hotRange = hotMetric
+    ? getHistoryMetricHotRange(hotMetric, hotRanges, gradientsEnabled)
+    : null
 
   const alerts = useMemo<DualGaugeAlert[]>(
     () =>

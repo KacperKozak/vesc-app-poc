@@ -20,6 +20,57 @@ internal fun validLiveHistoryLimitMinutes(value: Any?): Int? =
     ?.toInt()
     ?.coerceIn(MIN_LIVE_HISTORY_LIMIT_MINUTES, MAX_LIVE_HISTORY_LIMIT_MINUTES)
 
+val DEFAULT_HISTORY_METRIC_HOT_RANGES: Map<String, Map<String, Double>> = mapOf(
+  "speed" to mapOf("start" to 30.0, "end" to 40.0),
+  "duty" to mapOf("start" to 60.0, "end" to 80.0),
+  "tempMotor" to mapOf("start" to 70.0, "end" to 90.0),
+  "tempController" to mapOf("start" to 60.0, "end" to 80.0),
+  "motorCurrent" to mapOf("start" to 35.0, "end" to 55.0),
+  "batteryCurrent" to mapOf("start" to 25.0, "end" to 45.0),
+)
+
+private val historyMetricHotRangeKeys = setOf(
+  "speed",
+  "duty",
+  "battery",
+  "tempMotor",
+  "tempController",
+  "motorCurrent",
+  "batteryCurrent",
+)
+
+private fun validHistoryMetricHotRanges(value: Any?): Map<String, Map<String, Double>>? {
+  val entries: Sequence<Pair<String, Any?>> = when (value) {
+    is JSONObject -> value.keys().asSequence().map { it to value.opt(it) }
+    is Map<*, *> -> value.asSequence().mapNotNull { (key, range) ->
+      (key as? String)?.let { it to range }
+    }
+    else -> return null
+  }
+
+  val ranges = mutableMapOf<String, Map<String, Double>>()
+  for ((metric, rawRange) in entries) {
+    if (metric !in historyMetricHotRangeKeys) continue
+    val start: Double?
+    val end: Double?
+    when (rawRange) {
+      is JSONObject -> {
+        start = (rawRange.opt("start") as? Number)?.toDouble()
+        end = (rawRange.opt("end") as? Number)?.toDouble()
+      }
+      is Map<*, *> -> {
+        start = (rawRange["start"] as? Number)?.toDouble()
+        end = (rawRange["end"] as? Number)?.toDouble()
+      }
+      else -> continue
+    }
+    if (start != null && end != null && start.isFinite() && end.isFinite() && start != end) {
+      ranges[metric] = mapOf("start" to start, "end" to end)
+    }
+  }
+  return ranges
+}
+
 class AppDataRepository private constructor(private val context: Context) {
   private val dao = TelemetryDatabase.get(context).telemetryDao()
 
@@ -95,6 +146,8 @@ class AppDataRepository private constructor(private val context: Context) {
       freeSpinStationaryBoardCapKmh = req("freeSpinStationaryBoardCapKmh", DEFAULT_FREE_SPIN_STATIONARY_BOARD_CAP_KMH) { (it as? Number)?.toDouble() },
       mapStyleKey = req("mapStyleKey", "onedark", ::validMapStyleKey),
       mapNavigationMode = req("mapNavigationMode", "northUp", ::validMapNavigationMode),
+      historyMetricGradientsEnabled = req("historyMetricGradientsEnabled", true) { it as? Boolean },
+      historyMetricHotRanges = req("historyMetricHotRanges", DEFAULT_HISTORY_METRIC_HOT_RANGES, ::validHistoryMetricHotRanges),
     )
 
     if (badKeys.isNotEmpty()) {
@@ -124,6 +177,9 @@ class AppDataRepository private constructor(private val context: Context) {
         validMapStyleKey(value) ?: return@withContext
       "mapNavigationMode" ->
         validMapNavigationMode(value) ?: return@withContext
+      "historyMetricGradientsEnabled" -> value as? Boolean ?: return@withContext
+      "historyMetricHotRanges" ->
+        validHistoryMetricHotRanges(value) ?: return@withContext
       else -> return@withContext
     }
     val normalizedKey = when (key) {
@@ -143,6 +199,8 @@ class AppDataRepository private constructor(private val context: Context) {
         "freeSpinStationaryBoardCapKmh" -> d.freeSpinStationaryBoardCapKmh
         "mapStyleKey" -> d.mapStyleKey
         "mapNavigationMode" -> d.mapNavigationMode
+        "historyMetricGradientsEnabled" -> d.historyMetricGradientsEnabled
+        "historyMetricHotRanges" -> d.historyMetricHotRanges
         else -> null
       }
     }
@@ -341,6 +399,8 @@ fun AppSettings.toMap(): Map<String, Any?> = mapOf(
   "freeSpinStationaryBoardCapKmh" to freeSpinStationaryBoardCapKmh,
   "mapStyleKey" to mapStyleKey,
   "mapNavigationMode" to mapNavigationMode,
+  "historyMetricGradientsEnabled" to historyMetricGradientsEnabled,
+  "historyMetricHotRanges" to historyMetricHotRanges,
 )
 
 private fun encodeSettingJson(value: Any?): String {

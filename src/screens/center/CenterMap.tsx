@@ -55,6 +55,7 @@ import {
   getHistoryMetricColorRange,
   getMetricRampColor,
   getTelemetrySampleMetricValue,
+  type HistoryMetricHotRanges,
   type HistoryMetricKey,
 } from '@/lib/history/metricColorScale'
 import { getNavigationFallbackReason } from '@/lib/map/navigationDiagnostics'
@@ -482,14 +483,18 @@ function HistoryMapLayers({
     () => getHistoryRouteHighlightGradient(highlightProgress),
     [highlightProgress],
   )
+  const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)
+  const hotRanges = useSettingsStore((s) => s.historyMetricHotRanges)
   const routeMetricGradient = useMemo(
     () =>
       getHistoryRouteMetricGradient({
         gpsSamples: rideGpsSamples,
         telemetrySamples: rideTelemetrySamples,
         metric: activeHistoryMapMetric,
+        hotRanges,
+        gradientsEnabled,
       }),
-    [activeHistoryMapMetric, rideGpsSamples, rideTelemetrySamples],
+    [activeHistoryMapMetric, gradientsEnabled, hotRanges, rideGpsSamples, rideTelemetrySamples],
   )
 
   return (
@@ -729,14 +734,18 @@ function getHistoryRouteMetricGradient({
   gpsSamples,
   telemetrySamples,
   metric,
+  hotRanges,
+  gradientsEnabled,
 }: {
   gpsSamples: readonly HistoryGpsSample[]
   telemetrySamples: readonly TelemetrySample[]
   metric: HistoryMetricKey
+  hotRanges: HistoryMetricHotRanges
+  gradientsEnabled: boolean
 }): NonNullable<LineLayerStyle['lineGradient']> | null {
   if (gpsSamples.length < 2 || telemetrySamples.length === 0) return null
   const baseColor = getHistoryMetricBaseColor(metric)
-  const range = getHistoryMetricColorRange(metric, baseColor)
+  const range = getHistoryMetricColorRange(metric, baseColor, hotRanges, gradientsEnabled)
   if (!range) return null
 
   const lastIndex = gpsSamples.length - 1

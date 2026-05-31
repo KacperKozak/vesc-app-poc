@@ -25,6 +25,14 @@ describe('metricColorScale', () => {
     expect(getHistoryMetricHotRange('tempController')).toEqual({ start: 60, end: 80 })
   })
 
+  test('allows custom hot ranges and disabled gradients', () => {
+    expect(getHistoryMetricHotRange('speed', { speed: { start: 10, end: 20 } })).toEqual({
+      start: 10,
+      end: 20,
+    })
+    expect(getHistoryMetricHotRange('speed', { speed: { start: 10, end: 20 } }, false)).toBeNull()
+  })
+
   test('reads nullable controller temperature from telemetry sample', () => {
     const sample = {
       speedKmh: 12,

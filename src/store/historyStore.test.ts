@@ -44,6 +44,12 @@ const getSettings = mock(async () => ({
   lastGpsLatitude: null,
   lastGpsLongitude: null,
   movingSpeedThresholdKmh: 3,
+  freeSpinMaxSpeedDeltaKmh: 10,
+  freeSpinStationaryBoardCapKmh: 15,
+  mapStyleKey: 'onedark',
+  mapNavigationMode: 'northUp',
+  historyMetricGradientsEnabled: true,
+  historyMetricHotRanges: {},
 }))
 const updateSetting = mock(async () => {})
 

@@ -24,6 +24,7 @@ import {
 } from '@/lib/history/metricColorScale'
 import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
 import { useHistoryStore, type TelemetrySample } from '@/store/historyStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { interaction, theme } from '@/constants/theme'
 
 interface HistoryTelemetryPanelProps {
@@ -182,9 +183,11 @@ export function HistoryTelemetryPanel({
       }),
     [speedPoints],
   )
+  const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)
+  const hotRanges = useSettingsStore((s) => s.historyMetricHotRanges)
   const speedColorRange = useMemo(
-    () => getHistoryMetricColorRange('speed', telemetry.speed.color),
-    [],
+    () => getHistoryMetricColorRange('speed', telemetry.speed.color, hotRanges, gradientsEnabled),
+    [gradientsEnabled, hotRanges],
   )
   const speedPointColor = useMemo(
     () =>
@@ -193,14 +196,39 @@ export function HistoryTelemetryPanel({
   )
   const metricColorRanges = useMemo(
     () => ({
-      duty: getHistoryMetricColorRange('duty', telemetry.duty.color),
-      battery: getHistoryMetricColorRange('battery', telemetry.battVoltage.color),
-      tempMotor: getHistoryMetricColorRange('tempMotor', telemetry.motorTemp.color),
-      tempController: getHistoryMetricColorRange('tempController', telemetry.controllerTemp.color),
-      motorCurrent: getHistoryMetricColorRange('motorCurrent', telemetry.motorCurrent.color),
-      batteryCurrent: getHistoryMetricColorRange('batteryCurrent', telemetry.battCurrent.color),
+      duty: getHistoryMetricColorRange('duty', telemetry.duty.color, hotRanges, gradientsEnabled),
+      battery: getHistoryMetricColorRange(
+        'battery',
+        telemetry.battVoltage.color,
+        hotRanges,
+        gradientsEnabled,
+      ),
+      tempMotor: getHistoryMetricColorRange(
+        'tempMotor',
+        telemetry.motorTemp.color,
+        hotRanges,
+        gradientsEnabled,
+      ),
+      tempController: getHistoryMetricColorRange(
+        'tempController',
+        telemetry.controllerTemp.color,
+        hotRanges,
+        gradientsEnabled,
+      ),
+      motorCurrent: getHistoryMetricColorRange(
+        'motorCurrent',
+        telemetry.motorCurrent.color,
+        hotRanges,
+        gradientsEnabled,
+      ),
+      batteryCurrent: getHistoryMetricColorRange(
+        'batteryCurrent',
+        telemetry.battCurrent.color,
+        hotRanges,
+        gradientsEnabled,
+      ),
     }),
-    [],
+    [gradientsEnabled, hotRanges],
   )
   const metricPointColors = useMemo(
     () => ({

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { getSettings, updateSetting, type AppSettings } from 'vesc-ble'
+import { DEFAULT_HISTORY_METRIC_HOT_RANGES } from '@/lib/history/metricColorScale'
 
 const DEFAULTS: AppSettings = {
   liveHistoryLimit: 5,
@@ -13,6 +14,8 @@ const DEFAULTS: AppSettings = {
   freeSpinStationaryBoardCapKmh: 15,
   mapStyleKey: 'onedark',
   mapNavigationMode: 'northUp',
+  historyMetricGradientsEnabled: true,
+  historyMetricHotRanges: DEFAULT_HISTORY_METRIC_HOT_RANGES,
 }
 
 interface SettingsState extends AppSettings {
