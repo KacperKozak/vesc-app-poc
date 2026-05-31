@@ -16,6 +16,10 @@ const getSettings = mock(async () => ({
   movingSpeedThresholdKmh: 3,
   freeSpinMaxSpeedDeltaKmh: 10,
   freeSpinStationaryBoardCapKmh: 15,
+  mapStyleKey: 'onedark',
+  mapNavigationMode: 'northUp',
+  historyMetricGradientsEnabled: true,
+  historyMetricHotRanges: {},
 }))
 const setSelectedBoard = mock(() => {})
 const upsertBoard = mock(async (board: Board) => {

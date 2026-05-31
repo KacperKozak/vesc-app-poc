@@ -4,8 +4,9 @@ import type { StyleProp, ViewStyle } from 'react-native'
 import { DualGauge } from '@/components/ui/charts/DualGauge'
 import { useAlertsStore } from '@/store/alertsStore'
 import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
-import { useLiveWindowMs } from '@/store/settingsStore'
+import { useLiveWindowMs, useSettingsStore } from '@/store/settingsStore'
 import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
+import { getHistoryMetricHotRange } from '@/lib/history/metricColorScale'
 
 const SPEED_MAX = 50
 const DUTY_MAX = 100
@@ -29,6 +30,10 @@ export function DualGaugeIndicator({
   const dutySeries = useLiveMetric(liveSelectors.duty)
   const windowMs = useLiveWindowMs()
   const alertRules = useAlertsStore((s) => s.rules)
+  const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)
+  const hotRanges = useSettingsStore((s) => s.historyMetricHotRanges)
+  const speedHotRange = getHistoryMetricHotRange('speed', hotRanges, gradientsEnabled)
+  const dutyHotRange = getHistoryMetricHotRange('duty', hotRanges, gradientsEnabled)
 
   const speedAlerts = useMemo(
     () =>
@@ -63,6 +68,8 @@ export function DualGaugeIndicator({
       windowMs={windowMs}
       speedMax={SPEED_MAX}
       dutyMax={DUTY_MAX}
+      speedHotRange={speedHotRange}
+      dutyHotRange={dutyHotRange}
       speedAlerts={speedAlerts}
       dutyAlerts={dutyAlerts}
       compact={compact}

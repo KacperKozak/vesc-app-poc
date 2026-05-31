@@ -649,6 +649,15 @@ public class VescBleModule: Module {
     "lastGpsLatitude": NSNull(),
     "lastGpsLongitude": NSNull(),
     "movingSpeedThresholdKmh": 3,
+    "historyMetricGradientsEnabled": true,
+    "historyMetricHotRanges": [
+      "speed": ["start": 30, "end": 40],
+      "duty": ["start": 60, "end": 80],
+      "tempMotor": ["start": 70, "end": 90],
+      "tempController": ["start": 60, "end": 80],
+      "motorCurrent": ["start": 35, "end": 55],
+      "batteryCurrent": ["start": 25, "end": 45],
+    ],
   ]
 
   private static func liveHistoryLimitMinutes(_ value: Any?) -> Int? {

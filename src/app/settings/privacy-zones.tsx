@@ -7,19 +7,19 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from 'expo-router'
+import { theme } from '@/constants/theme'
+import { Input } from '@/components/ui/forms/Input'
 
 import { Button } from '@/components/ui/base/Button'
 import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
 import { MAPBOX_ACCESS_TOKEN } from '@/config/mapy'
 import { MAP_DEFAULTS } from '@/constants/mapStyles'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
-import { theme } from '@/constants/theme'
 import { BriefcaseIcon, HouseIcon, PencilSimpleIcon, TrashIcon } from 'phosphor-react-native'
 import type { Icon } from 'phosphor-react-native'
 import { HPill, HPillAdd, HPillDot, HPillMenuItem, HPills } from '@/components/ui/menus/HPills'
@@ -464,12 +464,12 @@ export default function PrivacyZonesScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setAddNameVisible(false)}>
           <Pressable style={styles.modalCard} onPress={() => undefined}>
             <Text style={styles.modalTitle}>Zone name</Text>
-            <TextInput
+            <Input
               style={styles.modalInput}
               value={addNameText}
               onChangeText={setAddNameText}
               placeholder="e.g. Gym, Work 2"
-              placeholderTextColor="#475569"
+              placeholderTextColor={theme.neutral.textDim}
               autoFocus
               maxLength={32}
               onSubmitEditing={handleAddConfirm}
@@ -502,12 +502,12 @@ export default function PrivacyZonesScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setRenameTarget(null)}>
           <Pressable style={styles.modalCard} onPress={() => undefined}>
             <Text style={styles.modalTitle}>Rename zone</Text>
-            <TextInput
+            <Input
               style={styles.modalInput}
               value={renameText}
               onChangeText={setRenameText}
               placeholder="Zone name"
-              placeholderTextColor="#475569"
+              placeholderTextColor={theme.neutral.textDim}
               autoFocus
               maxLength={32}
               onSubmitEditing={() => void handleRenameConfirm()}
@@ -565,12 +565,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   circleEnabled: {
-    backgroundColor: 'rgba(34, 197, 94, 0.18)',
-    borderColor: 'rgba(34, 197, 94, 0.70)',
+    backgroundColor: theme.zone.bg,
+    borderColor: theme.zone.border,
   },
   circleDisabled: {
     backgroundColor: 'transparent',
-    borderColor: 'rgba(100, 116, 139, 0.50)',
+    borderColor: theme.zone.borderDim,
   },
   zoneLabelWrapper: {
     ...StyleSheet.absoluteFill,
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
     color: theme.neutral.textPrimary,
     fontSize: 14,
     fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowColor: theme.neutral.textShadow,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(17,24,39,0.6)',
+    backgroundColor: theme.neutral.loadingOverlay,
   },
   bottomBar: {
     position: 'absolute',
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: theme.neutral.modalBackdrop,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -628,14 +628,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   modalInput: {
-    backgroundColor: theme.neutral.surfaceDeep,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
     borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: theme.neutral.textPrimary,
-    fontSize: 15,
     fontWeight: '500',
   },
   modalActions: {

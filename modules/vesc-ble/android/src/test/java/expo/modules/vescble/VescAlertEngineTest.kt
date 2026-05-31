@@ -2,6 +2,7 @@ package expo.modules.vescble
 
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -274,5 +275,105 @@ class VescAlertEngineTest {
         val fired = engine.evaluate(rules, telemetry(speed = 15.0, dutyCycle = 0.75))
         assertEquals(2, fired.size)
         assertEquals("duty", fired[0].ruleId)
+    }
+}
+
+class VescAlertTemplateTest {
+    private fun alert(
+        controlId: String = "duty",
+        value: Double = 75.0,
+        threshold: Double = 70.0,
+        thresholdMax: Double? = null,
+    ) = FiredAlert(
+        ruleId = "r1",
+        controlId = controlId,
+        value = value,
+        threshold = threshold,
+        thresholdMax = thresholdMax,
+        soundType = "tts:test",
+        rangeDepth = null,
+        firedAt = 0L,
+    )
+
+    @Test
+    fun basicPlaceholdersRendered() {
+        val result = renderAlertMessageTemplate(
+            "{value} {unit} over {threshold} {unit}",
+            alert(controlId = "duty", value = 75.0, threshold = 70.0),
+            batteryPercent = null,
+        )
+        assertEquals("75 % over 70 %", result)
+    }
+
+    @Test
+    fun batteryVoltagePlaceholderRendered() {
+        val result = renderAlertMessageTemplate(
+            "Battery {voltage} volts, {percent}%",
+            alert(controlId = "battery", value = 48.5, threshold = 50.0),
+            batteryPercent = 42.0,
+        )
+        assertEquals("Battery 48.5 volts, 42%", result)
+    }
+
+    @Test
+    fun batteryPercentMissingRecordsDiagnostic() {
+        val diagnostics = mutableListOf<String>()
+        val result = renderAlertMessageTemplate(
+            "Battery {voltage} volts, {percent}%",
+            alert(controlId = "battery", value = 48.5, threshold = 50.0),
+            batteryPercent = null,
+            onDiagnostic = { name, _ -> diagnostics.add(name) },
+        )
+        assertEquals("Battery 48.5 volts, %", result)
+        assertTrue(diagnostics.any { it == "alert_template_placeholder_unavailable" })
+    }
+
+    @Test
+    fun batteryPlaceholdersUnavailableForNonBattery() {
+        val diagnostics = mutableListOf<String>()
+        val result = renderAlertMessageTemplate(
+            "Speed {value} {unit} voltage={voltage} pct={percent}",
+            alert(controlId = "speed", value = 25.0, threshold = 20.0),
+            batteryPercent = 80.0,
+            onDiagnostic = { name, _ -> diagnostics.add(name) },
+        )
+        assertEquals("Speed 25 km/h voltage= pct=", result)
+        assertEquals(2, diagnostics.count { it == "alert_template_placeholder_unavailable" })
+    }
+
+    @Test
+    fun unknownPlaceholderStrippedWithDiagnostic() {
+        val diagnostics = mutableListOf<String>()
+        val result = renderAlertMessageTemplate(
+            "Alert {value} {unknown}",
+            alert(controlId = "speed", value = 25.0, threshold = 20.0),
+            batteryPercent = null,
+            onDiagnostic = { name, _ -> diagnostics.add(name) },
+        )
+        assertEquals("Alert 25", result)
+        assertTrue(diagnostics.any { it == "alert_template_unknown_placeholder" })
+    }
+
+    @Test
+    fun noBracesInOutputWhenAllPlaceholdersResolved() {
+        val result = renderAlertMessageTemplate(
+            "{value} {unit}",
+            alert(controlId = "motor-temp", value = 65.3, threshold = 60.0),
+            batteryPercent = null,
+        )
+        assertFalse(result.contains('{'))
+    }
+
+    @Test
+    fun unitMapCorrect() {
+        assertEquals("km/h", alertControlUnit("speed"))
+        assertEquals("V", alertControlUnit("battery"))
+        assertEquals("%", alertControlUnit("duty"))
+        assertEquals("°C", alertControlUnit("motor-temp"))
+        assertEquals("A", alertControlUnit("motor-current"))
+        assertEquals("°C", alertControlUnit("controller-temp"))
+        assertEquals("A", alertControlUnit("batt-current"))
+        assertEquals("°", alertControlUnit("imu"))
+        assertEquals("", alertControlUnit("footpad"))
     }
 }

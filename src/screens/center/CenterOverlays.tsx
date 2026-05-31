@@ -19,6 +19,7 @@ import { MapNavigationSelector } from '@/components/ui/menus/MapNavigationSelect
 import { MapStyleSwitch } from '@/components/ui/menus/MapStyleSwitch'
 import type { MapNavigationMode, MapStyleKey } from '@/constants/mapStyles'
 import { theme } from '@/constants/theme'
+import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
 import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
 import type { CenterMapHandle } from '@/screens/center/CenterMap'
@@ -34,7 +35,7 @@ import { MapRevealGesture } from '@/screens/center/MapRevealGesture'
 import { MapVignette } from '@/screens/center/MapVignette'
 import { TopBar } from '@/screens/center/TopBar'
 import type { Board } from '@/store/boardStore'
-import type { HistorySession, TelemetrySample } from '@/store/historyStore'
+import type { HistorySession, TelemetryMinuteBucket, TelemetrySample } from '@/store/historyStore'
 import { useWeatherStore } from '@/store/weatherStore'
 
 interface CenterBoardOverlayProps {
@@ -77,6 +78,7 @@ interface CenterHistoryOverlayProps {
   historyLoading: boolean
   historyHasMore: boolean
   historyError: string | undefined
+  blocks: TelemetryMinuteBucket[]
   sessions: HistorySession[]
   historySheetVisible: boolean
   setHistorySheetVisible: (visible: boolean) => void
@@ -88,6 +90,7 @@ interface CenterHistoryOverlayProps {
   exitHistory: () => void
   removeSession: () => void
   onSeek: (timeMs: number) => void
+  setActiveHistoryMapMetric: (metric: HistoryMetricKey) => void
 }
 
 interface CenterOverlaysProps {
@@ -136,7 +139,7 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
         />
       </View>
       <Pressable style={[styles.mapBackAction, { bottom }]} onPress={map.exitMapFocus}>
-        <ArrowLeftIcon size={20} color="#cbd5e1" weight="bold" />
+        <ArrowLeftIcon size={20} color={theme.neutral.textSecondary} weight="bold" />
         <Text style={styles.mapBackLabel}>GO BACK</Text>
       </Pressable>
     </>
@@ -254,7 +257,6 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
         pointerEvents={telemetryInteractive ? 'box-none' : 'none'}
         style={[styles.telemetryInterface, interfaceFadeStyle]}
       >
-        <MapVignette mode={mode} idPrefix="telemetry-map-vignette" />
         <LiveHud revealProgress={revealProgress} />
         <BottomTelemetryStrip revealProgress={revealProgress} />
         <TopBar
@@ -342,8 +344,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
           <MapVignette mode={mode} panelHeight={panelHeight} idPrefix="history-map-vignette" />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
-              <View style={styles.mapLoadingDim} />
-              <ActivityIndicator size="large" color={theme.wheel.color} />
+              <ActivityIndicator size="small" color={theme.wheel.color} />
             </View>
           )}
           <HistoryTelemetryPanel
@@ -361,6 +362,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
             }}
             onOpenList={() => history.setHistorySheetVisible(true)}
             onSeek={history.onSeek}
+            onMetricInteraction={history.setActiveHistoryMapMetric}
             onHeightChange={setPanelHeight}
           />
           <HistoryStatsBar session={history.selectedSession} />
@@ -375,12 +377,31 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
 
       {mode === 'history' && !history.selectedSession && (
         <>
+          <MapVignette
+            mode={mode}
+            panelHeight={panelHeight || 150}
+            idPrefix="history-map-vignette-loading"
+          />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
-              <View style={styles.mapLoadingDim} />
-              <ActivityIndicator size="large" color={theme.wheel.color} />
+              <ActivityIndicator size="small" color={theme.wheel.color} />
             </View>
           )}
+          <HistoryTelemetryPanel
+            startAtMs={null}
+            endAtMs={null}
+            deviceName={null}
+            samples={[]}
+            canPrevious={false}
+            canNext={false}
+            onPrevious={() => undefined}
+            onNext={() => undefined}
+            onOpenList={() => history.setHistorySheetVisible(true)}
+            onSeek={history.onSeek}
+            onMetricInteraction={history.setActiveHistoryMapMetric}
+            onHeightChange={setPanelHeight}
+          />
+          <HistoryStatsBar session={null} />
           <HistoryControls
             loading={historyBusy}
             canRemove={false}
@@ -393,6 +414,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
       <HistorySessionSheet
         visible={history.historySheetVisible}
         bottomOffset={historyPanelBottom + panelHeight + 8}
+        blocks={history.blocks}
         sessions={history.sessions}
         selectedSessionId={history.selectedSession?.id ?? null}
         hasMore={history.historyHasMore}
@@ -457,15 +479,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.28)',
-    backgroundColor: 'rgba(15,23,42,0.9)',
+    borderColor: theme.neutral.border,
+    backgroundColor: theme.neutral.surfaceDeep,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   mapBackLabel: {
-    color: '#cbd5e1',
+    color: theme.neutral.textSecondary,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
@@ -524,23 +546,28 @@ const styles = StyleSheet.create({
     zIndex: 25,
     borderRadius: 10,
     padding: 10,
-    backgroundColor: 'rgba(69, 26, 26, 0.88)',
+    backgroundColor: theme.error.bg,
     borderWidth: 1,
     borderColor: theme.error.bg,
   },
   historyErrorText: {
-    color: '#fecaca',
+    color: theme.error.text,
     fontSize: 12,
     fontWeight: '700',
   },
   mapLoading: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
     zIndex: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  mapLoadingDim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(2, 6, 23, 0.34)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(9, 12, 18, 0.58)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    transform: [{ translateX: -17 }, { translateY: -17 }],
   },
 })

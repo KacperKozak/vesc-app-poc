@@ -5,11 +5,11 @@ description: Turn a tracked issue into focused code changes with local docs, cod
 
 # To Code
 
-Use this skill to implement one tracked VESC app issue end-to-end.
+Implement one VESC issue end-to-end.
 
-## Communication
+## Comms
 
-Use `caveman` full style for progress and final responses unless user explicitly says normal mode. Keep code, commands, issue titles, file paths, errors, and GitHub labels exact.
+Caveman full style. Code/commands/paths/errors/labels exact.
 
 ## Invocation
 
@@ -19,82 +19,47 @@ Use `caveman` full style for progress and final responses unless user explicitly
 /to-code https://github.com/OWNER/REPO/issues/123
 ```
 
-Extract issue id from prompt. If missing, ask for it.
+Extract id. Missing -> ask.
 
 ## Read Order
 
-1. Read repo instructions:
+1. Repo rules:
    - `AGENTS.md`
    - `docs/agents/issue-tracker.md`
    - `docs/agents/domain.md`
-   - `docs/agents/react.md` if touching React Native UI
-   - `docs/agents/posthog.md` if touching PostHog/debugging flows
-2. Read domain docs:
+   - `docs/agents/react.md` if RN UI
+   - `docs/agents/posthog.md` if PostHog/debug
+2. Domain:
    - `CONTEXT.md` if present
-   - `docs/tune.md` if touching tune read/write behavior
-   - relevant `docs/adr/*.md` if present
-3. Fetch issue using configured tracker docs.
-   - For this repo's GitHub setup, use `gh issue view <id> --json number,title,body,state,labels,assignees,comments,url --jq '.'`.
-   - Do not fetch private GitHub issue content with unauthenticated HTTP.
-4. Explore relevant code and tests locally.
+   - `docs/tune.md` if tune r/w
+   - `docs/adr/*.md` if relevant
+3. Fetch issue: `gh issue view <id> --json number,title,body,state,labels,assignees,comments,url --jq '.'`. No unauth HTTP for private.
+4. Explore code + tests.
 
 ## Workflow
 
-1. **Understand**
-   - Summarize issue goal, acceptance criteria, and unknowns.
-   - If issue is vague or blocked, stop and ask one precise question.
-   - If issue contradicts `CONTEXT.md` or ADRs, surface conflict before editing.
+1. **Understand** — Goal, AC, unknowns. Vague/blocked -> stop, ask 1 question. Conflicts `CONTEXT.md`/ADR -> surface first.
+2. **Plan** — Smallest coherent impl. Name files. Start from issue `## Likely files`, verify. Match existing conventions.
+3. **Implement** — Focused edits. Native = truth, JS = view. `bun` for JS. Native test cmds only if native touched. Routes/layouts in `src/app/`; hooks/helpers/components elsewhere. No scope creep.
+4. **Verify** — Focused tests first. Broader if blast radius wide. Can't run -> say why.
+5. **Report** — Issue id. Files + behavior. Verify cmds + results. Real risks/follow-ups only.
+6. **Commit on request** — Include id. Format: `<summary> #<id>`. Ex: `Move avg filtering into sanitizer #25`. Multi-issue -> all ids first line.
 
-2. **Plan**
-   - Identify smallest coherent implementation.
-   - Name files likely touched.
-   - Start from issue `## Likely files` when present, then verify locally.
-   - Prefer existing architecture and repo conventions.
-
-3. **Implement**
-   - Make focused edits only.
-   - Keep native durable truth / JS presentation split when relevant.
-   - Use `bun` for package scripts and JS tests.
-   - Use repo-specific native test commands only when issue touches native code.
-   - Keep Expo Router route/layout files under `src/app/`; move hooks/helpers/components elsewhere.
-   - Do not broaden scope into unrelated refactors.
-
-4. **Verify**
-   - Run focused tests first.
-   - Run broader checks when blast radius warrants it.
-   - If verification cannot run, state exact reason.
-
-5. **Report**
-   - Mention issue id.
-   - Summarize changed files and behavior.
-   - List verification commands and results.
-   - Mention remaining risks or follow-up issues only when real.
-
-6. **Commit when requested**
-   - If the user asks to commit, include the issue id in the commit message.
-   - Preferred format: `#<issue-id> <concise summary>`.
-   - Example: `#25 move avg filtering into sanitizer`.
-   - If multiple issues are intentionally covered, include all ids in the first line.
-
-## GitHub Issue Handling
-
-When tracker is GitHub:
+## GitHub Issue Fetch
 
 ```bash
 gh issue view <id> --json number,title,body,state,labels,assignees,comments,url --jq '.'
 ```
 
-Do not use plain `gh issue view --comments` as primary fetch. It can return empty formatted output in non-interactive shells while JSON works.
+Plain `gh issue view --comments` unreliable non-interactive. JSON works.
 
-Use `gh issue comment <id> --body "..."` only when user asks, when issue workflow requires it, or when leaving useful implementation notes. Do not close issues unless user asks.
+`gh issue comment <id> --body "..."` only if user asks or notes useful. Don't close unless asked.
 
-## When To Refuse To Continue Without Clarification
+## Refuse Until Clarified
 
-Ask before editing when:
+- No concrete expected behavior.
+- Multiple incompatible directions.
+- Safety-sensitive board behavior at risk.
+- Needs creds/hardware/env not local.
 
-- Issue has no concrete expected behavior.
-- Multiple incompatible product directions are possible.
-- Change could alter safety-sensitive board behavior.
-- Issue requires credentials, hardware, or environment state not available locally.
-
-Ask one question at a time.
+One question at a time.

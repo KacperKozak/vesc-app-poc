@@ -56,7 +56,9 @@ export function CenterScreen({
         liveLocations={controller.liveLocations}
         latestApproximateLocation={controller.latestApproximateLocation}
         rideGpsSamples={controller.sessionGpsSamples}
+        rideTelemetrySamples={controller.sessionSamples}
         rideMarkers={controller.sessionMarkers}
+        activeHistoryMapMetric={controller.activeHistoryMapMetric}
         historyPreview={controller.historyPreview}
         historyActive={controller.historyActive}
         mapStyleKey={controller.mapStyleKey}
@@ -113,6 +115,7 @@ export function CenterScreen({
           historyLoading: controller.historyLoading,
           historyHasMore: controller.historyHasMore,
           historyError: controller.historyError,
+          blocks: controller.blocks,
           sessions: controller.sessions,
           historySheetVisible: controller.historySheetVisible,
           setHistorySheetVisible: controller.setHistorySheetVisible,
@@ -124,6 +127,7 @@ export function CenterScreen({
           exitHistory: controller.exitHistory,
           removeSession: controller.removeSession,
           onSeek: controller.onSeek,
+          setActiveHistoryMapMetric: controller.setActiveHistoryMapMetric,
         }}
       />
     </View>

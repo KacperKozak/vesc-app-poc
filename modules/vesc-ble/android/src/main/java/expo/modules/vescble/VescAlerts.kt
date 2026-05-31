@@ -7,9 +7,81 @@ import android.media.SoundPool
 import android.os.Handler
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import expo.modules.vescble.telemetry.AlertRuleEntity
 import kotlin.math.abs
+
+private const val TTS_PREFIX = "tts:"
+
+internal fun alertControlUnit(controlId: String): String =
+    telemetryMetricByControlId[controlId]?.unit ?: ""
+
+private fun formatAlertValue(value: Double, controlId: String): String =
+    telemetryMetricByControlId[controlId]?.formatValue(value) ?: "%.0f".format(value)
+
+internal fun renderAlertMessageTemplate(
+    template: String,
+    alert: FiredAlert,
+    batteryPercent: Double?,
+    onDiagnostic: ((String, Map<String, Any?>) -> Unit)? = null,
+): String {
+    val isBattery = alert.controlId == "battery"
+    var text = template
+    text = text.replace("{value}", formatAlertValue(alert.value, alert.controlId))
+    text = text.replace("{threshold}", formatAlertValue(alert.threshold, alert.controlId))
+    text = text.replace("{unit}", alertControlUnit(alert.controlId))
+    if (isBattery) {
+        text = text.replace("{voltage}", formatAlertValue(alert.value, alert.controlId))
+        if (batteryPercent != null) {
+            text = text.replace("{percent}", "%.0f".format(batteryPercent))
+        } else if (text.contains("{percent}")) {
+            onDiagnostic?.invoke(
+                "alert_template_placeholder_unavailable",
+                mapOf("placeholder" to "{percent}", "rule_id" to alert.ruleId, "control_id" to alert.controlId),
+            )
+            text = text.replace("{percent}", "")
+        }
+    } else {
+        for (ph in listOf("{voltage}", "{percent}")) {
+            if (text.contains(ph)) {
+                onDiagnostic?.invoke(
+                    "alert_template_placeholder_unavailable",
+                    mapOf("placeholder" to ph, "rule_id" to alert.ruleId, "control_id" to alert.controlId),
+                )
+                text = text.replace(ph, "")
+            }
+        }
+    }
+    if (text.contains('{')) {
+        val unknowns = Regex("\\{[^}]*\\}").findAll(text).map { it.value }.distinct().toList()
+        if (unknowns.isNotEmpty()) {
+            onDiagnostic?.invoke(
+                "alert_template_unknown_placeholder",
+                mapOf("placeholders" to unknowns.joinToString(","), "rule_id" to alert.ruleId),
+            )
+            text = text.replace(Regex("\\{[^}]*\\}"), "")
+        }
+    }
+    return text.trim()
+}
+
+private fun ttsSampleAlert(soundType: String) = FiredAlert(
+    ruleId = "preview",
+    controlId = "battery",
+    value = 48.0,
+    threshold = 50.0,
+    thresholdMax = null,
+    soundType = soundType,
+    rangeDepth = null,
+    firedAt = System.currentTimeMillis(),
+)
+
+private fun ttsAlarmAttributes(): AudioAttributes = AudioAttributes.Builder()
+    .setLegacyStreamType(AudioManager.STREAM_ALARM)
+    .setUsage(AudioAttributes.USAGE_ALARM)
+    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+    .build()
 
 internal data class FiredAlert(
     val ruleId: String,
@@ -73,7 +145,8 @@ internal class VescAlertEngine {
         )
     }
 
-    private fun alertDirectionIsAbove(controlId: String): Boolean = controlId != "battery"
+    private fun alertDirectionIsAbove(controlId: String): Boolean =
+        telemetryMetricByControlId[controlId]?.alertAbove ?: true
 
     private fun alertRangeDepth(
         value: Double,
@@ -119,6 +192,10 @@ internal class VescAlertFeedback(
     private val context: Context,
     private val handler: Handler,
 ) {
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var ttsPendingText: String? = null
+
     private val soundPool = SoundPool.Builder()
         .setMaxStreams(8)
         .setAudioAttributes(
@@ -138,6 +215,34 @@ internal class VescAlertFeedback(
         }
     }
 
+    fun speakMessage(text: String) {
+        val existing = tts
+        if (existing == null) {
+            ttsPendingText = text
+            tts = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    tts?.setAudioAttributes(ttsAlarmAttributes())
+                    ttsReady = true
+                    val pending = ttsPendingText
+                    ttsPendingText = null
+                    if (pending != null) speakNow(pending)
+                } else {
+                    Log.w(VESC_SESSION_TAG, "TTS init failed status=$status")
+                }
+            }
+            return
+        }
+        if (!ttsReady) {
+            ttsPendingText = text
+            return
+        }
+        speakNow(text)
+    }
+
+    private fun speakNow(text: String) {
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "vesc_alert")
+    }
+
     fun playSingle(soundType: String) {
         try {
             val preset = resolveAlertPreset(soundType, ALERT_CATEGORY_SINGLE)
@@ -150,6 +255,12 @@ internal class VescAlertFeedback(
     }
 
     fun preview(soundType: String) {
+        if (soundType.startsWith(TTS_PREFIX)) {
+            val template = soundType.removePrefix(TTS_PREFIX)
+            val text = renderAlertMessageTemplate(template, ttsSampleAlert(soundType), batteryPercent = 42.0)
+            if (text.isNotEmpty()) speakMessage(text)
+            return
+        }
         try {
             playPreset(resolveAlertPreset(soundType, null))
         } catch (e: Exception) {
@@ -207,6 +318,10 @@ internal class VescAlertFeedback(
     fun release() {
         stopAllGeiger()
         soundPool.release()
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        ttsReady = false
     }
 
     fun vibrate(rangeDepth: Double?) {
@@ -241,6 +356,22 @@ internal class VescAlertFeedback(
 
     companion object {
         fun preview(context: Context, soundType: String) {
+            if (soundType.startsWith(TTS_PREFIX)) {
+                val template = soundType.removePrefix(TTS_PREFIX)
+                val text = renderAlertMessageTemplate(template, ttsSampleAlert(soundType), batteryPercent = 42.0)
+                if (text.isEmpty()) return
+                val handler = Handler(contextMainLooper())
+                val holder = arrayOfNulls<TextToSpeech>(1)
+                holder[0] = TextToSpeech(context) { status ->
+                    if (status == TextToSpeech.SUCCESS) {
+                        val t = holder[0] ?: return@TextToSpeech
+                        t.setAudioAttributes(ttsAlarmAttributes())
+                        t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "preview")
+                        handler.postDelayed({ t.stop(); t.shutdown() }, 5_000)
+                    }
+                }
+                return
+            }
             val handler = Handler(contextMainLooper())
             val preset = resolveAlertPreset(soundType, null)
             val pool = SoundPool.Builder()

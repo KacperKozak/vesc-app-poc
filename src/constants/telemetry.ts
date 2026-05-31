@@ -116,7 +116,7 @@ const telemetryDefinitions = {
   controllerTemp: {
     label: 'Controller Temp',
     unit: '°C',
-    color: theme.error.color,
+    color: theme.target.color,
     decimals: 0,
     chartRange: { min: 0, max: 80 },
     minSpan: 30,

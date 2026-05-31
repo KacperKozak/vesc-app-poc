@@ -33,6 +33,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     mapSelector,
     perspectiveEnabled,
     seekTimeMs,
+    activeHistoryMapMetric,
     enterTelemetry,
     enterMap,
     enterWeather,
@@ -42,6 +43,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     dismissMapSelector,
     setPerspectiveEnabled,
     setSeekTimeMs,
+    setActiveHistoryMapMetric,
   } = useCenterScreenStore(
     useShallow((s) => ({
       mode: s.mode,
@@ -49,6 +51,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       mapSelector: s.mapSelector,
       perspectiveEnabled: s.perspectiveEnabled,
       seekTimeMs: s.seekTimeMs,
+      activeHistoryMapMetric: s.activeHistoryMapMetric,
       enterTelemetry: s.enterTelemetry,
       enterMap: s.enterMap,
       enterWeather: s.enterWeather,
@@ -58,6 +61,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       dismissMapSelector: s.dismissMapSelector,
       setPerspectiveEnabled: s.setPerspectiveEnabled,
       setSeekTimeMs: s.setSeekTimeMs,
+      setActiveHistoryMapMetric: s.setActiveHistoryMapMetric,
     })),
   )
   const liveLocations = useBleStore((s) => s.liveLocationHistory)
@@ -70,6 +74,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
   const mapNavigationMode = useSettingsStore((s) => s.mapNavigationMode)
   const setSetting = useSettingsStore((s) => s.set)
   const {
+    blocks,
     sessions,
     selectedSession,
     sessionSamples,
@@ -85,6 +90,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     removeSelectedSession,
   } = useHistoryStore(
     useShallow((s) => ({
+      blocks: s.blocks,
       sessions: s.sessions,
       selectedSession: s.selectedSession,
       sessionSamples: s.sessionSamples,
@@ -163,13 +169,15 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
 
   const exitWeatherMode = useCallback(() => {
     enterTelemetry()
-    mapRef.current?.recenterLive()
+    requestAnimationFrame(() => mapRef.current?.recenterLive())
   }, [enterTelemetry, mapRef])
 
   const exitHistory = useCallback(() => {
     void selectSession(null)
     enterTelemetry()
-    requestAnimationFrame(() => mapRef.current?.recenterLive({ resetPadding: true }))
+    requestAnimationFrame(() =>
+      mapRef.current?.recenterLive({ resetPadding: true, animationDuration: 0 }),
+    )
   }, [enterTelemetry, mapRef, selectSession])
 
   const loadOlderHistoryPages = useCallback(
@@ -292,6 +300,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     mode,
     liveLocations,
     latestApproximateLocation,
+    blocks,
     historyActive,
     mapStyleKey,
     setMapStyleKey,
@@ -339,5 +348,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     exitMapFocus,
     seekGpsPosition,
     onSeek: setSeekTimeMs,
+    activeHistoryMapMetric,
+    setActiveHistoryMapMetric,
   }
 }

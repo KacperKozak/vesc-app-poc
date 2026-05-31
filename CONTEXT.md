@@ -8,6 +8,10 @@ This context defines the shared language for the VESC-based board app. The app c
 A saved rideable device that can be connected over BLE and may expose one motor controller through CAN.
 _Avoid_: Device, controller, scooter
 
+**Board Session**:
+The lifecycle of a single live BLE-bound connection to a Board, from connect attempt through disconnect. Owns the in-flight identity used to discard stale callbacks across reconnects. Distinct from Ride Recording, which is the persisted ride capture.
+_Avoid_: Session, connection, BLE session
+
 **Live State**:
 The current app-visible snapshot of board connection, GPS, scan, recording, and recent telemetry state.
 _Avoid_: UI state, cached status
@@ -78,6 +82,7 @@ _Avoid_: Error log, debug session, crash report
 
 ## Relationships
 
+- A **Board Session** owns one live BLE connection to a **Board**; only Telemetry Samples received during the active session count toward live state and Ride Recording.
 - A **Board** produces **Telemetry Samples** while connected.
 - A **Metric Sanitizer** may create **Metric Exclusions** for values derived from **Telemetry Samples** while preserving the original samples and current live board readout.
 - A **Metric Exclusion** belongs to one **Telemetry Sample** and one metric.
@@ -107,7 +112,7 @@ _Avoid_: Error log, debug session, crash report
 ## Flagged Ambiguities
 
 - "device" may mean the phone BLE peripheral, the saved app board, or the motor controller; resolved term: use **Board** for the saved rideable device.
-- "session" may mean a BLE connection, raw debug capture, or persisted ride; resolved term: use **Ride Recording** for persisted ride capture and avoid using "session" without a qualifier.
+- "session" may mean a BLE connection, raw debug capture, or persisted ride; resolved terms: use **Board Session** for the live BLE connection lifecycle and **Ride Recording** for the persisted ride capture. Avoid bare "session".
 - "error" may mean crash, handled failure, UI message, or diagnostic clue; resolved term: use **Diagnostic Event** for app-observed abnormal conditions worth reviewing.
 - "telemetry marker" names the storage table, but map-visible history annotations are **Ride History Markers**.
 - "filter" may mean dropping samples, smoothing charts, or excluding implausible values from metrics; resolved term: use **Metric Sanitizer** for metric exclusion that preserves original samples.

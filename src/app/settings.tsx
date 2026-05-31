@@ -25,6 +25,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { routes } from '@/navigation/routes'
 import { useSettingsStore } from '@/store/settingsStore'
 import { theme } from '@/constants/theme'
+import {
+  DEFAULT_HISTORY_METRIC_HOT_RANGES,
+  type HistoryMetricHotRanges,
+  type HistoryMetricKey,
+} from '@/lib/history/metricColorScale'
 import { SettingsCard } from '@/components/ui/settings/SettingsCard'
 import { SettingsRow } from '@/components/ui/settings/SettingsRow'
 import { SettingsSectionTitle } from '@/components/ui/settings/SettingsSectionTitle'
@@ -34,6 +39,21 @@ import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
 import { useSettingsDatabaseOps } from '@/hooks/useSettingsDatabaseOps'
 
 const appVersion = Constants.expoConfig?.version ?? '–'
+
+const HOT_RANGE_METRICS: {
+  key: Exclude<HistoryMetricKey, 'battery'>
+  label: string
+  unit: string
+  min: number
+  max: number
+}[] = [
+  { key: 'speed', label: 'Speed', unit: 'km/h', min: 0, max: 120 },
+  { key: 'duty', label: 'Duty', unit: '%', min: 0, max: 100 },
+  { key: 'tempMotor', label: 'Motor temp', unit: '°C', min: 0, max: 140 },
+  { key: 'tempController', label: 'Controller temp', unit: '°C', min: 0, max: 140 },
+  { key: 'motorCurrent', label: 'Motor current', unit: 'A', min: 0, max: 200 },
+  { key: 'batteryCurrent', label: 'Battery current', unit: 'A', min: 0, max: 200 },
+]
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -49,6 +69,8 @@ export default function SettingsScreen() {
     movingSpeedThresholdKmh,
     freeSpinMaxSpeedDeltaKmh,
     freeSpinStationaryBoardCapKmh,
+    historyMetricGradientsEnabled,
+    historyMetricHotRanges,
     set,
   } = useSettingsStore(
     useShallow((s) => ({
@@ -58,11 +80,27 @@ export default function SettingsScreen() {
       movingSpeedThresholdKmh: s.movingSpeedThresholdKmh,
       freeSpinMaxSpeedDeltaKmh: s.freeSpinMaxSpeedDeltaKmh,
       freeSpinStationaryBoardCapKmh: s.freeSpinStationaryBoardCapKmh,
+      historyMetricGradientsEnabled: s.historyMetricGradientsEnabled,
+      historyMetricHotRanges: s.historyMetricHotRanges,
       set: s.set,
     })),
   )
 
   const db = useSettingsDatabaseOps()
+
+  const setHotRangeValue = (
+    metric: Exclude<HistoryMetricKey, 'battery'>,
+    edge: 'start' | 'end',
+    value: number,
+  ) => {
+    const fallback = DEFAULT_HISTORY_METRIC_HOT_RANGES[metric] ?? { start: 0, end: 1 }
+    const current = historyMetricHotRanges[metric] ?? fallback
+    const nextRanges: HistoryMetricHotRanges = {
+      ...historyMetricHotRanges,
+      [metric]: { ...current, [edge]: value },
+    }
+    void set('historyMetricHotRanges', nextRanges)
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -122,8 +160,8 @@ export default function SettingsScreen() {
               <Switch
                 value={autoConnect}
                 onValueChange={(v) => void set('autoConnect', v)}
-                trackColor={{ false: theme.neutral.border, true: '#1d4ed8' }}
-                thumbColor={autoConnect ? '#3b82f6' : theme.neutral.textMuted}
+                trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
+                thumbColor={autoConnect ? theme.wheel.color : theme.neutral.textMuted}
               />
             }
           />
@@ -136,8 +174,8 @@ export default function SettingsScreen() {
               <Switch
                 value={autoRecording}
                 onValueChange={(v) => void set('autoRecording', v)}
-                trackColor={{ false: theme.neutral.border, true: '#1d4ed8' }}
-                thumbColor={autoRecording ? '#3b82f6' : theme.neutral.textMuted}
+                trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
+                thumbColor={autoRecording ? theme.wheel.color : theme.neutral.textMuted}
               />
             }
           />
@@ -224,6 +262,74 @@ export default function SettingsScreen() {
           />
         </SettingsCard>
 
+        <SettingsSectionTitle>Advanced</SettingsSectionTitle>
+        <Text style={styles.sectionHint}>
+          Hot graph ramps start at Start and reach full warning color at End.
+        </Text>
+
+        <SettingsCard>
+          <SettingsRow
+            icon={GaugeIcon}
+            label="Graph hot gradients"
+            hint="Color live, history, and map graphs by metric value"
+            right={
+              <Switch
+                value={historyMetricGradientsEnabled}
+                onValueChange={(v) => void set('historyMetricGradientsEnabled', v)}
+                trackColor={{ false: theme.neutral.border, true: theme.warning.border }}
+                thumbColor={
+                  historyMetricGradientsEnabled ? theme.warning.color : theme.neutral.textMuted
+                }
+              />
+            }
+          />
+          {HOT_RANGE_METRICS.map((metric) => {
+            const fallback = DEFAULT_HISTORY_METRIC_HOT_RANGES[metric.key] ?? { start: 0, end: 1 }
+            const range = historyMetricHotRanges[metric.key] ?? fallback
+
+            return (
+              <View key={metric.key} style={styles.hotRangeRow}>
+                <View style={styles.hotRangeBody}>
+                  <Text style={styles.hotRangeName}>{metric.label}</Text>
+                  <Text style={styles.hotRangeHint}>
+                    Default: {fallback.start}-{fallback.end} {metric.unit}
+                  </Text>
+                </View>
+                <View style={styles.hotRangeControl}>
+                  <Text style={styles.hotRangeLabel}>Start</Text>
+                  <Stepper
+                    value={range.start}
+                    unit={metric.unit}
+                    min={metric.min}
+                    max={metric.max}
+                    onChange={(nextValue) => {
+                      const clampedValue = Math.min(metric.max, Math.max(metric.min, nextValue))
+                      if (clampedValue !== range.start) {
+                        setHotRangeValue(metric.key, 'start', clampedValue)
+                      }
+                    }}
+                  />
+                </View>
+                <View style={styles.hotRangeControl}>
+                  <Text style={styles.hotRangeLabel}>End</Text>
+                  <Stepper
+                    value={range.end}
+                    unit={metric.unit}
+                    min={metric.min}
+                    max={metric.max}
+                    onChange={(nextValue) => {
+                      const clampedValue = Math.min(metric.max, Math.max(metric.min, nextValue))
+                      if (clampedValue !== range.end) {
+                        setHotRangeValue(metric.key, 'end', clampedValue)
+                      }
+                    }}
+                  />
+                </View>
+              </View>
+            )
+          })}
+        </SettingsCard>
+
         <SettingsSectionTitle>Database</SettingsSectionTitle>
 
         <SettingsCard>
@@ -242,7 +348,7 @@ export default function SettingsScreen() {
                 disabled={db.rebuildState === 'running'}
               >
                 {db.rebuildState === 'done' && (
-                  <CheckCircleIcon size={13} color="#bbf7d0" weight="fill" />
+                  <CheckCircleIcon size={13} color={theme.gps.text} weight="fill" />
                 )}
                 <Text style={styles.rebuildButtonText}>
                   {db.rebuildState === 'running'
@@ -385,11 +491,11 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   rebuildButtonDone: {
-    borderColor: '#166534',
-    backgroundColor: '#052e16',
+    borderColor: theme.gps.border,
+    backgroundColor: theme.gps.bg,
   },
   rebuildButtonText: {
-    color: '#cbd5e1',
+    color: theme.neutral.textSecondary,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -417,5 +523,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     textAlign: 'right',
+  },
+  hotRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  hotRangeBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  hotRangeName: {
+    color: theme.neutral.textPrimary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  hotRangeHint: {
+    color: theme.neutral.textMuted,
+    fontSize: 12,
+  },
+  hotRangeControl: {
+    width: 96,
+    gap: 6,
+  },
+  hotRangeLabel: {
+    color: theme.neutral.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
 })

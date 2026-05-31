@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { useMemo, useState } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   BatteryChargingIcon,
   BatteryMediumIcon,
+  CaretDownIcon,
+  CaretUpIcon,
   ClockCountdownIcon,
   GaugeIcon,
   LightningIcon,
@@ -15,10 +17,10 @@ import type { Icon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { HistorySession } from '@/store/historyStore'
-import { theme } from '@/constants/theme'
+import { interaction, theme } from '@/constants/theme'
 
 interface HistoryStatsBarProps {
-  session: HistorySession
+  session: HistorySession | null
 }
 
 interface StatItem {
@@ -31,15 +33,52 @@ interface StatItem {
 
 export function HistoryStatsBar({ session }: HistoryStatsBarProps) {
   const insets = useSafeAreaInsets()
+  const [expanded, setExpanded] = useState(false)
   const stats = useMemo(() => sessionToStats(session), [session])
+  const primaryStats = stats.slice(0, 4)
+  const secondaryStats = stats.slice(4)
 
   return (
     <View style={[styles.wrap, { top: Math.max(insets.top, 8) + 46 }]} pointerEvents="box-none">
-      <View style={styles.grid}>
-        {stats.map((item) => (
-          <CompactStat key={item.key} item={item} />
-        ))}
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={expanded ? 'Collapse ride stats' : 'Expand ride stats'}
+        onPress={() => setExpanded((value) => !value)}
+        android_ripple={interaction.ripple}
+        style={styles.bar}
+      >
+        {expanded ? (
+          <View style={styles.expandedPanel}>
+            <View style={styles.row}>
+              {primaryStats.map((item) => (
+                <CompactStat key={item.key} item={item} />
+              ))}
+              <View style={styles.toggleCell}>
+                <View style={styles.expandedToggle}>
+                  <CaretUpIcon size={16} color={theme.neutral.textSecondary} weight="bold" />
+                </View>
+              </View>
+            </View>
+            <View style={styles.row}>
+              {secondaryStats.map((item) => (
+                <CompactStat key={item.key} item={item} />
+              ))}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.row}>
+            {primaryStats.map((item) => (
+              <CompactStat key={item.key} item={item} />
+            ))}
+            <View style={styles.toggleCell}>
+              <View style={styles.toggle}>
+                <CaretDownIcon size={16} color={theme.neutral.textSecondary} weight="bold" />
+              </View>
+            </View>
+          </View>
+        )}
+      </Pressable>
     </View>
   )
 }
@@ -51,82 +90,84 @@ interface CompactStatProps {
 function CompactStat({ item }: CompactStatProps) {
   const IconComponent = item.icon
   return (
-    <View style={styles.compactCell}>
-      <IconComponent size={14} color={item.accent} weight="duotone" />
-      <Text style={styles.compactValue} numberOfLines={1} adjustsFontSizeToFit>
-        {item.value}
-      </Text>
-      <Text style={styles.compactLabel} numberOfLines={1}>
+    <View style={styles.compactCell} pointerEvents="none">
+      <Text style={styles.compactLabel} numberOfLines={1} adjustsFontSizeToFit>
         {item.label}
       </Text>
+      <View style={styles.valueRow}>
+        <IconComponent size={14} color={item.accent} weight="duotone" style={styles.icon} />
+        <Text style={styles.compactValue} numberOfLines={1} adjustsFontSizeToFit>
+          {item.value}
+        </Text>
+      </View>
     </View>
   )
 }
 
-function sessionToStats(session: HistorySession): StatItem[] {
+function sessionToStats(session: HistorySession | null): StatItem[] {
   return [
-    {
-      key: 'rideTime',
-      label: 'Time',
-      value: formatDuration(session.endAtMs - session.startAtMs),
-      icon: ClockCountdownIcon,
-      accent: theme.target.color,
-    },
-    {
-      key: 'topSpeed',
-      label: 'Top speed',
-      value: formatSpeed(session.maxSpeedKmh),
-      icon: GaugeIcon,
-      accent: theme.warning.color,
-    },
-    {
-      key: 'mosfetTemp',
-      label: 'Ctrl max',
-      value: formatTemp(session.maxTempMosfet),
-      icon: ThermometerHotIcon,
-      accent: theme.error.color,
-    },
-    {
-      key: 'batteryUsed',
-      label: 'Used',
-      value: formatWh(session.batteryUsedWh),
-      icon: BatteryMediumIcon,
-      accent: theme.warning.color,
-    },
-    {
-      key: 'maxDuty',
-      label: 'Max duty',
-      value: formatDuty(session.maxDuty),
-      icon: LightningIcon,
-      accent: theme.bran.color,
-    },
     {
       key: 'distance',
       label: 'Distance',
-      value: formatDistance(session.distanceM),
+      value: session ? formatDistance(session.distanceM) : '',
       icon: RoadHorizonIcon,
       accent: theme.wheel.color,
     },
     {
+      key: 'topSpeed',
+      label: 'Top Speed',
+      value: session ? formatSpeed(session.maxSpeedKmh) : '',
+      icon: GaugeIcon,
+      accent: theme.warning.color,
+    },
+    {
       key: 'avgSpeed',
-      label: 'Avg speed',
-      value: formatSpeed(session.avgSpeedKmh),
+      label: 'Avg Speed',
+      value: session ? formatSpeed(session.avgSpeedKmh) : '',
       icon: RepeatIcon,
-      accent: '#14b8a6',
+      accent: theme.teal.color,
+    },
+    {
+      key: 'rideTime',
+      label: 'Time',
+      value: session ? formatDuration(session.endAtMs - session.startAtMs) : '',
+      icon: ClockCountdownIcon,
+      accent: theme.target.color,
+    },
+    {
+      key: 'mosfetTemp',
+      label: 'Ctrl Max',
+      value: session ? formatTemp(session.maxTempMosfet) : '',
+      icon: ThermometerHotIcon,
+      accent: theme.error.color,
     },
     {
       key: 'motorTemp',
-      label: 'Motor max',
-      value: formatTemp(session.maxTempMotor),
+      label: 'Motor Max',
+      value: session ? formatTemp(session.maxTempMotor) : '',
       icon: ThermometerSimpleIcon,
       accent: theme.highlight.color,
     },
     {
+      key: 'batteryUsed',
+      label: 'Used',
+      value: session ? formatWh(session.batteryUsedWh) : '',
+      icon: BatteryMediumIcon,
+      accent: theme.warning.color,
+    },
+    {
       key: 'batteryRegen',
       label: 'Regen',
-      value: formatWh(session.batteryRegenWh),
+      value: session ? formatWh(session.batteryRegenWh) : '',
       icon: BatteryChargingIcon,
       accent: theme.gps.color,
+    },
+    {
+      key: 'maxDuty',
+      label: 'Max Duty',
+      value: session ? formatDuty(session.maxDuty) : '',
+      icon: LightningIcon,
+      accent: theme.bran.color,
     },
   ]
 }
@@ -159,7 +200,7 @@ function formatDuty(value: number): string {
 }
 
 function formatWh(value: number): string {
-  if (value < 1) return `${Math.round(value * 1000)} mWh`
+  if (value < 1) return `${(value * 1000).toFixed(0)} mWh`
   return `${value.toFixed(1)} Wh`
 }
 
@@ -174,26 +215,82 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   compactValue: {
-    color: '#f8fafc',
+    color: theme.neutral.textPrimary,
     fontSize: 12,
     fontWeight: '800',
+    textAlign: 'left',
   },
   compactLabel: {
     color: theme.neutral.textMuted,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
-  },
-  grid: {
-    width: '100%',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'stretch',
-    rowGap: 12,
+    textAlign: 'left',
   },
   compactCell: {
-    width: '20%',
+    flex: 1,
     minWidth: 0,
-    gap: 4,
-    paddingHorizontal: 4,
+    minHeight: 32,
+    justifyContent: 'center',
+    gap: 3,
+    paddingRight: 4,
+  },
+  icon: {
+    flexShrink: 0,
+  },
+  valueRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  bar: {
+    width: '100%',
+    overflow: 'hidden',
+    paddingTop: 8,
+    paddingBottom: 0,
+    paddingLeft: 10,
+    paddingRight: 0,
+    gap: 8,
+  },
+  expandedPanel: {
+    backgroundColor: theme.neutral.mapOverlayPill,
+    borderWidth: 1,
+    borderColor: theme.neutral.borderMuted,
+    borderRadius: 12,
+    paddingTop: 0,
+    paddingBottom: 8,
+    paddingLeft: 10,
+    paddingRight: 0,
+    marginLeft: -10,
+    gap: 8,
+  },
+  row: {
+    width: '100%',
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  toggleCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  toggle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.neutral.surfaceDeep,
+    borderWidth: 1,
+    borderColor: theme.neutral.border,
+  },
+  expandedToggle: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })

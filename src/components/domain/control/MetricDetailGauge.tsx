@@ -3,7 +3,12 @@ import type { SharedValue } from 'react-native-reanimated'
 
 import { SingleGauge, type DualGaugeAlert } from '@/components/ui/charts/DualGauge'
 import type { TelemetryMetricConfig } from '@/constants/telemetry'
+import {
+  getHistoryMetricHotRange,
+  getHistoryMetricKeyForControlId,
+} from '@/lib/history/metricColorScale'
 import { useAlertsStore } from '@/store/alertsStore'
+import { useSettingsStore } from '@/store/settingsStore'
 
 interface MetricDetailGaugeProps {
   metric: TelemetryMetricConfig
@@ -21,6 +26,12 @@ export function MetricDetailGauge({
   label = metric.label.toUpperCase(),
 }: MetricDetailGaugeProps) {
   const alertRules = useAlertsStore((s) => s.rules)
+  const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)
+  const hotRanges = useSettingsStore((s) => s.historyMetricHotRanges)
+  const hotMetric = getHistoryMetricKeyForControlId(metric.controlId)
+  const hotRange = hotMetric
+    ? getHistoryMetricHotRange(hotMetric, hotRanges, gradientsEnabled)
+    : null
 
   const alerts = useMemo<DualGaugeAlert[]>(
     () =>
@@ -46,6 +57,7 @@ export function MetricDetailGauge({
       decimals={metric.decimals}
       label={label}
       alerts={alerts}
+      hotRange={hotRange}
     />
   )
 }

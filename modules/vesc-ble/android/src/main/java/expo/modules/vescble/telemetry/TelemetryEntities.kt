@@ -328,6 +328,8 @@ data class AppSettings(
   val freeSpinStationaryBoardCapKmh: Double = DEFAULT_FREE_SPIN_STATIONARY_BOARD_CAP_KMH,
   val mapStyleKey: String = "onedark",
   val mapNavigationMode: String = "northUp",
+  val historyMetricGradientsEnabled: Boolean = true,
+  val historyMetricHotRanges: Map<String, Map<String, Double>> = DEFAULT_HISTORY_METRIC_HOT_RANGES,
 )
 
 @Entity(

@@ -7,16 +7,28 @@ import Mapbox, {
   RasterSource,
   ShapeSource,
 } from '@rnmapbox/maps'
+import type { LineLayerStyle } from '@rnmapbox/maps'
 import {
+  ArrowUpIcon,
   ClockCountdownIcon,
+  CrosshairSimpleIcon,
   LinkBreakIcon,
+  MapPinIcon,
   PlugsConnectedIcon,
   StopIcon,
   WarningCircleIcon,
   type Icon,
 } from 'phosphor-react-native'
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ElementRef,
+} from 'react'
+import { Animated, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import type { LocationEvent } from 'vesc-ble'
 
 import { InfoModal } from '@/components/ui/modals/InfoModal'
@@ -32,14 +44,22 @@ import {
 } from '@/constants/mapStyles'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { theme } from '@/constants/theme'
+import { telemetry } from '@/constants/telemetry'
 import {
   getLiveGpsPresentation,
   getReliableGpsBearingFromFixes,
 } from '@/helpers/liveGpsPresentation'
 import { distanceMeters, makeCircleFeature, makeTrailLineString } from '@/helpers/mapGeometry'
 import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
+import {
+  getHistoryMetricColorRange,
+  getMetricRampColor,
+  getTelemetrySampleMetricValue,
+  type HistoryMetricHotRanges,
+  type HistoryMetricKey,
+} from '@/lib/history/metricColorScale'
 import { getNavigationFallbackReason } from '@/lib/map/navigationDiagnostics'
-import type { HistoryGpsSample, HistoryMarker } from '@/store/historyStore'
+import type { HistoryGpsSample, HistoryMarker, TelemetrySample } from '@/store/historyStore'
 import { useNavigationDiagnosticsStore } from '@/store/navigationDiagnosticsStore'
 import { useSettingsStore } from '@/store/settingsStore'
 
@@ -51,13 +71,14 @@ import {
 } from './useCameraControls'
 import { getLiveFollowCameraProfile, getPitchForZoom } from './cameraFollowProfile'
 import { shouldPreserveLiveFollowGesture } from './cameraGestureState'
+import { MapVignette } from './MapVignette'
 import { phoneHeadingAnimationDuration } from './phoneHeading'
 import { usePhoneHeading } from './usePhoneHeading'
 
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN)
 
 export interface CenterMapHandle {
-  recenterLive: (options?: { resetPadding?: boolean }) => void
+  recenterLive: (options?: { resetPadding?: boolean; animationDuration?: number }) => void
   previewHistorySession: (preview: HistoryPreviewTarget) => void
   beginPreviewPan: () => void
   previewPanBy: (deltaX: number, deltaY: number, animationDuration?: number) => void
@@ -79,6 +100,33 @@ interface SelectedHistoryMarker {
 const RADAR_MAX_ZOOM = 10
 const HEADING_SMOOTHING_TAU_MS = 180
 const HEADING_SNAP_DEG = 0.08
+const OFFSCREEN_GPS_INDICATOR_SIZE = 64
+const OFFSCREEN_GPS_EDGE_SIDE_INSET = 58
+const OFFSCREEN_GPS_EDGE_TOP_INSET = 122
+const OFFSCREEN_GPS_EDGE_BOTTOM_INSET = 142
+const GPS_POINT_COLOR = theme.target.color
+const GPS_POINT_TEXT_COLOR = theme.target.text
+const DESTINATION_POINT_COLOR = theme.gps.color
+const DESTINATION_POINT_TEXT_COLOR = theme.gps.text
+const HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS = 50
+const HISTORY_ROUTE_HIGHLIGHT_DELAY_MS = 500
+const HISTORY_ROUTE_HIGHLIGHT_WIDTH = 0.24
+const HISTORY_ROUTE_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.98)'
+const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = 'rgba(255, 255, 255, 0)'
+const HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS = 1400
+const HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS = 5200
+const HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM = 260
+interface MapLayout {
+  width: number
+  height: number
+}
+
+interface OffscreenGpsIndicatorState {
+  id: 'gps' | 'target'
+  x: number
+  y: number
+  angleDeg: number
+}
 
 const HISTORY_MARKER_LABELS: Record<HistoryMarker['type'], string> = {
   app_stop: 'Recording stopped',
@@ -99,12 +147,12 @@ const HISTORY_MARKER_ICONS: Record<HistoryMarker['type'], Icon> = {
 }
 
 const HISTORY_MARKER_COLORS: Record<HistoryMarker['type'], string> = {
-  app_stop: '#f59e0b',
+  app_stop: theme.highlight.color,
   connected: theme.gps.color,
   connection_lost: theme.warning.color,
   disconnected: theme.warning.color,
   error: theme.error.color,
-  gap: '#eab308',
+  gap: theme.highlight.color,
 }
 
 function formatMarkerTime(ms: number): string {
@@ -142,6 +190,101 @@ function smoothHeadingStep(current: number, target: number, elapsedMs: number): 
   return normalizeHeading(current + delta * alpha)
 }
 
+function nearlySameIndicator(
+  current: OffscreenGpsIndicatorState[],
+  next: OffscreenGpsIndicatorState[],
+) {
+  if (current.length !== next.length) return false
+  return next.every((nextIndicator, index) => {
+    const currentIndicator = current[index]
+    return (
+      currentIndicator?.id === nextIndicator.id &&
+      Math.abs(currentIndicator.x - nextIndicator.x) < 0.5 &&
+      Math.abs(currentIndicator.y - nextIndicator.y) < 0.5 &&
+      Math.abs(currentIndicator.angleDeg - nextIndicator.angleDeg) < 0.5
+    )
+  })
+}
+
+function clampedEdgeIndicator(
+  id: OffscreenGpsIndicatorState['id'],
+  point: { x: number; y: number },
+  layout: MapLayout,
+): OffscreenGpsIndicatorState | null {
+  if (point.x >= 0 && point.x <= layout.width && point.y >= 0 && point.y <= layout.height) {
+    return null
+  }
+
+  const left = Math.min(OFFSCREEN_GPS_EDGE_SIDE_INSET, layout.width / 2)
+  const right = Math.max(left, layout.width - OFFSCREEN_GPS_EDGE_SIDE_INSET)
+  const top = Math.min(OFFSCREEN_GPS_EDGE_TOP_INSET, layout.height / 2)
+  const bottom = Math.max(top, layout.height - OFFSCREEN_GPS_EDGE_BOTTOM_INSET)
+  const centerX = layout.width / 2
+  const centerY = layout.height / 2
+  const deltaX = point.x - centerX
+  const deltaY = point.y - centerY
+
+  if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY) || (deltaX === 0 && deltaY === 0)) {
+    return null
+  }
+
+  const candidates = [
+    deltaX < 0 ? (left - centerX) / deltaX : Number.POSITIVE_INFINITY,
+    deltaX > 0 ? (right - centerX) / deltaX : Number.POSITIVE_INFINITY,
+    deltaY < 0 ? (top - centerY) / deltaY : Number.POSITIVE_INFINITY,
+    deltaY > 0 ? (bottom - centerY) / deltaY : Number.POSITIVE_INFINITY,
+  ].filter((value) => value > 0)
+  const scale = Math.min(...candidates)
+
+  if (!Number.isFinite(scale)) return null
+
+  return {
+    id,
+    x: Math.min(right, Math.max(left, centerX + deltaX * scale)),
+    y: Math.min(bottom, Math.max(top, centerY + deltaY * scale)),
+    angleDeg: (Math.atan2(deltaX, -deltaY) * 180) / Math.PI,
+  }
+}
+
+function bearingDeg(
+  from: { longitude: number; latitude: number },
+  to: { longitude: number; latitude: number },
+) {
+  const fromLat = (from.latitude * Math.PI) / 180
+  const toLat = (to.latitude * Math.PI) / 180
+  const deltaLon = ((to.longitude - from.longitude) * Math.PI) / 180
+  const y = Math.sin(deltaLon) * Math.cos(toLat)
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) - Math.sin(fromLat) * Math.cos(toLat) * Math.cos(deltaLon)
+  return normalizeHeading((Math.atan2(y, x) * 180) / Math.PI)
+}
+
+function projectCoordinateToEdgePoint(
+  coordinate: { longitude: number; latitude: number },
+  camera: CameraSnapshot,
+  layout: MapLayout,
+) {
+  const center = {
+    longitude: camera.centerCoordinate[0],
+    latitude: camera.centerCoordinate[1],
+  }
+  const angleRad = ((bearingDeg(center, coordinate) - camera.heading) * Math.PI) / 180
+  const radius = Math.max(layout.width, layout.height)
+  return {
+    x: layout.width / 2 + Math.sin(angleRad) * radius,
+    y: layout.height / 2 - Math.cos(angleRad) * radius,
+  }
+}
+
+function usableCoordinate(location: { longitude: number; latitude: number } | null | undefined) {
+  if (!location) return null
+  if (!Number.isFinite(location.longitude) || !Number.isFinite(location.latitude)) return null
+  return {
+    longitude: location.longitude,
+    latitude: location.latitude,
+  }
+}
+
 function buildHistoryMarkerMessage(selection: SelectedHistoryMarker): string {
   const { marker, gps } = selection
   const lines = [
@@ -159,6 +302,48 @@ function buildHistoryMarkerMessage(selection: SelectedHistoryMarker): string {
   if (marker.message) lines.push(`Message: ${marker.message}`)
 
   return lines.join('\n')
+}
+
+function OffscreenGpsIndicator({
+  indicator,
+  onPress,
+}: {
+  indicator: OffscreenGpsIndicatorState
+  onPress: () => void
+}) {
+  const IconComponent = indicator.id === 'gps' ? CrosshairSimpleIcon : MapPinIcon
+  const color = indicator.id === 'gps' ? GPS_POINT_TEXT_COLOR : DESTINATION_POINT_TEXT_COLOR
+  const borderColor = indicator.id === 'gps' ? GPS_POINT_COLOR : DESTINATION_POINT_COLOR
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        indicator.id === 'gps' ? 'Recenter map on current position' : 'Clear target point'
+      }
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.offscreenGpsIndicator,
+        {
+          left: indicator.x - OFFSCREEN_GPS_INDICATOR_SIZE / 2,
+          top: indicator.y - OFFSCREEN_GPS_INDICATOR_SIZE / 2,
+        },
+        pressed && styles.offscreenGpsIndicatorPressed,
+      ]}
+    >
+      <View
+        pointerEvents="none"
+        style={[
+          styles.offscreenGpsArrowOrbit,
+          { transform: [{ rotate: `${indicator.angleDeg}deg` }] },
+        ]}
+      >
+        <ArrowUpIcon size={22} color={color} weight="bold" />
+      </View>
+      <View pointerEvents="none" style={[styles.offscreenGpsIcon, { borderColor }]}>
+        <IconComponent size={24} color={color} weight="bold" />
+      </View>
+    </Pressable>
+  )
 }
 
 interface CenterMapLayersProps {
@@ -180,6 +365,8 @@ interface CenterMapLayersProps {
   gpsBearingDeg: number | null
   rideRoute: [number, number][]
   seekPosition: HistoryGpsSample | null
+  rideTelemetrySamples: TelemetrySample[]
+  activeHistoryMapMetric: HistoryMetricKey
   rideMarkers: HistoryMarker[]
   rideGpsSamples: HistoryGpsSample[]
   targetLocation: { latitude: number; longitude: number } | null
@@ -238,7 +425,7 @@ function LiveMapLayers({
             <MapPin
               id="center-gps-position"
               coordinate={[gpsFix.longitude, gpsFix.latitude]}
-              color={MAP_DEFAULTS.markerColor}
+              color={GPS_POINT_COLOR}
               bearingDeg={gpsBearingDeg}
             />
           )}
@@ -252,6 +439,8 @@ function HistoryMapLayers({
   rideRouteShape,
   rideRoute,
   seekPosition,
+  rideTelemetrySamples,
+  activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
   onSelectMarker,
@@ -259,18 +448,73 @@ function HistoryMapLayers({
   rideRouteShape: CenterMapLayersProps['rideRouteShape']
   rideRoute: CenterMapLayersProps['rideRoute']
   seekPosition: CenterMapLayersProps['seekPosition']
+  rideTelemetrySamples: CenterMapLayersProps['rideTelemetrySamples']
+  activeHistoryMapMetric: CenterMapLayersProps['activeHistoryMapMetric']
   rideMarkers: CenterMapLayersProps['rideMarkers']
   rideGpsSamples: CenterMapLayersProps['rideGpsSamples']
   onSelectMarker: CenterMapLayersProps['onSelectMarker']
 }) {
+  const [highlightProgress, setHighlightProgress] = useState(0)
+  const highlightDurationMs = useMemo(
+    () => getHistoryRouteHighlightDurationMs(rideRoute),
+    [rideRoute],
+  )
+
+  useEffect(() => {
+    if (!rideRouteShape) return
+    const resetFrame = requestAnimationFrame(() => setHighlightProgress(0))
+    let interval: ReturnType<typeof setInterval> | null = null
+    const timeout = setTimeout(() => {
+      const startedAt = Date.now()
+      interval = setInterval(() => {
+        const progress = (Date.now() - startedAt) / highlightDurationMs
+        setHighlightProgress(Math.min(1, progress))
+        if (progress >= 1 && interval) clearInterval(interval)
+      }, HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS)
+    }, HISTORY_ROUTE_HIGHLIGHT_DELAY_MS)
+    return () => {
+      cancelAnimationFrame(resetFrame)
+      clearTimeout(timeout)
+      if (interval) clearInterval(interval)
+    }
+  }, [highlightDurationMs, rideRouteShape])
+
+  const routeHighlightGradient = useMemo(
+    () => getHistoryRouteHighlightGradient(highlightProgress),
+    [highlightProgress],
+  )
+  const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)
+  const hotRanges = useSettingsStore((s) => s.historyMetricHotRanges)
+  const routeMetricGradient = useMemo(
+    () =>
+      getHistoryRouteMetricGradient({
+        gpsSamples: rideGpsSamples,
+        telemetrySamples: rideTelemetrySamples,
+        metric: activeHistoryMapMetric,
+        hotRanges,
+        gradientsEnabled,
+      }),
+    [activeHistoryMapMetric, gradientsEnabled, hotRanges, rideGpsSamples, rideTelemetrySamples],
+  )
+
   return (
     <>
       {rideRouteShape && (
-        <ShapeSource id="center-ride-route-source" shape={rideRouteShape}>
+        <ShapeSource id="center-ride-route-source" shape={rideRouteShape} lineMetrics>
           <LineLayer
             id="center-ride-route-line"
             style={{
-              lineColor: theme.target.color,
+              lineColor: getHistoryMetricBaseColor(activeHistoryMapMetric),
+              lineWidth: 4,
+              lineCap: 'round',
+              lineJoin: 'round',
+              ...(routeMetricGradient ? { lineGradient: routeMetricGradient } : {}),
+            }}
+          />
+          <LineLayer
+            id="center-ride-route-highlight"
+            style={{
+              lineGradient: routeHighlightGradient,
               lineWidth: 4,
               lineCap: 'round',
               lineJoin: 'round',
@@ -307,6 +551,262 @@ function HistoryMapLayers({
   )
 }
 
+function getHistoryRouteHighlightGradient(
+  progress: number,
+): NonNullable<LineLayerStyle['lineGradient']> {
+  const peak = -HISTORY_ROUTE_HIGHLIGHT_WIDTH + progress * (1 + HISTORY_ROUTE_HIGHLIGHT_WIDTH * 2)
+  const leadingEdge = Math.max(0, peak - HISTORY_ROUTE_HIGHLIGHT_WIDTH)
+  const trailingEdge = Math.min(1, peak + HISTORY_ROUTE_HIGHLIGHT_WIDTH)
+
+  if (peak <= 0) {
+    if (trailingEdge <= 0) {
+      return [
+        'interpolate',
+        ['linear'],
+        ['line-progress'],
+        0,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+        1,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+    }
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+      trailingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  if (peak >= 1) {
+    if (leadingEdge >= 1) {
+      return [
+        'interpolate',
+        ['linear'],
+        ['line-progress'],
+        0,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+        1,
+        HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+    }
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      leadingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  if (leadingEdge <= 0) {
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      peak,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+      trailingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  if (trailingEdge >= 1) {
+    return [
+      'interpolate',
+      ['linear'],
+      ['line-progress'],
+      0,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      leadingEdge,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+      peak,
+      HISTORY_ROUTE_HIGHLIGHT_COLOR,
+      1,
+      HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+  }
+
+  return [
+    'interpolate',
+    ['linear'],
+    ['line-progress'],
+    0,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    leadingEdge,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    peak,
+    HISTORY_ROUTE_HIGHLIGHT_COLOR,
+    trailingEdge,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+    1,
+    HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT,
+  ] as unknown as NonNullable<LineLayerStyle['lineGradient']>
+}
+
+function getHistoryMetricBaseColor(metric: HistoryMetricKey): string {
+  switch (metric) {
+    case 'speed':
+      return telemetry.speed.color
+    case 'duty':
+      return telemetry.duty.color
+    case 'battery':
+      return telemetry.battVoltage.color
+    case 'tempMotor':
+      return telemetry.motorTemp.color
+    case 'tempController':
+      return telemetry.controllerTemp.color
+    case 'motorCurrent':
+      return telemetry.motorCurrent.color
+    case 'batteryCurrent':
+      return telemetry.battCurrent.color
+  }
+}
+
+function getNearestTelemetrySample(
+  samples: readonly TelemetrySample[],
+  targetMs: number,
+): TelemetrySample | null {
+  if (samples.length === 0) return null
+  let lo = 0
+  let hi = samples.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const at = samples[mid].capturedAtMs
+    if (at === targetMs) return samples[mid]
+    if (at < targetMs) lo = mid + 1
+    else hi = mid - 1
+  }
+  if (hi < 0) return samples[0]
+  if (lo >= samples.length) return samples[samples.length - 1]
+  const before = samples[hi]
+  const after = samples[lo]
+  return targetMs - before.capturedAtMs <= after.capturedAtMs - targetMs ? before : after
+}
+
+function advanceNearestTelemetryIndex(
+  samples: readonly TelemetrySample[],
+  currentIndex: number,
+  targetMs: number,
+): number {
+  let index = Math.max(0, Math.min(currentIndex, samples.length - 1))
+  while (
+    index + 1 < samples.length &&
+    Math.abs(samples[index + 1].capturedAtMs - targetMs) <=
+      Math.abs(samples[index].capturedAtMs - targetMs)
+  ) {
+    index += 1
+  }
+  return index
+}
+
+function getRouteDistanceProgress(samples: readonly HistoryGpsSample[]): number[] {
+  const distances = new Array<number>(samples.length).fill(0)
+  let distanceM = 0
+  for (let index = 1; index < samples.length; index += 1) {
+    const from = samples[index - 1]
+    const to = samples[index]
+    distanceM += distanceMeters(
+      { longitude: from.longitude, latitude: from.latitude },
+      { longitude: to.longitude, latitude: to.latitude },
+    )
+    distances[index] = distanceM
+  }
+
+  if (distanceM <= 0) return distances
+  return distances.map((distance) => Math.max(0, Math.min(1, distance / distanceM)))
+}
+
+function getHistoryRouteMetricGradient({
+  gpsSamples,
+  telemetrySamples,
+  metric,
+  hotRanges,
+  gradientsEnabled,
+}: {
+  gpsSamples: readonly HistoryGpsSample[]
+  telemetrySamples: readonly TelemetrySample[]
+  metric: HistoryMetricKey
+  hotRanges: HistoryMetricHotRanges
+  gradientsEnabled: boolean
+}): NonNullable<LineLayerStyle['lineGradient']> | null {
+  if (gpsSamples.length < 2 || telemetrySamples.length === 0) return null
+  const baseColor = getHistoryMetricBaseColor(metric)
+  const range = getHistoryMetricColorRange(metric, baseColor, hotRanges, gradientsEnabled)
+  if (!range) return null
+
+  const lastIndex = gpsSamples.length - 1
+  const routeProgress = getRouteDistanceProgress(gpsSamples)
+  const maxStops = 160
+  const step = Math.max(1, Math.floor(lastIndex / (maxStops - 1)))
+  const expression: unknown[] = ['interpolate', ['linear'], ['line-progress']]
+
+  let lastProgress = -1
+  let telemetryIndex = 0
+  for (let index = 0; index < gpsSamples.length; index += step) {
+    const gpsSample = gpsSamples[index]
+    telemetryIndex = advanceNearestTelemetryIndex(
+      telemetrySamples,
+      telemetryIndex,
+      gpsSample.capturedAtMs,
+    )
+    const telemetrySample = telemetrySamples[telemetryIndex]
+    const value = telemetrySample ? getTelemetrySampleMetricValue(telemetrySample, metric) : null
+    const previousStop = expression.at(-2)
+    const previousProgress = typeof previousStop === 'number' ? previousStop : -1
+    lastProgress = routeProgress[index] ?? 0
+    if (lastProgress <= previousProgress) continue
+    expression.push(lastProgress, value == null ? baseColor : getMetricRampColor(value, range))
+  }
+
+  if (lastProgress < 1) {
+    const lastGpsSample = gpsSamples[lastIndex]
+    const lastTelemetrySample = getNearestTelemetrySample(
+      telemetrySamples,
+      lastGpsSample.capturedAtMs,
+    )
+    const lastValue = lastTelemetrySample
+      ? getTelemetrySampleMetricValue(lastTelemetrySample, metric)
+      : null
+    expression.push(1, lastValue == null ? baseColor : getMetricRampColor(lastValue, range))
+  }
+
+  return expression as unknown as NonNullable<LineLayerStyle['lineGradient']>
+}
+
+function getHistoryRouteHighlightDurationMs(route: [number, number][]) {
+  if (route.length < 2) return HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS
+  let distanceM = 0
+  for (let index = 1; index < route.length; index += 1) {
+    const [fromLongitude, fromLatitude] = route[index - 1]
+    const [toLongitude, toLatitude] = route[index]
+    distanceM += distanceMeters(
+      { longitude: fromLongitude, latitude: fromLatitude },
+      { longitude: toLongitude, latitude: toLatitude },
+    )
+  }
+  return Math.min(
+    HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS,
+    Math.max(
+      HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS,
+      (distanceM / 1000) * HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM,
+    ),
+  )
+}
+
 function CenterMapLayers({
   historyActive,
   isMapy,
@@ -322,6 +822,8 @@ function CenterMapLayers({
   gpsBearingDeg,
   rideRoute,
   seekPosition,
+  rideTelemetrySamples,
+  activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
   targetLocation,
@@ -361,6 +863,8 @@ function CenterMapLayers({
           rideRouteShape={rideRouteShape}
           rideRoute={rideRoute}
           seekPosition={seekPosition}
+          rideTelemetrySamples={rideTelemetrySamples}
+          activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
           onSelectMarker={onSelectMarker}
@@ -378,7 +882,7 @@ function CenterMapLayers({
         <MapPin
           id="center-target-position"
           coordinate={[targetLocation.longitude, targetLocation.latitude]}
-          color={theme.target.color}
+          color={DESTINATION_POINT_COLOR}
           onSelected={onClearTarget}
         />
       )}
@@ -391,7 +895,9 @@ interface CenterMapProps {
   liveLocations: LocationEvent[]
   latestApproximateLocation: LocationEvent | null
   rideGpsSamples: HistoryGpsSample[]
+  rideTelemetrySamples: TelemetrySample[]
   rideMarkers: HistoryMarker[]
+  activeHistoryMapMetric: HistoryMetricKey
   historyActive: boolean
   mapStyleKey: MapStyleKey
   mapNavigationMode: MapNavigationMode
@@ -418,7 +924,9 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     liveLocations,
     latestApproximateLocation,
     rideGpsSamples,
+    rideTelemetrySamples,
     rideMarkers,
+    activeHistoryMapMetric,
     historyActive,
     mapStyleKey,
     mapNavigationMode,
@@ -439,6 +947,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const styleReloadCameraRef = useRef<CameraSnapshot | null>(null)
   const previousMapStyleKeyRef = useRef(mapStyleKey)
   const mapRevealedRef = useRef(false)
+  const mapViewRef = useRef<ElementRef<typeof Mapbox.MapView> | null>(null)
+  const offscreenProjectionRequestRef = useRef(0)
   const [mapOpacity] = useState(() => new Animated.Value(0))
   const [cameraReady, setCameraReady] = useState(false)
   const [selectedHistoryMarker, setSelectedHistoryMarker] = useState<SelectedHistoryMarker | null>(
@@ -447,6 +957,10 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const [showRadar, setShowRadar] = useState(true)
   const [cameraHeading, setCameraHeading] = useState(0)
   const [initialApproximateFix, setInitialApproximateFix] = useState<LocationEvent | null>(null)
+  const [mapLayout, setMapLayout] = useState<MapLayout>({ width: 0, height: 0 })
+  const [offscreenGpsIndicators, setOffscreenGpsIndicators] = useState<
+    OffscreenGpsIndicatorState[]
+  >([])
 
   const gpsFix = liveLocations.at(-1) ?? null
   const previousGpsFix = liveLocations.at(-2) ?? null
@@ -488,6 +1002,15 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     ],
   )
   const { cameraFix, accuracyFix, accuracyRadiusM, directionBearingDeg } = gpsPresentation
+  const offscreenGpsCoordinate = useMemo(
+    () =>
+      usableCoordinate(gpsFix) ??
+      usableCoordinate(latestApproximateLocation) ??
+      usableCoordinate(initialApproximateFix) ??
+      usableCoordinate(accuracyFix) ??
+      usableCoordinate(cameraFix),
+    [accuracyFix, cameraFix, gpsFix, initialApproximateFix, latestApproximateLocation],
+  )
   const retainedGpsBearing = gpsPresentation.nextReliableBearing
   const gpsHeadingMode = mapNavigationMode === 'gpsHeading'
   const phoneHeadingMode = mapNavigationMode === 'phoneHeading'
@@ -543,7 +1066,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
     [rideGpsSamples],
   )
-
   const {
     cameraRef,
     currentCameraRef,
@@ -551,6 +1073,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     followGps,
     setFollowGps,
     setFollowZoomLevel,
+    recenterLive,
     getLiveFollowCamera,
     getHistoryPreviewCamera,
   } = useCameraControls({
@@ -561,6 +1084,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     historyActive,
     historyPreview,
     rideRoute,
+    mapViewport: mapLayout,
     gpsHeadingMode: headingFollowMode,
     phoneHeadingMode,
     phoneHeadingReady: phoneHeadingDeg != null,
@@ -581,6 +1105,118 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         ? null
         : directionBearingDeg - cameraHeading
   const updateNavigationDiagnostics = useNavigationDiagnosticsStore((s) => s.update)
+
+  const handleMapLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout
+    setMapLayout((current) =>
+      Math.abs(current.width - width) < 0.5 && Math.abs(current.height - height) < 0.5
+        ? current
+        : { width, height },
+    )
+  }, [])
+
+  const updateOffscreenGpsIndicator = useCallback(() => {
+    const camera = currentCameraRef.current
+    const mapView = mapViewRef.current
+    if (
+      mapView == null ||
+      historyActive ||
+      (offscreenGpsCoordinate == null && targetLocation == null) ||
+      mapLayout.width <= 0 ||
+      mapLayout.height <= 0
+    ) {
+      offscreenProjectionRequestRef.current += 1
+      setOffscreenGpsIndicators((current) => (current.length === 0 ? current : []))
+      return
+    }
+
+    const requestId = offscreenProjectionRequestRef.current + 1
+    offscreenProjectionRequestRef.current = requestId
+    const trackedPoints = [
+      ...(offscreenGpsCoordinate
+        ? [
+            {
+              id: 'gps' as const,
+              coordinate: [offscreenGpsCoordinate.longitude, offscreenGpsCoordinate.latitude] as [
+                number,
+                number,
+              ],
+            },
+          ]
+        : []),
+      ...(targetLocation
+        ? [
+            {
+              id: 'target' as const,
+              coordinate: [targetLocation.longitude, targetLocation.latitude] as [number, number],
+            },
+          ]
+        : []),
+    ]
+
+    void Promise.all(
+      trackedPoints.map(async (trackedPoint) => ({
+        ...trackedPoint,
+        point: await mapView.getPointInView(trackedPoint.coordinate),
+      })),
+    )
+      .then((projectedPoints) => {
+        if (offscreenProjectionRequestRef.current !== requestId) return
+        const next = projectedPoints.flatMap((trackedPoint) => {
+          const [x, y] = trackedPoint.point
+          if (typeof x !== 'number' || typeof y !== 'number') return []
+
+          const detectedIndicator = clampedEdgeIndicator(trackedPoint.id, { x, y }, mapLayout)
+          if (!detectedIndicator) return []
+          if (!camera) return [detectedIndicator]
+
+          const positionedPoint = projectCoordinateToEdgePoint(
+            {
+              longitude: trackedPoint.coordinate[0],
+              latitude: trackedPoint.coordinate[1],
+            },
+            camera,
+            mapLayout,
+          )
+          const positionedIndicator = clampedEdgeIndicator(
+            trackedPoint.id,
+            positionedPoint,
+            mapLayout,
+          )
+          return [positionedIndicator ?? detectedIndicator]
+        })
+        setOffscreenGpsIndicators((current) =>
+          nearlySameIndicator(current, next) ? current : next,
+        )
+      })
+      .catch(() => {
+        if (offscreenProjectionRequestRef.current !== requestId) return
+        setOffscreenGpsIndicators((current) => (current.length === 0 ? current : []))
+      })
+  }, [currentCameraRef, historyActive, mapLayout, offscreenGpsCoordinate, targetLocation])
+
+  const handleOffscreenIndicatorPress = useCallback(
+    (indicator: OffscreenGpsIndicatorState) => {
+      onMapInteraction()
+      if (indicator.id === 'gps') {
+        recenterLive({ resetPadding: true })
+        return
+      }
+      if (!targetLocation) return
+
+      setFollowGps(false)
+      const currentCamera = currentCameraRef.current
+      cameraRef.current?.setCamera({
+        centerCoordinate: [targetLocation.longitude, targetLocation.latitude],
+        zoomLevel: currentCamera?.zoomLevel,
+        heading: currentCamera?.heading,
+        pitch: currentCamera?.pitch,
+        animationDuration: MAP_DEFAULTS.animationDuration,
+        animationMode: 'easeTo',
+      })
+    },
+    [cameraRef, currentCameraRef, onMapInteraction, recenterLive, setFollowGps, targetLocation],
+  )
 
   useEffect(() => {
     updateNavigationDiagnostics({
@@ -761,6 +1397,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       )
       onHeadingChange(state.properties.heading)
       setShowRadar(state.properties.zoom <= RADAR_MAX_ZOOM)
+      updateOffscreenGpsIndicator()
     },
     [
       cameraRef,
@@ -777,8 +1414,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       phoneHeadingMode,
       setFollowGps,
       setFollowZoomLevel,
+      updateOffscreenGpsIndicator,
     ],
   )
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(updateOffscreenGpsIndicator)
+    return () => cancelAnimationFrame(frame)
+  }, [updateOffscreenGpsIndicator])
 
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
@@ -798,9 +1441,11 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   return (
     <Animated.View
       style={[styles.mapContainer, { opacity: mapOpacity }]}
+      onLayout={handleMapLayout}
       onTouchStart={onMapInteraction}
     >
       <Mapbox.MapView
+        ref={mapViewRef}
         style={styles.map}
         styleURL={useCustomJSON ? undefined : selectedMapStyle.styleURL}
         styleJSON={isOneDark ? ONE_DARK_MAP_STYLE : isMapy ? BLANK_STYLE : undefined}
@@ -838,6 +1483,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           gpsBearingDeg={gpsPinBearingDeg}
           rideRoute={rideRoute}
           seekPosition={seekPosition}
+          rideTelemetrySamples={rideTelemetrySamples}
+          activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
           targetLocation={targetLocation}
@@ -861,6 +1508,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           Weather data by RainViewer
         </Text>
       ) : null}
+      {mode === 'telemetry' ? <MapVignette mode={mode} idPrefix="telemetry-map-vignette" /> : null}
+      {offscreenGpsIndicators.map((indicator) => (
+        <OffscreenGpsIndicator
+          key={indicator.id}
+          indicator={indicator}
+          onPress={() => handleOffscreenIndicatorPress(indicator)}
+        />
+      ))}
       <View style={styles.edgeGuardLeft} pointerEvents="box-only" />
       <View style={styles.edgeGuardRight} pointerEvents="box-only" />
     </Animated.View>
@@ -876,13 +1531,46 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFill,
   },
+  offscreenGpsIndicator: {
+    position: 'absolute',
+    width: OFFSCREEN_GPS_INDICATOR_SIZE,
+    height: OFFSCREEN_GPS_INDICATOR_SIZE,
+    zIndex: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offscreenGpsIndicatorPressed: {
+    opacity: 0.55,
+  },
+  offscreenGpsIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: GPS_POINT_COLOR,
+    backgroundColor: theme.neutral.surfaceDeep,
+    shadowColor: theme.neutral.surfaceDeep,
+    shadowOpacity: 0.32,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  offscreenGpsArrowOrbit: {
+    position: 'absolute',
+    width: OFFSCREEN_GPS_INDICATOR_SIZE,
+    height: OFFSCREEN_GPS_INDICATOR_SIZE,
+    alignItems: 'center',
+  },
   edgeGuardLeft: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     left: 0,
     width: EDGE_GUARD_WIDTH,
-    backgroundColor: 'rgba(0,0,0,0.001)',
+    backgroundColor: theme.neutral.touchInvisible,
+    zIndex: 3,
   },
   edgeGuardRight: {
     position: 'absolute',
@@ -890,7 +1578,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: EDGE_GUARD_WIDTH,
-    backgroundColor: 'rgba(0,0,0,0.001)',
+    backgroundColor: theme.neutral.touchInvisible,
+    zIndex: 3,
   },
   emptyContainer: {
     ...StyleSheet.absoluteFill,
@@ -901,12 +1590,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyTitle: {
-    color: '#f9fafb',
+    color: theme.neutral.textPrimary,
     fontSize: 18,
     fontWeight: '700',
   },
   emptyText: {
-    color: '#9ca3af',
+    color: theme.neutral.textSecondary,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
@@ -915,10 +1604,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     left: 6,
-    color: 'rgba(255,255,255,0.55)',
+    color: theme.neutral.textDimLight,
     fontSize: 10,
     fontWeight: '500',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: theme.neutral.dimOverlay,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,

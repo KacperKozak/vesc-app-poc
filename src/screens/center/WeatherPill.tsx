@@ -19,15 +19,22 @@ export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
 
   if (!weather) return null
 
+  const currentHour = new Date().getHours()
   const iconColor =
     weather.weatherCode != null
-      ? weatherCodeToColor(weather.weatherCode, new Date().getHours())
+      ? weatherCodeToColor(weather.weatherCode, currentHour)
       : theme.bran.text
 
   if (expanded) {
     return (
       <View style={styles.expanded}>
-        <WeatherIcon code={weather.weatherCode} size={28} color={iconColor} weight="duotone" />
+        <WeatherIcon
+          code={weather.weatherCode}
+          hour={currentHour}
+          size={28}
+          color={iconColor}
+          weight="duotone"
+        />
         <View style={styles.expandedText}>
           <Text style={styles.expandedTemp}>{weather.temperature}°</Text>
           {weather.weatherCode != null && (
@@ -46,7 +53,13 @@ export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
 
   return (
     <Pressable style={styles.pill} onPress={onPress} android_ripple={interaction.rippleBorderless}>
-      <WeatherIcon code={weather.weatherCode} size={16} color={iconColor} weight="duotone" />
+      <WeatherIcon
+        code={weather.weatherCode}
+        hour={currentHour}
+        size={16}
+        color={iconColor}
+        weight="duotone"
+      />
       <Text style={styles.temp}>{weather.temperature}°</Text>
       {precipitationProbability != null && precipitationProbability > 0 && (
         <>
@@ -63,12 +76,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(15,23,42,0.72)',
+    backgroundColor: theme.neutral.mapOverlayPill,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.28)',
+    borderColor: theme.neutral.borderMuted,
   },
   temp: {
     color: theme.neutral.textPrimary,

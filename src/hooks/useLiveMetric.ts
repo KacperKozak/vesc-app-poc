@@ -33,6 +33,7 @@ export const liveSelectors = {
   motorCurrent: (s: TelemetryEvent) => finite(s.motorCurrent),
   batteryCurrent: (s: TelemetryEvent) => finite(s.batteryCurrent),
   batteryVoltage: (s: TelemetryEvent) => finite(s.batteryVoltage),
+  batteryPercent: (s: TelemetryEvent) => finite(s.batteryPercent),
   motorTemp: (s: TelemetryEvent) => (s.tempMotor != null && s.tempMotor > 0 ? s.tempMotor : null),
   controllerTemp: (s: TelemetryEvent) => finite(s.tempMosfet),
   footpadAdc1: (s: TelemetryEvent) => finite(s.adc1),

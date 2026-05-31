@@ -99,6 +99,7 @@ Present the proposed breakdown as a numbered list. For each slice, show:
 
 - **Title**: short descriptive name
 - **Type**: HITL / AFK
+- **Complexity**: low / medium / high (see `docs/agents/issue-tracker.md` for definitions)
 - **Blocked by**: which other slices (if any) must complete first
 - **User stories covered**: which user stories this addresses (if the source material has them)
 
@@ -114,9 +115,11 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to the issue tracker
 
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise. If the confirmed prefix uses a new area label, update `docs/agents/issue-tracker.md` before or alongside publishing.
+For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. These issues are considered ready for AFK agents, so publish them with the correct triage label unless instructed otherwise. Every issue must also have exactly one `complexity:low`, `complexity:medium`, or `complexity:high` label (see `docs/agents/issue-tracker.md` for definitions). If the confirmed prefix uses a new area label, update `docs/agents/issue-tracker.md` before or alongside publishing.
 
 Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field. Do not publish concurrently when blocker references are needed.
+
+After all issues in the group are published, do a second pass: edit each issue body to fill the `## Related` section with refs to every sibling issue in the same `[Area]`/`[Feature Tag]` group (excluding self). Use `gh issue edit <id> --body-file -` or `gh issue edit <id> --body "..."`. Use bare `#<id>` refs (e.g. `- #42`). GitHub auto-renders them as live links with current title + state icon — no manual title needed, stays in sync if titles change.
 
 Before publishing, re-check each issue has a **Likely files** section. Paths are navigational hints, not ownership boundaries. Do not force a path into the list if you are guessing without codebase evidence; write "Unknown - inspect <area/module> first" only when the repo structure cannot be narrowed further.
 
@@ -137,6 +140,23 @@ Starting points for implementation. Include repo-relative paths and one short re
 
 - `src/or/modules/path.ts` - why this file is probably relevant
 
+## Implementation hints
+
+Code-level hints to help AFK agents navigate the implementation without guessing. Include when the codebase exploration revealed non-obvious integration points. Skip this section for trivial slices.
+
+Good hints:
+
+- Exact code patterns to follow or replace (with file + line reference)
+- Existing call sites that need modification (quote the current code)
+- Data shapes, sign conventions, or direction flags that are easy to get wrong
+- Helper functions or patterns already in the codebase that should be reused
+
+Bad hints:
+
+- Restating what "What to build" already says
+- Full implementation code (that belongs in the PR, not the issue)
+- Guesses about code you haven't actually read
+
 ## Acceptance criteria
 
 - [ ] Criterion 1
@@ -149,6 +169,15 @@ Starting points for implementation. Include repo-relative paths and one short re
 
 Or "None - can start immediately" if no blockers.
 
+## Related
+
+All other issues in the same `[Area]`/`[Feature Tag]` group (siblings, blockers, follow-ups). Excludes self. Filled in after all group issues published. Use bare `#<id>` so GitHub renders live title + state icon.
+
+- #<id>
+
+Or "None" if this is a standalone issue with no group siblings.
+
 </issue-template>
 
 Do NOT close or modify any parent issue.
+Predict the next issue id after creating first one to speed up issue creation with "related" inside. Then update first issue. If IDs differ, update them.

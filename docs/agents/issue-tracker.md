@@ -61,21 +61,34 @@ Treat these as navigational hints, not a complete file list or ownership boundar
 
 Use one or more app-area labels for filtering:
 
-| Area label        | Title prefix   | Use for                                 |
-| ----------------- | -------------- | --------------------------------------- |
-| `area:history`    | `[History]`    | ride history, sessions, buckets, graphs |
-| `area:sanitizers` | `[Sanitizers]` | metric sanitizers and exclusions        |
-| `area:map`        | `[Map]`        | maps, routes, GPS display               |
-| `area:weather`    | `[Weather]`    | weather data and UI                     |
-| `area:core`       | `[Core]`       | app shell, storage, lifecycle, infra    |
-| `area:board`      | `[Board]`      | board profiles, board table/settings    |
-| `area:telemetry`  | `[Telemetry]`  | live telemetry ingest/display           |
-| `area:tunes`      | `[Tunes]`      | VESC tune read/write flows              |
-| `area:alerts`     | `[Alerts]`     | alert rules, alert feedback, audio/TTS  |
+| Area label        | Title prefix   | Use for                                                           |
+| ----------------- | -------------- | ----------------------------------------------------------------- |
+| `area:history`    | `[History]`    | ride history, sessions, buckets, graphs                           |
+| `area:sanitizers` | `[Sanitizers]` | metric sanitizers and exclusions                                  |
+| `area:map`        | `[Map]`        | maps, routes, GPS display                                         |
+| `area:weather`    | `[Weather]`    | weather data and UI                                               |
+| `area:core`       | `[Core]`       | app shell, storage, lifecycle, infra                              |
+| `area:board`      | `[Board]`      | board profiles, board table/settings                              |
+| `area:telemetry`  | `[Telemetry]`  | live telemetry ingest/display                                     |
+| `area:tunes`      | `[Tunes]`      | VESC tune read/write flows                                        |
+| `area:alerts`     | `[Alerts]`     | alert rules, alert feedback, audio/TTS                            |
+| `area:battery`    | `[Battery]`    | battery config, SoC estimation, voltage compensation              |
+| `area:tech`       | `[Tech]`       | internal refactor, tech upgrades, no user-visible behavior change |
+| `area:ios`        | `[iOS]`        | iOS platform port and iOS-specific native code                    |
 
 When a PRD or issue-planning skill creates or starts using a new app-area label, update this table in the same turn. Add the label, title prefix, and a short "Use for" description so future PRDs and implementation issues can reuse the prefix consistently.
 
 If a user writes a typo for a known area, normalize it in metadata. For example, use `area:sanitizers` and `[Sanitizers]` for `sanatizers`.
+
+## Complexity labels
+
+Every implementation issue must have exactly one complexity label. Complexity reflects **risk and precision needed**, not size. A 5-line native pipeline change can be `complexity:high`; a 100-line UI component can be `complexity:low`.
+
+| Label               | When to use                                                          | Claude         | OpenAI        |
+| ------------------- | -------------------------------------------------------------------- | -------------- | ------------- |
+| `complexity:low`    | Isolated changes, hard to break other things (UI, docs, config)      | sonnet / haiku | GPT-5.3 Codex |
+| `complexity:medium` | Moderate integration surface, needs care but not safety-critical     | sonnet         | GPT-5.4 Codex |
+| `complexity:high`   | Critical paths, subtle correctness, native pipelines, data integrity | opus           | GPT-5.5       |
 
 ## When a skill says "fetch the relevant ticket"
 

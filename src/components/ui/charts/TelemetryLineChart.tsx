@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { PanResponder, StyleSheet, Text, View } from 'react-native'
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native'
 import Svg, {
   Circle as SvgCircle,
+  Defs as SvgDefs,
+  LinearGradient as SvgLinearGradient,
   Line as SvgLine,
   Polyline as SvgPolyline,
   Rect as SvgRect,
+  Stop as SvgStop,
 } from 'react-native-svg'
 
 import { theme } from '@/constants/theme'
@@ -13,6 +16,7 @@ import {
   findNearestChartPointAtX,
   getChartPosition,
   getXPosition,
+  splitChartPointSegments,
   splitChartLineSegments,
   type ExcludedRange,
   type TelemetryChartPoint,
@@ -21,11 +25,12 @@ import {
 const DEFAULT_HEIGHT = 54
 const Y_AXIS_WIDTH = 34
 const TOOLTIP_WIDTH = 94
+const CARD_HORIZONTAL_PADDING = 8
 const EXCLUSION_MARKER_HEIGHT = 1
 const EXCLUSION_MARKER_INSET = 1
 
 function exclusionColor(reason: string): string {
-  if (reason === 'free_spin') return '#facc15'
+  if (reason === 'free_spin') return theme.highlight.color
   return theme.neutral.textSecondary
 }
 
@@ -47,6 +52,15 @@ function formatAxisNumber(value: number): string {
   return value.toFixed(1)
 }
 
+function resolveActiveChartColor(
+  currentPoint: TelemetryChartPoint | null,
+  baseColor: string,
+  getPointColor?: (value: number) => string,
+): string {
+  if (!currentPoint || !getPointColor) return baseColor
+  return getPointColor(currentPoint.value)
+}
+
 interface TelemetryLineChartProps {
   label: string
   value: string
@@ -59,9 +73,110 @@ interface TelemetryLineChartProps {
   onPointSelected?: (point: TelemetryChartPoint) => void
   onGestureStart?: () => void
   formatValue?: (value: number) => string
+  getPointColor?: (value: number) => string
   windowMs?: number
   excludedRanges?: ExcludedRange[]
 }
+
+interface ChartLineSegmentsProps {
+  points: TelemetryChartPoint[]
+  range: { y: { min: number; max: number } }
+  width: number
+  height: number
+  color: string
+  getPointColor?: (value: number) => string
+  gradientIdPrefix: string
+  windowMs?: number
+}
+
+const ChartLineSegments = memo(function ChartLineSegments({
+  points,
+  range,
+  width,
+  height,
+  color,
+  getPointColor,
+  gradientIdPrefix,
+  windowMs,
+}: ChartLineSegmentsProps) {
+  const polylineSegments = useMemo(
+    () =>
+      width > 0
+        ? splitChartLineSegments(points, range, width, height, windowMs)
+            .map((segment) => segment.map((point) => `${point.x},${point.y}`).join(' '))
+            .filter((segment) => segment.length > 0)
+        : [],
+    [height, points, range, width, windowMs],
+  )
+  const coloredLineSegments = useMemo(
+    () =>
+      getPointColor && width > 0
+        ? splitChartPointSegments(points, range, width, height, windowMs).map(
+            (segment, segmentIndex) => ({
+              key: `${segmentIndex}`,
+              gradientId: `${gradientIdPrefix}-${segmentIndex}`,
+              points: segment.map((point) => `${point.x},${point.y}`).join(' '),
+              stops: segment.map((point) => ({
+                offset: `${Math.max(0, Math.min(1, point.x / width)) * 100}%`,
+                color: getPointColor(point.point.value),
+              })),
+            }),
+          )
+        : [],
+    [getPointColor, gradientIdPrefix, height, points, range, width, windowMs],
+  )
+
+  if (getPointColor) {
+    return (
+      <>
+        <SvgDefs>
+          {coloredLineSegments.map((segment) => (
+            <SvgLinearGradient
+              key={segment.gradientId}
+              id={segment.gradientId}
+              x1={0}
+              y1={0}
+              x2={width}
+              y2={0}
+              gradientUnits="userSpaceOnUse"
+            >
+              {segment.stops.map((stop, index) => (
+                <SvgStop
+                  key={`${segment.gradientId}-${index}`}
+                  offset={stop.offset}
+                  stopColor={stop.color}
+                />
+              ))}
+            </SvgLinearGradient>
+          ))}
+        </SvgDefs>
+        {coloredLineSegments.map((segment) => (
+          <SvgPolyline
+            key={segment.key}
+            points={segment.points}
+            fill="none"
+            stroke={`url(#${segment.gradientId})`}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+      </>
+    )
+  }
+
+  return polylineSegments.map((segment, index) => (
+    <SvgPolyline
+      key={`segment-${index}`}
+      points={segment}
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ))
+})
 
 export function TelemetryLineChart({
   label,
@@ -75,10 +190,12 @@ export function TelemetryLineChart({
   onPointSelected,
   onGestureStart,
   formatValue,
+  getPointColor,
   windowMs,
   excludedRanges,
 }: TelemetryLineChartProps) {
   'use no memo'
+  const gradientIdPrefix = `telemetry-line-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const [chartWidth, setChartWidth] = useState(0)
   const [chartPageX, setChartPageX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -102,16 +219,6 @@ export function TelemetryLineChart({
     if (!currentPoint || chartWidth < 1) return null
     return getChartPosition(points, currentPoint, range, chartWidth, height, windowMs)
   }, [chartWidth, currentPoint, height, points, range, windowMs])
-
-  const polylineSegments = useMemo(
-    () =>
-      chartWidth > 0
-        ? splitChartLineSegments(points, range, chartWidth, height, windowMs)
-            .map((segment) => segment.map((point) => `${point.x},${point.y}`).join(' '))
-            .filter((segment) => segment.length > 0)
-        : [],
-    [chartWidth, height, points, range, windowMs],
-  )
 
   const selectAtPageX = useCallback(
     (x: number) => {
@@ -160,11 +267,16 @@ export function TelemetryLineChart({
   const tooltipLeft = useMemo(() => {
     if (!markerPosition || chartWidth <= 0) return 0
     const half = TOOLTIP_WIDTH / 2
-    let left = markerPosition.x - half
-    if (left < 0) left = 0
-    if (left + TOOLTIP_WIDTH > chartWidth) left = chartWidth - TOOLTIP_WIDTH
+    const cardChartLeft = CARD_HORIZONTAL_PADDING + Y_AXIS_WIDTH
+    const cardChartRight = cardChartLeft + chartWidth
+    let left = cardChartLeft + markerPosition.x - half
+    if (left < CARD_HORIZONTAL_PADDING) left = CARD_HORIZONTAL_PADDING
+    if (left + TOOLTIP_WIDTH > cardChartRight) left = cardChartRight - TOOLTIP_WIDTH
     return left
   }, [chartWidth, markerPosition])
+
+  const activeColor = resolveActiveChartColor(currentPoint, color, getPointColor)
+  const valueColorStyle = getPointColor && currentPoint ? { color: activeColor } : undefined
 
   return (
     <View style={[styles.card, containerStyle]}>
@@ -174,9 +286,18 @@ export function TelemetryLineChart({
           {isDragging && currentPoint && (
             <Text style={styles.headerTime}>{formatTime(currentPoint.date)}</Text>
           )}
-          <Text style={[styles.value, isDragging && { color }]}>{value}</Text>
+          <Text style={[styles.value, valueColorStyle]}>{value}</Text>
         </View>
       </View>
+
+      {isDragging && currentPoint && markerPosition && (
+        <View style={[styles.tooltip, { left: tooltipLeft }]}>
+          <Text style={styles.tooltipValue}>
+            {formatValue ? formatValue(currentPoint.value) : currentPoint.value.toFixed(1)}
+          </Text>
+          <Text style={styles.tooltipTime}>{formatTime(currentPoint.date)}</Text>
+        </View>
+      )}
 
       <View style={styles.chartBody}>
         <View style={[styles.yAxis, { height }]}>
@@ -192,13 +313,20 @@ export function TelemetryLineChart({
           {...panResponder.panHandlers}
         >
           <Svg width="100%" height={height}>
-            <SvgLine x1={0} y1={0.5} x2={chartWidth} y2={0.5} stroke="#1e293b" strokeWidth={0.5} />
+            <SvgLine
+              x1={0}
+              y1={0.5}
+              x2={chartWidth}
+              y2={0.5}
+              stroke={theme.neutral.surface}
+              strokeWidth={0.5}
+            />
             <SvgLine
               x1={0}
               y1={height / 2}
               x2={chartWidth}
               y2={height / 2}
-              stroke="#1e293b"
+              stroke={theme.neutral.surface}
               strokeWidth={0.5}
               strokeDasharray="4,4"
             />
@@ -207,7 +335,7 @@ export function TelemetryLineChart({
               y1={height - 0.5}
               x2={chartWidth}
               y2={height - 0.5}
-              stroke="#1e293b"
+              stroke={theme.neutral.surface}
               strokeWidth={0.5}
             />
 
@@ -230,17 +358,16 @@ export function TelemetryLineChart({
               )
             })}
 
-            {polylineSegments.map((segment, index) => (
-              <SvgPolyline
-                key={`segment-${index}`}
-                points={segment}
-                fill="none"
-                stroke={color}
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ))}
+            <ChartLineSegments
+              points={points}
+              range={range}
+              width={chartWidth}
+              height={height}
+              color={color}
+              getPointColor={getPointColor}
+              gradientIdPrefix={gradientIdPrefix}
+              windowMs={windowMs}
+            />
 
             {markerPosition && isDragging && (
               <SvgLine
@@ -248,7 +375,7 @@ export function TelemetryLineChart({
                 y1={0}
                 x2={markerPosition.x}
                 y2={height}
-                stroke="#475569"
+                stroke={theme.neutral.textDim}
                 strokeWidth={1}
                 strokeDasharray="3,3"
               />
@@ -259,21 +386,12 @@ export function TelemetryLineChart({
                 cx={markerPosition.x}
                 cy={markerPosition.y}
                 r={4}
-                fill="#0f172a"
-                stroke={color}
+                fill={theme.neutral.surfaceDeep}
+                stroke={activeColor}
                 strokeWidth={2}
               />
             )}
           </Svg>
-
-          {isDragging && currentPoint && markerPosition && (
-            <View style={[styles.tooltip, { left: tooltipLeft }]}>
-              <Text style={styles.tooltipValue}>
-                {formatValue ? formatValue(currentPoint.value) : currentPoint.value.toFixed(1)}
-              </Text>
-              <Text style={styles.tooltipTime}>{formatTime(currentPoint.date)}</Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -292,7 +410,8 @@ export function TelemetryLineChart({
 const styles = StyleSheet.create({
   card: {
     overflow: 'hidden',
-    paddingHorizontal: 8,
+    position: 'relative',
+    paddingHorizontal: CARD_HORIZONTAL_PADDING,
     paddingTop: 6,
     paddingBottom: 4,
   },
@@ -318,7 +437,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   value: {
-    color: '#e2e8f0',
+    color: theme.neutral.textPrimary,
     fontSize: 11,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -356,20 +475,20 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: 'absolute',
-    top: 4,
+    top: 2,
     width: TOOLTIP_WIDTH,
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    backgroundColor: theme.neutral.surfaceDeep,
     borderRadius: 4,
     borderWidth: 1,
     borderColor: theme.neutral.border,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   tooltipValue: {
-    color: '#e2e8f0',
+    color: theme.neutral.textPrimary,
     fontSize: 9,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
