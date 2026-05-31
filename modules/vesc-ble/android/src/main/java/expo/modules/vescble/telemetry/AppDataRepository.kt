@@ -574,16 +574,20 @@ private fun Map<String, Any?>.toPrivacyZoneEntity(): PrivacyZoneEntity {
   )
 }
 
-private fun Map<String, Any?>.toBoardEntity(): BoardEntity = BoardEntity(
-  id = getString("id"),
-  name = getString("name"),
-  description = get("description") as? String,
-  bleId = get("bleId") as? String,
-  isStarred = getBoolean("isStarred"),
-  createdAt = getLong("createdAt"),
-  batteryConfigJson = encodeBatteryConfig(get("batteryConfig")),
-  pollIntervalMs = (get("pollIntervalMs") as? Number)?.toLong() ?: 100L,
-)
+private fun Map<String, Any?>.toBoardEntity(): BoardEntity {
+  val pollIntervalMs = (get("pollIntervalMs") as? Number)?.toLong()
+  return BoardEntity(
+    id = getString("id"),
+    name = getString("name"),
+    description = get("description") as? String,
+    bleId = get("bleId") as? String,
+    isStarred = getBoolean("isStarred"),
+    createdAt = getLong("createdAt"),
+    batteryConfigJson = encodeBatteryConfig(get("batteryConfig")),
+  ).let { entity ->
+    if (pollIntervalMs != null) entity.copy(pollIntervalMs = pollIntervalMs) else entity
+  }
+}
 
 internal fun encodeBatteryConfig(value: Any?): String? {
   val config = normalizeBatteryConfig(value) ?: return null
