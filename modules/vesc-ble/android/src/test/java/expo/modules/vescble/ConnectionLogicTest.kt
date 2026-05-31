@@ -108,6 +108,36 @@ class ConnectionLogicTest {
         )
     }
 
+    @Test
+    fun `accept CAN ping while waiting and not direct`() {
+        assertTrue(
+            shouldAcceptCanPingResponse(
+                boardStatus = BoardPhase.WaitingForTelemetry,
+                directConnection = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `ignore CAN ping once direct fallback is active`() {
+        assertFalse(
+            shouldAcceptCanPingResponse(
+                boardStatus = BoardPhase.WaitingForTelemetry,
+                directConnection = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `ignore CAN ping once connected`() {
+        assertFalse(
+            shouldAcceptCanPingResponse(
+                boardStatus = BoardPhase.Connected,
+                directConnection = false,
+            ),
+        )
+    }
+
     // --- shouldSetDirectOnReady (markBoardReady sets direct) ---
 
     @Test

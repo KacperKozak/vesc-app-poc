@@ -20,6 +20,12 @@ internal fun shouldCanPingFallback(
 ): Boolean =
     canId == null && !directConnection && boardStatus == BoardPhase.WaitingForTelemetry
 
+internal fun shouldAcceptCanPingResponse(
+    boardStatus: BoardPhase,
+    directConnection: Boolean,
+): Boolean =
+    boardStatus != BoardPhase.Connected && !directConnection
+
 internal fun shouldSetDirectOnReady(canId: Int?, directConnection: Boolean): Boolean =
     !isPollingCapable(canId, directConnection)
 

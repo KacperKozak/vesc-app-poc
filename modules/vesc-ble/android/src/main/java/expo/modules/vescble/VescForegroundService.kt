@@ -736,7 +736,7 @@ class VescForegroundService : Service() {
         sessionSequence += 1
         val session = BoardSession(id = sessionSequence)
         boardSession = session
-        canId = start.boardConfig.canId ?: loadCachedCanId(start.boardConfig.deviceId)
+        canId = start.boardConfig.canId
         directConnection = false
         boardError = null
         telemetry = null
@@ -939,8 +939,8 @@ class VescForegroundService : Service() {
             COMM_FW_VERSION -> handleFwVersionPayload(payload)
             COMM_PING_CAN -> {
                 cancelCanPingTimeout()
-                if (boardStatus == BoardPhase.Connected) {
-                    Log.d(VESC_SESSION_TAG, "Ignoring late CAN ping response, board already connected")
+                if (!shouldAcceptCanPingResponse(boardStatus, directConnection)) {
+                    Log.d(VESC_SESSION_TAG, "Ignoring late CAN ping response, direct=$directConnection status=$boardStatus")
                 } else if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
                     telemetryPipeline.updateCanId(canId)
@@ -953,6 +953,7 @@ class VescForegroundService : Service() {
                     ))
                 } else {
                     Log.d(VESC_SESSION_TAG, "No CAN devices found, using direct connection")
+                    canId = null
                     directConnection = true
                     telemetryPipeline.updateCanId(null)
                     emitState()
@@ -1257,22 +1258,6 @@ class VescForegroundService : Service() {
         telemetryPipeline.cancelStaleWatchdog()
     }
 
-    private fun persistCanId(deviceId: String?, discovered: Int?) {
-        val id = deviceId ?: return
-        val prefs = getSharedPreferences("vesc_can_cache", MODE_PRIVATE)
-        if (discovered != null) {
-            prefs.edit().putInt("can_id_$id", discovered).apply()
-        } else {
-            prefs.edit().remove("can_id_$id").apply()
-        }
-    }
-
-    private fun loadCachedCanId(deviceId: String?): Int? {
-        val id = deviceId ?: return null
-        val v = getSharedPreferences("vesc_can_cache", MODE_PRIVATE).getInt("can_id_$id", -1)
-        return if (v >= 0) v else null
-    }
-
     private fun armCanPingTimeout() {
         cancelCanPingTimeout()
         val session = boardSession ?: return
@@ -1280,6 +1265,7 @@ class VescForegroundService : Service() {
             canPingTimeoutHandle = null
             if (shouldCanPingFallback(canId, directConnection, boardStatus)) {
                 Log.d(VESC_SESSION_TAG, "CAN ping timeout, falling back to direct connection")
+                canId = null
                 directConnection = true
                 telemetryPipeline.updateCanId(null)
                 emitState()
@@ -1332,6 +1318,7 @@ class VescForegroundService : Service() {
         cancelCanPingTimeout()
         if (shouldSetDirectOnReady(canId, directConnection)) {
             Log.d(VESC_SESSION_TAG, "Telemetry received before CAN discovery, assuming direct connection")
+            canId = null
             directConnection = true
             telemetryPipeline.updateCanId(null)
         }
@@ -1341,7 +1328,6 @@ class VescForegroundService : Service() {
         if (boardStatus == BoardPhase.Connected) return
         reconnectScheduler.resetAttempts()
         boardStatus = BoardPhase.Connected
-        persistCanId(boardConfig?.deviceId, canId)
         recordLocalDiagnostic(
             "board_ready",
             boardConfig,
