@@ -941,9 +941,29 @@ class VescForegroundService : Service() {
                 cancelCanPingTimeout()
                 if (!shouldAcceptCanPingResponse(boardStatus, directConnection)) {
                     Log.d(VESC_SESSION_TAG, "Ignoring late CAN ping response, direct=$directConnection status=$boardStatus")
+                    recordLocalDiagnostic(
+                        "can_ping_response_ignored",
+                        boardConfig,
+                        "connect",
+                        mapOf(
+                            "message" to "Ignoring CAN ping response",
+                            "payload_size" to payload.size,
+                            "reason" to if (directConnection) "direct_connection_active" else "board_already_connected",
+                        ),
+                    )
                 } else if (payload.size > 1) {
                     canId = payload[1].toInt() and 0xff
                     telemetryPipeline.updateCanId(canId)
+                    recordLocalDiagnostic(
+                        "can_ping_can_id_discovered",
+                        boardConfig,
+                        "connect",
+                        mapOf(
+                            "message" to "CAN id discovered",
+                            "discovered_can_id" to canId,
+                            "payload_size" to payload.size,
+                        ),
+                    )
                     emitState()
                     startPolling()
                     sendPayloadWithRetry(byteArrayOf(
@@ -956,6 +976,16 @@ class VescForegroundService : Service() {
                     canId = null
                     directConnection = true
                     telemetryPipeline.updateCanId(null)
+                    recordLocalDiagnostic(
+                        "can_ping_direct_fallback",
+                        boardConfig,
+                        "connect",
+                        mapOf(
+                            "message" to "CAN ping returned no devices, using direct connection",
+                            "reason" to "empty_can_ping_response",
+                            "payload_size" to payload.size,
+                        ),
+                    )
                     emitState()
                     startPolling()
                 }
@@ -1250,6 +1280,16 @@ class VescForegroundService : Service() {
         val session = boardConfig ?: return
         val sessionToken = boardSession ?: return
         telemetryPipeline.armStaleWatchdog()
+        recordLocalDiagnostic(
+            "telemetry_polling_started",
+            session,
+            "telemetry",
+            mapOf(
+                "message" to "Telemetry polling started",
+                "polling_mode" to if (canId != null) "can" else if (directConnection) "direct" else "unavailable",
+                "poll_interval_ms" to session.pollIntervalMs,
+            ),
+        )
         pollingLoop.start(session, sessionToken, canId, directConnection)
     }
 
@@ -1268,6 +1308,16 @@ class VescForegroundService : Service() {
                 canId = null
                 directConnection = true
                 telemetryPipeline.updateCanId(null)
+                recordLocalDiagnostic(
+                    "can_ping_direct_fallback",
+                    boardConfig,
+                    "connect",
+                    mapOf(
+                        "message" to "CAN ping timed out, using direct connection",
+                        "reason" to "can_ping_timeout",
+                        "timeout_ms" to CAN_PING_TIMEOUT,
+                    ),
+                )
                 emitState()
                 startPolling()
             }
