@@ -106,14 +106,16 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       removeSelectedSession: s.removeSelectedSession,
     })),
   )
-  const { mapPoints, loadMapPoints, replaceDirectionPoint, clearDirectionPoint } = useMapStore(
-    useShallow((s) => ({
-      mapPoints: s.mapPoints,
-      loadMapPoints: s.load,
-      replaceDirectionPoint: s.replaceDirectionPoint,
-      clearDirectionPoint: s.clearDirectionPoint,
-    })),
-  )
+  const { mapPoints, loadMapPoints, saveMapPoint, replaceDirectionPoint, clearDirectionPoint } =
+    useMapStore(
+      useShallow((s) => ({
+        mapPoints: s.mapPoints,
+        loadMapPoints: s.load,
+        saveMapPoint: s.saveMapPoint,
+        replaceDirectionPoint: s.replaceDirectionPoint,
+        clearDirectionPoint: s.clearDirectionPoint,
+      })),
+    )
   const directionPoint = useMemo(
     () => mapPoints.find((point) => point.kind === 'direction') ?? null,
     [mapPoints],
@@ -324,6 +326,8 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     perspectiveEnabled,
     setPerspectiveEnabled,
     directionPoint,
+    mapPoints,
+    saveMapPoint,
     replaceDirectionPoint,
     clearDirectionPoint,
     sessions,

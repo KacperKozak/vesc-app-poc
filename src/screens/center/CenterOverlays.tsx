@@ -4,12 +4,14 @@ import {
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
   ClockCounterClockwiseIcon,
+  PlusIcon,
   SlidersHorizontalIcon,
 } from 'phosphor-react-native'
 import { useCallback, useEffect, useState, type RefObject } from 'react'
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import type { MapPointKind } from 'vesc-ble'
 
 import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
 import { FloatingBar } from '@/components/domain/main/FloatingBar'
@@ -18,6 +20,12 @@ import { IconButton } from '@/components/ui/base/IconButton'
 import { MapNavigationSelector } from '@/components/ui/menus/MapNavigationSelector'
 import { MapStyleSwitch } from '@/components/ui/menus/MapStyleSwitch'
 import type { MapNavigationMode, MapStyleKey } from '@/constants/mapStyles'
+import { getMapPointKindIcon } from '@/constants/mapPointIcons'
+import {
+  getMapPointKindColor,
+  getMapPointKindTextColor,
+  MAP_POINT_KIND_OPTIONS,
+} from '@/constants/mapPoints'
 import { theme } from '@/constants/theme'
 import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
@@ -65,6 +73,7 @@ interface CenterMapOverlayProps {
   exitWeather: () => void
   refreshWeather: () => void
   weatherLocation: { latitude: number; longitude: number } | null
+  addMapPoint: (kind: MapPointKind, latitude: number, longitude: number) => Promise<unknown>
 }
 
 interface CenterHistoryOverlayProps {
@@ -113,8 +122,33 @@ interface FullMapControlsProps {
 }
 
 function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const addRotation = useSharedValue(0)
+  const addButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${addRotation.value}deg` }],
+  }))
+
+  useEffect(() => {
+    addRotation.value = withTiming(addMenuOpen ? 45 : 0, { duration: 160 })
+  }, [addMenuOpen, addRotation])
+
+  const toggleAddMenu = useCallback(() => {
+    setAddMenuOpen((open) => !open)
+  }, [])
+
+  const handleSelectMapPoint = useCallback(
+    (kind: MapPointKind) => {
+      const center = mapRef.current?.getCenterCoordinate()
+      if (!center) return
+      setAddMenuOpen(false)
+      void map.addMapPoint(kind, center.latitude, center.longitude)
+    },
+    [map, mapRef],
+  )
+
   return (
     <>
+      {addMenuOpen ? <CenterPlacementPointer /> : null}
       <View pointerEvents="box-none" style={[styles.weatherPillContainer, { top }]}>
         <WeatherPill location={map.weatherLocation} onPress={map.enterWeather} />
       </View>
@@ -142,7 +176,46 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
         <ArrowLeftIcon size={20} color={theme.neutral.textSecondary} weight="bold" />
         <Text style={styles.mapBackLabel}>GO BACK</Text>
       </Pressable>
+      <View style={[styles.mapAddAction, { bottom }]}>
+        {addMenuOpen ? (
+          <View style={styles.mapAddMenu}>
+            {MAP_POINT_KIND_OPTIONS.map((option) => {
+              const IconComponent = getMapPointKindIcon(option.kind)
+              const color = getMapPointKindColor(option.kind)
+              return (
+                <Pressable
+                  key={option.kind}
+                  style={({ pressed }) => [styles.mapAddRow, pressed && styles.mapAddRowPressed]}
+                  onPress={() => handleSelectMapPoint(option.kind)}
+                >
+                  <Text style={styles.mapAddRowLabel}>{option.label}</Text>
+                  <View style={[styles.mapAddRowIcon, { borderColor: color }]}>
+                    <IconComponent
+                      size={16}
+                      color={getMapPointKindTextColor(option.kind)}
+                      weight="duotone"
+                    />
+                  </View>
+                  {option.kind !== 'direction' ? <View style={styles.mapAddRowBorder} /> : null}
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : null}
+        <Animated.View style={addButtonStyle}>
+          <IconButton icon={PlusIcon} size="lg" onPress={toggleAddMenu} />
+        </Animated.View>
+      </View>
     </>
+  )
+}
+
+function CenterPlacementPointer() {
+  return (
+    <View pointerEvents="none" style={styles.centerPlacementPointer}>
+      <View style={styles.centerPlacementLine} />
+      <View style={styles.centerPlacementBall} />
+    </View>
   )
 }
 
@@ -302,12 +375,14 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
         pointerEvents={mode === 'map' ? 'box-none' : 'none'}
         style={[styles.mapInterface, mode === 'map' ? styles.visible : styles.hidden]}
       >
-        <FullMapControls
-          mapRef={mapRef}
-          map={map}
-          top={Math.max(insets.top, 8)}
-          bottom={aboveStripBottom - 112}
-        />
+        {mode === 'map' ? (
+          <FullMapControls
+            mapRef={mapRef}
+            map={map}
+            top={Math.max(insets.top, 8)}
+            bottom={aboveStripBottom - 112}
+          />
+        ) : null}
       </View>
 
       <View
@@ -492,6 +567,79 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
+  mapAddAction: {
+    position: 'absolute',
+    right: 12,
+    zIndex: 31,
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  mapAddMenu: {
+    alignItems: 'flex-end',
+    borderRadius: 21,
+    overflow: 'hidden',
+    backgroundColor: theme.neutral.mapOverlaySelector,
+    borderWidth: 1,
+    borderColor: theme.neutral.borderMuted,
+  },
+  mapAddRow: {
+    height: 42,
+    paddingLeft: 16,
+    paddingRight: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  mapAddRowBorder: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1,
+    backgroundColor: theme.neutral.borderMuted,
+  },
+  mapAddRowPressed: {
+    opacity: 0.55,
+  },
+  mapAddRowLabel: {
+    color: theme.neutral.textPrimary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  mapAddRowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.neutral.surfaceDeep,
+  },
+  centerPlacementPointer: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    zIndex: 29,
+    alignItems: 'center',
+    transform: [{ translateX: -12 }, { translateY: -52 }],
+  },
+  centerPlacementLine: {
+    width: 1,
+    height: 40,
+    borderLeftWidth: 1,
+    borderStyle: 'dotted',
+    borderColor: theme.neutral.textSecondary,
+  },
+  centerPlacementBall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dotted',
+    borderColor: theme.neutral.textPrimary,
+    backgroundColor: theme.neutral.transparent,
+  },
   telemetryInterface: {
     ...StyleSheet.absoluteFill,
     zIndex: 6,
@@ -565,9 +713,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(9, 12, 18, 0.58)',
+    backgroundColor: theme.neutral.loadingOverlay,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.10)',
+    borderColor: theme.neutral.borderMuted,
     transform: [{ translateX: -17 }, { translateY: -17 }],
   },
 })

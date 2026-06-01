@@ -466,6 +466,10 @@ export function useCameraControls({
         previewZoomBaseRef.current = null
       },
       restorePreviewPan,
+      getCenterCoordinate() {
+        const center = currentCameraRef.current?.centerCoordinate ?? gpsCamera.centerCoordinate
+        return { longitude: center[0], latitude: center[1] }
+      },
       resetRotation() {
         followZoomLevelRef.current = null
         cameraRef.current?.setCamera({

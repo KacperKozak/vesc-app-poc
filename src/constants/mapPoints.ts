@@ -1,0 +1,44 @@
+import type { MapPointKind } from 'vesc-ble'
+
+import { theme } from '@/constants/theme'
+
+type MapPointThemeKey =
+  | 'bran'
+  | 'wheel'
+  | 'gps'
+  | 'target'
+  | 'warning'
+  | 'error'
+  | 'highlight'
+  | 'teal'
+
+export interface MapPointKindOption {
+  kind: MapPointKind
+  label: string
+  themeKey: MapPointThemeKey
+}
+
+export const MAP_POINT_KIND_OPTIONS: readonly MapPointKindOption[] = [
+  { kind: 'drop', label: 'Drop', themeKey: 'wheel' },
+  { kind: 'bonk', label: 'Bonk', themeKey: 'error' },
+  { kind: 'nose_slide', label: 'Nose slide', themeKey: 'target' },
+  { kind: 'trail_entry', label: 'Trail entry', themeKey: 'teal' },
+  { kind: 'viewpoint', label: 'Viewpoint', themeKey: 'highlight' },
+  { kind: 'charging', label: 'Charging', themeKey: 'bran' },
+  { kind: 'charging_food', label: 'Charging + food', themeKey: 'warning' },
+  { kind: 'direction', label: 'Direction point', themeKey: 'gps' },
+] as const
+
+const MAP_POINT_OPTIONS_BY_KIND = new Map(
+  MAP_POINT_KIND_OPTIONS.map((option) => [option.kind, option]),
+)
+
+export function getMapPointKindColor(kind: MapPointKind) {
+  return theme[MAP_POINT_OPTIONS_BY_KIND.get(kind)?.themeKey ?? MAP_POINT_KIND_OPTIONS[0].themeKey]
+    .color
+}
+
+export function getMapPointKindTextColor(kind: MapPointKind) {
+  return theme[MAP_POINT_OPTIONS_BY_KIND.get(kind)?.themeKey ?? MAP_POINT_KIND_OPTIONS[0].themeKey]
+    .text
+}

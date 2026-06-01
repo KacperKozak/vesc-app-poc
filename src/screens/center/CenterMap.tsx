@@ -42,6 +42,8 @@ import {
   type MapNavigationMode,
   type MapStyleKey,
 } from '@/constants/mapStyles'
+import { getMapPointKindIcon } from '@/constants/mapPointIcons'
+import { getMapPointKindColor, getMapPointKindTextColor } from '@/constants/mapPoints'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
@@ -90,6 +92,7 @@ export interface CenterMapHandle {
   togglePerspective: () => void
   setPadding: (bottom: number) => void
   zoomToLevel: (zoom: number) => void
+  getCenterCoordinate: () => { latitude: number; longitude: number }
 }
 
 interface SelectedHistoryMarker {
@@ -111,8 +114,8 @@ const DESTINATION_POINT_TEXT_COLOR = theme.gps.text
 const HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS = 50
 const HISTORY_ROUTE_HIGHLIGHT_DELAY_MS = 500
 const HISTORY_ROUTE_HIGHLIGHT_WIDTH = 0.24
-const HISTORY_ROUTE_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.98)'
-const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = 'rgba(255, 255, 255, 0)'
+const HISTORY_ROUTE_HIGHLIGHT_COLOR = theme.neutral.routeHighlight
+const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = theme.neutral.routeHighlightTransparent
 const HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS = 1400
 const HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS = 5200
 const HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM = 260
@@ -370,6 +373,7 @@ interface CenterMapLayersProps {
   rideMarkers: HistoryMarker[]
   rideGpsSamples: HistoryGpsSample[]
   directionPoint: MapPoint | null
+  mapPoints: MapPoint[]
   onClearDirectionPoint: () => void
   onSelectMarker: (selection: SelectedHistoryMarker) => void
 }
@@ -827,6 +831,7 @@ function CenterMapLayers({
   rideMarkers,
   rideGpsSamples,
   directionPoint,
+  mapPoints,
   onClearDirectionPoint,
   onSelectMarker,
 }: CenterMapLayersProps) {
@@ -839,7 +844,9 @@ function CenterMapLayers({
           minZoomLevel={14}
           maxZoomLevel={22}
           style={{
-            fillExtrusionColor: isOneDark ? '#3e4451' : '#e5e7eb',
+            fillExtrusionColor: isOneDark
+              ? theme.neutral.mapBuildingDark
+              : theme.neutral.mapBuildingLight,
             fillExtrusionHeight: ['coalesce', ['get', 'height'], 12],
             fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
             fillExtrusionOpacity: isOneDark ? 0.65 : 0.42,
@@ -886,6 +893,19 @@ function CenterMapLayers({
           onSelected={onClearDirectionPoint}
         />
       )}
+      {!historyActive &&
+        mapPoints
+          .filter((point) => point.kind !== 'direction')
+          .map((point) => (
+            <MapPin
+              key={point.id}
+              id={`center-map-point-${point.id}`}
+              coordinate={[point.longitude, point.latitude]}
+              color={getMapPointKindColor(point.kind)}
+              icon={getMapPointKindIcon(point.kind)}
+              iconColor={getMapPointKindTextColor(point.kind)}
+            />
+          ))}
     </>
   )
 }
@@ -908,6 +928,7 @@ interface CenterMapProps {
   onLongPressTarget: (target: { latitude: number; longitude: number }) => void
   onMapInteraction: () => void
   directionPoint: MapPoint | null
+  mapPoints: MapPoint[]
   onClearDirectionPoint: () => void
   weatherActive: boolean
   seekPosition: HistoryGpsSample | null
@@ -937,6 +958,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     onLongPressTarget,
     onMapInteraction,
     directionPoint,
+    mapPoints,
     weatherActive,
     onClearDirectionPoint,
     seekPosition,
@@ -1489,6 +1511,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
           directionPoint={directionPoint}
+          mapPoints={mapPoints}
           onClearDirectionPoint={onClearDirectionPoint}
           onSelectMarker={setSelectedHistoryMarker}
         />

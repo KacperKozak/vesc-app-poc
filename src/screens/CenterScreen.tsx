@@ -41,7 +41,7 @@ export function CenterScreen({
     return (
       <View style={styles.container}>
         <View style={styles.empty}>
-          <ActivityIndicator size="small" color="#3b82f6" />
+          <ActivityIndicator size="small" color={theme.wheel.color} />
           <Text style={styles.emptySubtitle}>Loading boards...</Text>
         </View>
       </View>
@@ -72,6 +72,7 @@ export function CenterScreen({
         }
         onMapInteraction={controller.dismissMapSelector}
         directionPoint={controller.directionPoint}
+        mapPoints={controller.mapPoints}
         onClearDirectionPoint={() => void controller.clearDirectionPoint()}
         weatherActive={controller.weatherActive}
         seekPosition={controller.seekGpsPosition}
@@ -105,6 +106,7 @@ export function CenterScreen({
           exitWeather: controller.exitWeatherMode,
           refreshWeather: controller.refreshWeather,
           weatherLocation: controller.liveLocations.at(-1) ?? controller.latestApproximateLocation,
+          addMapPoint: controller.saveMapPoint,
         }}
         history={{
           enterHistoryMode: controller.enterHistoryMode,
