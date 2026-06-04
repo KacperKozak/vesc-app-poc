@@ -92,6 +92,7 @@ export interface CenterMapHandle {
   togglePerspective: () => void
   setPadding: (bottom: number) => void
   zoomToLevel: (zoom: number) => void
+  focusCoordinate: (coordinate: [number, number]) => void
   getCenterCoordinate: () => { latitude: number; longitude: number }
 }
 
@@ -124,8 +125,13 @@ interface MapLayout {
   height: number
 }
 
-interface OffscreenMapIndicatorState {
-  id: 'gps' | 'direction'
+export interface OffscreenMapIndicatorState {
+  id: string
+  type: 'gps' | 'direction' | 'mapPoint'
+  coordinate: [number, number]
+  color: string
+  textColor: string
+  icon: Icon
   x: number
   y: number
   angleDeg: number
@@ -210,7 +216,10 @@ function nearlySameIndicator(
 }
 
 function clampedEdgeIndicator(
-  id: OffscreenMapIndicatorState['id'],
+  trackedPoint: Pick<
+    OffscreenMapIndicatorState,
+    'id' | 'type' | 'coordinate' | 'color' | 'textColor' | 'icon'
+  >,
   point: { x: number; y: number },
   layout: MapLayout,
 ): OffscreenMapIndicatorState | null {
@@ -242,7 +251,7 @@ function clampedEdgeIndicator(
   if (!Number.isFinite(scale)) return null
 
   return {
-    id,
+    ...trackedPoint,
     x: Math.min(right, Math.max(left, centerX + deltaX * scale)),
     y: Math.min(bottom, Math.max(top, centerY + deltaY * scale)),
     angleDeg: (Math.atan2(deltaX, -deltaY) * 180) / Math.PI,
@@ -307,21 +316,23 @@ function buildHistoryMarkerMessage(selection: SelectedHistoryMarker): string {
   return lines.join('\n')
 }
 
-function OffscreenMapIndicator({
+export function OffscreenMapIndicator({
   indicator,
   onPress,
 }: {
   indicator: OffscreenMapIndicatorState
   onPress: () => void
 }) {
-  const IconComponent = indicator.id === 'gps' ? CrosshairSimpleIcon : MapPinIcon
-  const color = indicator.id === 'gps' ? GPS_POINT_TEXT_COLOR : DESTINATION_POINT_TEXT_COLOR
-  const borderColor = indicator.id === 'gps' ? GPS_POINT_COLOR : DESTINATION_POINT_COLOR
+  const IconComponent = indicator.icon
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={
-        indicator.id === 'gps' ? 'Recenter map on current position' : 'Show direction point'
+        indicator.type === 'gps'
+          ? 'Recenter map on current position'
+          : indicator.type === 'direction'
+            ? 'Show direction point'
+            : 'Show selected map point'
       }
       onPress={onPress}
       style={({ pressed }) => [
@@ -340,10 +351,13 @@ function OffscreenMapIndicator({
           { transform: [{ rotate: `${indicator.angleDeg}deg` }] },
         ]}
       >
-        <ArrowUpIcon size={22} color={color} weight="bold" />
+        <ArrowUpIcon size={22} color={indicator.textColor} weight="bold" />
       </View>
-      <View pointerEvents="none" style={[styles.offscreenMapIcon, { borderColor }]}>
-        <IconComponent size={24} color={color} weight="bold" />
+      <View
+        pointerEvents="none"
+        style={[styles.offscreenMapIcon, { borderColor: indicator.color }]}
+      >
+        <IconComponent size={24} color={indicator.textColor} weight="bold" />
       </View>
     </Pressable>
   )
@@ -374,7 +388,10 @@ interface CenterMapLayersProps {
   rideGpsSamples: HistoryGpsSample[]
   directionPoint: MapPoint | null
   mapPoints: MapPoint[]
+  selectedMapPointId: string | null
   onClearDirectionPoint: () => void
+  onToggleMapPointSelection: (id: string) => void
+  onSuppressNextMapPress: () => void
   onSelectMarker: (selection: SelectedHistoryMarker) => void
 }
 
@@ -447,6 +464,7 @@ function HistoryMapLayers({
   activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
+  onSuppressNextMapPress,
   onSelectMarker,
 }: {
   rideRouteShape: CenterMapLayersProps['rideRouteShape']
@@ -456,6 +474,7 @@ function HistoryMapLayers({
   activeHistoryMapMetric: CenterMapLayersProps['activeHistoryMapMetric']
   rideMarkers: CenterMapLayersProps['rideMarkers']
   rideGpsSamples: CenterMapLayersProps['rideGpsSamples']
+  onSuppressNextMapPress: CenterMapLayersProps['onSuppressNextMapPress']
   onSelectMarker: CenterMapLayersProps['onSelectMarker']
 }) {
   const [highlightProgress, setHighlightProgress] = useState(0)
@@ -547,7 +566,10 @@ function HistoryMapLayers({
             coordinate={renderCoordinate}
             color={HISTORY_MARKER_COLORS[marker.type]}
             icon={HISTORY_MARKER_ICONS[marker.type]}
-            onSelected={() => onSelectMarker({ marker, gps })}
+            onSelected={() => {
+              onSuppressNextMapPress()
+              onSelectMarker({ marker, gps })
+            }}
           />
         ),
       )}
@@ -832,9 +854,17 @@ function CenterMapLayers({
   rideGpsSamples,
   directionPoint,
   mapPoints,
+  selectedMapPointId,
   onClearDirectionPoint,
+  onToggleMapPointSelection,
+  onSuppressNextMapPress,
   onSelectMarker,
 }: CenterMapLayersProps) {
+  const selectedMapPoint = useMemo(
+    () => mapPoints.find((point) => point.id === selectedMapPointId) ?? null,
+    [mapPoints, selectedMapPointId],
+  )
+
   return (
     <>
       {showBuildings3d && (
@@ -874,6 +904,7 @@ function CenterMapLayers({
           activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
+          onSuppressNextMapPress={onSuppressNextMapPress}
           onSelectMarker={onSelectMarker}
         />
       ) : (
@@ -890,7 +921,10 @@ function CenterMapLayers({
           id="center-direction-position"
           coordinate={[directionPoint.longitude, directionPoint.latitude]}
           color={DESTINATION_POINT_COLOR}
-          onSelected={onClearDirectionPoint}
+          onSelected={() => {
+            onSuppressNextMapPress()
+            onClearDirectionPoint()
+          }}
         />
       )}
       {!historyActive &&
@@ -904,6 +938,11 @@ function CenterMapLayers({
               color={getMapPointKindColor(point.kind)}
               icon={getMapPointKindIcon(point.kind)}
               iconColor={getMapPointKindTextColor(point.kind)}
+              selected={selectedMapPoint?.id === point.id}
+              onSelected={() => {
+                onSuppressNextMapPress()
+                onToggleMapPointSelection(point.id)
+              }}
             />
           ))}
     </>
@@ -927,8 +966,13 @@ interface CenterMapProps {
   onHeadingChange: (heading: number) => void
   onLongPressTarget: (target: { latitude: number; longitude: number }) => void
   onMapInteraction: () => void
+  onMapPress: () => void
+  onEnterMapMode: () => void
+  onOffscreenMapIndicatorsChange: (indicators: OffscreenMapIndicatorState[]) => void
   directionPoint: MapPoint | null
   mapPoints: MapPoint[]
+  selectedMapPointId: string | null
+  onToggleMapPointSelection: (id: string) => void
   onClearDirectionPoint: () => void
   weatherActive: boolean
   seekPosition: HistoryGpsSample | null
@@ -957,8 +1001,13 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     onHeadingChange,
     onLongPressTarget,
     onMapInteraction,
+    onMapPress,
+    onEnterMapMode,
+    onOffscreenMapIndicatorsChange,
     directionPoint,
     mapPoints,
+    selectedMapPointId,
+    onToggleMapPointSelection,
     weatherActive,
     onClearDirectionPoint,
     seekPosition,
@@ -971,6 +1020,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const mapRevealedRef = useRef(false)
   const mapViewRef = useRef<ElementRef<typeof Mapbox.MapView> | null>(null)
   const offscreenProjectionRequestRef = useRef(0)
+  const suppressNextMapPressRef = useRef(false)
+  const suppressNextMapPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mapOpacity] = useState(() => new Animated.Value(0))
   const [cameraReady, setCameraReady] = useState(false)
   const [selectedHistoryMarker, setSelectedHistoryMarker] = useState<SelectedHistoryMarker | null>(
@@ -1032,6 +1083,12 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       usableCoordinate(accuracyFix) ??
       usableCoordinate(cameraFix),
     [accuracyFix, cameraFix, gpsFix, initialApproximateFix, latestApproximateLocation],
+  )
+  const selectedMapPoint = useMemo(
+    () =>
+      mapPoints.find((point) => point.kind !== 'direction' && point.id === selectedMapPointId) ??
+      null,
+    [mapPoints, selectedMapPointId],
   )
   const retainedGpsBearing = gpsPresentation.nextReliableBearing
   const gpsHeadingMode = mapNavigationMode === 'gpsHeading'
@@ -1143,7 +1200,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     if (
       mapView == null ||
       historyActive ||
-      (offscreenMapGpsCoordinate == null && directionPoint == null) ||
+      (offscreenMapGpsCoordinate == null && directionPoint == null && selectedMapPoint == null) ||
       mapLayout.width <= 0 ||
       mapLayout.height <= 0
     ) {
@@ -1158,19 +1215,42 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       ...(offscreenMapGpsCoordinate
         ? [
             {
-              id: 'gps' as const,
+              id: 'gps',
+              type: 'gps' as const,
               coordinate: [
                 offscreenMapGpsCoordinate.longitude,
                 offscreenMapGpsCoordinate.latitude,
               ] as [number, number],
+              color: GPS_POINT_COLOR,
+              textColor: GPS_POINT_TEXT_COLOR,
+              icon: CrosshairSimpleIcon,
             },
           ]
         : []),
       ...(directionPoint
         ? [
             {
-              id: 'direction' as const,
+              id: 'direction',
+              type: 'direction' as const,
               coordinate: [directionPoint.longitude, directionPoint.latitude] as [number, number],
+              color: DESTINATION_POINT_COLOR,
+              textColor: DESTINATION_POINT_TEXT_COLOR,
+              icon: MapPinIcon,
+            },
+          ]
+        : []),
+      ...(selectedMapPoint
+        ? [
+            {
+              id: `map-point-${selectedMapPoint.id}`,
+              type: 'mapPoint' as const,
+              coordinate: [selectedMapPoint.longitude, selectedMapPoint.latitude] as [
+                number,
+                number,
+              ],
+              color: getMapPointKindColor(selectedMapPoint.kind),
+              textColor: getMapPointKindTextColor(selectedMapPoint.kind),
+              icon: getMapPointKindIcon(selectedMapPoint.kind),
             },
           ]
         : []),
@@ -1188,7 +1268,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           const [x, y] = trackedPoint.point
           if (typeof x !== 'number' || typeof y !== 'number') return []
 
-          const detectedIndicator = clampedEdgeIndicator(trackedPoint.id, { x, y }, mapLayout)
+          const detectedIndicator = clampedEdgeIndicator(trackedPoint, { x, y }, mapLayout)
           if (!detectedIndicator) return []
           if (!camera) return [detectedIndicator]
 
@@ -1200,11 +1280,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
             camera,
             mapLayout,
           )
-          const positionedIndicator = clampedEdgeIndicator(
-            trackedPoint.id,
-            positionedPoint,
-            mapLayout,
-          )
+          const positionedIndicator = clampedEdgeIndicator(trackedPoint, positionedPoint, mapLayout)
           return [positionedIndicator ?? detectedIndicator]
         })
         setOffscreenMapIndicators((current) =>
@@ -1215,7 +1291,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         if (offscreenProjectionRequestRef.current !== requestId) return
         setOffscreenMapIndicators((current) => (current.length === 0 ? current : []))
       })
-  }, [currentCameraRef, directionPoint, historyActive, mapLayout, offscreenMapGpsCoordinate])
+  }, [
+    currentCameraRef,
+    directionPoint,
+    historyActive,
+    mapLayout,
+    offscreenMapGpsCoordinate,
+    selectedMapPoint,
+  ])
 
   const handleOffscreenIndicatorPress = useCallback(
     (indicator: OffscreenMapIndicatorState) => {
@@ -1224,12 +1307,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         recenterLive({ resetPadding: true })
         return
       }
-      if (!directionPoint) return
+      if (indicator.type === 'direction' && !directionPoint) return
+      if (indicator.type === 'mapPoint') onEnterMapMode()
 
       setFollowGps(false)
       const currentCamera = currentCameraRef.current
       cameraRef.current?.setCamera({
-        centerCoordinate: [directionPoint.longitude, directionPoint.latitude],
+        centerCoordinate:
+          indicator.type === 'direction' && directionPoint
+            ? [directionPoint.longitude, directionPoint.latitude]
+            : indicator.coordinate,
         zoomLevel: currentCamera?.zoomLevel,
         heading: currentCamera?.heading,
         pitch: currentCamera?.pitch,
@@ -1237,7 +1324,15 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         animationMode: 'easeTo',
       })
     },
-    [cameraRef, currentCameraRef, directionPoint, onMapInteraction, recenterLive, setFollowGps],
+    [
+      cameraRef,
+      currentCameraRef,
+      directionPoint,
+      onEnterMapMode,
+      onMapInteraction,
+      recenterLive,
+      setFollowGps,
+    ],
   )
 
   useEffect(() => {
@@ -1363,6 +1458,42 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     [historyActive, onLongPressTarget, onMapInteraction],
   )
 
+  const handleSuppressNextMapPress = useCallback(() => {
+    if (suppressNextMapPressTimeoutRef.current) {
+      clearTimeout(suppressNextMapPressTimeoutRef.current)
+    }
+    suppressNextMapPressRef.current = true
+    suppressNextMapPressTimeoutRef.current = setTimeout(() => {
+      suppressNextMapPressRef.current = false
+      suppressNextMapPressTimeoutRef.current = null
+    }, 250)
+  }, [])
+
+  const handleMapPress = useCallback(() => {
+    if (suppressNextMapPressRef.current) {
+      suppressNextMapPressRef.current = false
+      if (suppressNextMapPressTimeoutRef.current) {
+        clearTimeout(suppressNextMapPressTimeoutRef.current)
+        suppressNextMapPressTimeoutRef.current = null
+      }
+      return
+    }
+    onMapPress()
+  }, [onMapPress])
+
+  useEffect(() => {
+    onOffscreenMapIndicatorsChange(offscreenMapIndicators)
+  }, [offscreenMapIndicators, onOffscreenMapIndicatorsChange])
+
+  useEffect(
+    () => () => {
+      if (suppressNextMapPressTimeoutRef.current) {
+        clearTimeout(suppressNextMapPressTimeoutRef.current)
+      }
+    },
+    [],
+  )
+
   const handleCameraChanged = useCallback(
     (state: {
       properties: { center: number[]; zoom: number; heading: number; pitch: number }
@@ -1479,7 +1610,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         logoEnabled={false}
         attributionEnabled={false}
         onDidFinishLoadingMap={handleMapLoaded}
-        onPress={onMapInteraction}
+        onPress={handleMapPress}
         onLongPress={handleLongPress}
         onCameraChanged={handleCameraChanged}
       >
@@ -1512,7 +1643,10 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           rideGpsSamples={rideGpsSamples}
           directionPoint={directionPoint}
           mapPoints={mapPoints}
+          selectedMapPointId={selectedMapPointId}
           onClearDirectionPoint={onClearDirectionPoint}
+          onToggleMapPointSelection={onToggleMapPointSelection}
+          onSuppressNextMapPress={handleSuppressNextMapPress}
           onSelectMarker={setSelectedHistoryMarker}
         />
       </Mapbox.MapView>
@@ -1533,13 +1667,15 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         </Text>
       ) : null}
       {mode === 'telemetry' ? <MapVignette mode={mode} idPrefix="telemetry-map-vignette" /> : null}
-      {offscreenMapIndicators.map((indicator) => (
-        <OffscreenMapIndicator
-          key={indicator.id}
-          indicator={indicator}
-          onPress={() => handleOffscreenIndicatorPress(indicator)}
-        />
-      ))}
+      {mode !== 'telemetry'
+        ? offscreenMapIndicators.map((indicator) => (
+            <OffscreenMapIndicator
+              key={indicator.id}
+              indicator={indicator}
+              onPress={() => handleOffscreenIndicatorPress(indicator)}
+            />
+          ))
+        : null}
       <View style={styles.edgeGuardLeft} pointerEvents="box-only" />
       <View style={styles.edgeGuardRight} pointerEvents="box-only" />
     </Animated.View>

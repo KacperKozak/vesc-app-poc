@@ -10,6 +10,7 @@ interface MapPinProps {
   icon?: Icon
   iconColor?: string
   bearingDeg?: number | null
+  selected?: boolean
   onSelected?: () => void
 }
 
@@ -19,13 +20,17 @@ export function MapPin({
   icon: IconComponent,
   iconColor,
   bearingDeg,
+  selected = false,
   onSelected,
 }: MapPinProps) {
   if (IconComponent) {
     return (
       <MarkerView coordinate={coordinate} allowOverlap>
-        <Pressable style={[styles.iconPin, { borderColor: color }]} onPress={onSelected}>
-          <IconComponent size={11} color={iconColor ?? color} weight="bold" />
+        <Pressable
+          style={[styles.iconPin, { borderColor: color }, selected && styles.iconPinSelected]}
+          onPress={onSelected}
+        >
+          <IconComponent size={selected ? 24 : 11} color={iconColor ?? color} weight="bold" />
         </Pressable>
       </MarkerView>
     )
@@ -70,11 +75,22 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: theme.neutral.mapOverlayPin,
     opacity: 0.78,
-    shadowColor: '#000',
+    shadowColor: theme.neutral.surfaceDeep,
     shadowOpacity: 0.22,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
+  },
+  iconPinSelected: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    backgroundColor: theme.neutral.surfaceDeep,
+    opacity: 1,
+    shadowOpacity: 0.36,
+    shadowRadius: 7,
+    elevation: 8,
   },
   pinCore: {
     width: 8,

@@ -30,7 +30,11 @@ import { theme } from '@/constants/theme'
 import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
 import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
-import type { CenterMapHandle } from '@/screens/center/CenterMap'
+import {
+  OffscreenMapIndicator,
+  type CenterMapHandle,
+  type OffscreenMapIndicatorState,
+} from '@/screens/center/CenterMap'
 import type { MapSelector } from '@/screens/center/centerScreenStore'
 import type { CenterViewState } from '@/screens/center/centerViewState'
 import { HistoryControls } from '@/screens/center/HistoryControls'
@@ -74,6 +78,8 @@ interface CenterMapOverlayProps {
   refreshWeather: () => void
   weatherLocation: { latitude: number; longitude: number } | null
   addMapPoint: (kind: MapPointKind, latitude: number, longitude: number) => Promise<unknown>
+  offscreenMapIndicators: OffscreenMapIndicatorState[]
+  onOffscreenIndicatorPress: (indicator: OffscreenMapIndicatorState) => void
 }
 
 interface CenterHistoryOverlayProps {
@@ -113,6 +119,11 @@ interface CenterOverlaysProps {
 const RECORD_BUTTON_HEIGHT = 48
 const HISTORY_BUTTON_SIZE = 54
 const TELEMETRY_FADE_TIMING = { duration: 260 } as const
+const COMPACT_MAP_POINT_KINDS: readonly MapPointKind[] = ['drop', 'bonk', 'nose_slide']
+
+function isCompactMapPointKind(kind: MapPointKind) {
+  return COMPACT_MAP_POINT_KINDS.includes(kind)
+}
 
 interface FullMapControlsProps {
   mapRef: RefObject<CenterMapHandle | null>
@@ -144,6 +155,12 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
       void map.addMapPoint(kind, center.latitude, center.longitude)
     },
     [map, mapRef],
+  )
+  const compactMapPointOptions = MAP_POINT_KIND_OPTIONS.filter((option) =>
+    isCompactMapPointKind(option.kind),
+  )
+  const stackedMapPointOptions = MAP_POINT_KIND_OPTIONS.filter(
+    (option) => !isCompactMapPointKind(option.kind),
   )
 
   return (
@@ -179,7 +196,37 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
       <View style={[styles.mapAddAction, { bottom }]}>
         {addMenuOpen ? (
           <View style={styles.mapAddMenu}>
-            {MAP_POINT_KIND_OPTIONS.map((option) => {
+            <View style={styles.mapAddCompactRow}>
+              {compactMapPointOptions.map((option, index) => {
+                const IconComponent = getMapPointKindIcon(option.kind)
+                const color = getMapPointKindColor(option.kind)
+                return (
+                  <Pressable
+                    key={option.kind}
+                    accessibilityRole="button"
+                    accessibilityLabel={option.label}
+                    style={({ pressed }) => [
+                      styles.mapAddCompactItem,
+                      pressed && styles.mapAddRowPressed,
+                    ]}
+                    onPress={() => handleSelectMapPoint(option.kind)}
+                  >
+                    <View style={[styles.mapAddRowIcon, { borderColor: color }]}>
+                      <IconComponent
+                        size={16}
+                        color={getMapPointKindTextColor(option.kind)}
+                        weight="duotone"
+                      />
+                    </View>
+                    {index < compactMapPointOptions.length - 1 ? (
+                      <View style={styles.mapAddCompactDivider} />
+                    ) : null}
+                  </Pressable>
+                )
+              })}
+              <View style={styles.mapAddRowBorder} />
+            </View>
+            {stackedMapPointOptions.map((option, index) => {
               const IconComponent = getMapPointKindIcon(option.kind)
               const color = getMapPointKindColor(option.kind)
               return (
@@ -196,7 +243,9 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
                       weight="duotone"
                     />
                   </View>
-                  {option.kind !== 'direction' ? <View style={styles.mapAddRowBorder} /> : null}
+                  {index < stackedMapPointOptions.length - 1 ? (
+                    <View style={styles.mapAddRowBorder} />
+                  ) : null}
                 </Pressable>
               )
             })}
@@ -213,8 +262,8 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
 function CenterPlacementPointer() {
   return (
     <View pointerEvents="none" style={styles.centerPlacementPointer}>
-      <View style={styles.centerPlacementLine} />
       <View style={styles.centerPlacementBall} />
+      <View style={styles.centerPlacementDot} />
     </View>
   )
 }
@@ -370,6 +419,19 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
           ]}
         />
       </Animated.View>
+
+      <View
+        pointerEvents={telemetryInteractive ? 'box-none' : 'none'}
+        style={styles.telemetryOffscreenIndicators}
+      >
+        {map.offscreenMapIndicators.map((indicator) => (
+          <OffscreenMapIndicator
+            key={indicator.id}
+            indicator={indicator}
+            onPress={() => map.onOffscreenIndicatorPress(indicator)}
+          />
+        ))}
+      </View>
 
       <View
         pointerEvents={mode === 'map' ? 'box-none' : 'none'}
@@ -575,7 +637,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   mapAddMenu: {
-    alignItems: 'flex-end',
+    minWidth: 178,
+    alignItems: 'stretch',
     borderRadius: 21,
     overflow: 'hidden',
     backgroundColor: theme.neutral.mapOverlaySelector,
@@ -588,8 +651,29 @@ const styles = StyleSheet.create({
     paddingRight: 5,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     gap: 12,
+  },
+  mapAddCompactRow: {
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  mapAddCompactItem: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  mapAddCompactDivider: {
+    position: 'absolute',
+    top: 7,
+    right: 0,
+    bottom: 7,
+    width: 1,
+    backgroundColor: theme.neutral.borderMuted,
   },
   mapAddRowBorder: {
     position: 'absolute',
@@ -622,27 +706,31 @@ const styles = StyleSheet.create({
     top: '50%',
     zIndex: 29,
     alignItems: 'center',
-    transform: [{ translateX: -12 }, { translateY: -52 }],
-  },
-  centerPlacementLine: {
-    width: 1,
-    height: 40,
-    borderLeftWidth: 1,
-    borderStyle: 'dotted',
-    borderColor: theme.neutral.textSecondary,
+    justifyContent: 'center',
+    transform: [{ translateX: -12 }, { translateY: -12 }],
   },
   centerPlacementBall: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderStyle: 'dotted',
     borderColor: theme.neutral.textPrimary,
     backgroundColor: theme.neutral.transparent,
+  },
+  centerPlacementDot: {
+    position: 'absolute',
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.neutral.textPrimary,
   },
   telemetryInterface: {
     ...StyleSheet.absoluteFill,
     zIndex: 6,
+  },
+  telemetryOffscreenIndicators: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 40,
   },
   mapInterface: {
     ...StyleSheet.absoluteFill,

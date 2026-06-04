@@ -20,12 +20,11 @@ export interface MapPointKindOption {
 
 export const MAP_POINT_KIND_OPTIONS: readonly MapPointKindOption[] = [
   { kind: 'drop', label: 'Drop', themeKey: 'wheel' },
-  { kind: 'bonk', label: 'Bonk', themeKey: 'error' },
+  { kind: 'bonk', label: 'Bonk', themeKey: 'warning' },
   { kind: 'nose_slide', label: 'Nose slide', themeKey: 'target' },
   { kind: 'trail_entry', label: 'Trail entry', themeKey: 'teal' },
   { kind: 'viewpoint', label: 'Viewpoint', themeKey: 'highlight' },
   { kind: 'charging', label: 'Charging', themeKey: 'bran' },
-  { kind: 'charging_food', label: 'Charging + food', themeKey: 'warning' },
   { kind: 'direction', label: 'Direction point', themeKey: 'gps' },
 ] as const
 
