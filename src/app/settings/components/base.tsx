@@ -229,11 +229,24 @@ function DeviceRowShowcase() {
 }
 
 function BatteryBarShowcase() {
+  const [empty, setEmpty] = useState(false)
   const points = useMemo(() => generateSparklineData(60, 82, 3), [])
 
   return (
-    <ShowcaseCard name="BatteryBar">
-      <BatteryBar percent={82} voltage={74.5} series={points} />
+    <ShowcaseCard
+      name="BatteryBar"
+      controls={
+        <>
+          <ToggleRow label="empty" value={empty} onToggle={setEmpty} />
+        </>
+      }
+    >
+      <BatteryBar
+        percent={empty ? null : 82}
+        voltage={empty ? null : 74.5}
+        series={empty ? [] : points}
+        range={{ min: 42, max: 84 }}
+      />
     </ShowcaseCard>
   )
 }
