@@ -1,5 +1,20 @@
 import { theme } from '@/constants/theme'
 
+export interface OpenMeteoHourInput {
+  times: string[]
+  temperatures: number[]
+  weatherCodes: number[]
+  precipitationProbabilities: (number | null)[]
+}
+
+export interface WeatherHourForecast {
+  hour: string
+  hourNum: number
+  temperature: number
+  weatherCode: number
+  precipitationProbability: number
+}
+
 export type WeatherIconName =
   | 'sun'
   | 'moon'
@@ -54,10 +69,28 @@ export function weatherCodeToLabel(code: number): string {
 }
 
 export function parseHourLabel(isoTime: string): string {
-  const date = new Date(isoTime)
-  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+  const [, time = ''] = isoTime.split('T')
+  const [hour = '0', minute = '00'] = time.split(':')
+  return `${Number(hour)}:${minute.padStart(2, '0')}`
 }
 
-export function isFutureHour(isoTime: string): boolean {
-  return new Date(isoTime).getTime() > Date.now()
+function parseHourNumber(isoTime: string): number {
+  const [, time = ''] = isoTime.split('T')
+  const [hour = '0'] = time.split(':')
+  return Number(hour)
+}
+
+export function buildOpenMeteoHourlyForecast({
+  times,
+  temperatures,
+  weatherCodes,
+  precipitationProbabilities,
+}: OpenMeteoHourInput): WeatherHourForecast[] {
+  return times.map((time, index) => ({
+    hour: parseHourLabel(time),
+    hourNum: parseHourNumber(time),
+    temperature: Math.round(temperatures[index]),
+    weatherCode: weatherCodes[index],
+    precipitationProbability: precipitationProbabilities[index] ?? 0,
+  }))
 }
