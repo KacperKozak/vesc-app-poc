@@ -248,6 +248,7 @@ function BatteryStep({ wizard }: Props) {
         onChangeParallelCount={wizard.setParallelCount}
         onChangeManualMinVoltage={wizard.setManualMinVoltage}
         onChangeManualMaxVoltage={wizard.setManualMaxVoltage}
+        testIDPrefix="add-board-battery"
       />
       <NavActions
         canContinue={wizard.batteryWarning == null}

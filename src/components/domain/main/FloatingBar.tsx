@@ -151,6 +151,7 @@ export function FloatingBar({
             { backgroundColor: pill.config.bg, borderColor: pill.config.border },
           ]}
           onPress={pill.onPress}
+          testID="floating-bar-connect"
         >
           <Text style={[styles.pillText, { color: pill.config.text }]} numberOfLines={1}>
             {pill.text}
@@ -169,6 +170,7 @@ export function FloatingBar({
         ]}
         disabled={!recording && !canToggleRecording(bleStatus)}
         onPress={toggleRecord}
+        testID="floating-bar-record"
       >
         {recording ? (
           <StopIcon size={22} color={theme.neutral.textPrimary} weight="fill" />

@@ -101,6 +101,7 @@ export function TopBar({
               if (!activeBoard) return
               router.push({ pathname: routes.editBoard, params: { boardId: activeBoard.id } })
             }}
+            testID="board-edit-button"
           >
             <PencilSimpleIcon
               size={14}
@@ -110,7 +111,11 @@ export function TopBar({
           </Pressable>
           <View style={styles.divider} />
           {canDisconnect && (
-            <Pressable style={styles.plugButton} onPress={onDisconnect}>
+            <Pressable
+              style={styles.plugButton}
+              onPress={onDisconnect}
+              testID="board-disconnect-button"
+            >
               <PowerIcon size={15} color={theme.error.color} weight="bold" />
             </Pressable>
           )}

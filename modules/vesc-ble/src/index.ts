@@ -588,7 +588,14 @@ const E2E_BOARD_SCAN_RESULT: DeviceFoundEvent = {
 
 let e2eScanActive = false
 let e2eScanTimer: ReturnType<typeof setTimeout> | null = null
+let e2eSelectedBoardId: string | null = null
+let e2eConnectedBoardId: string | null = null
+let e2eConnectionSeq = 0
+let e2eLastTelemetry: TelemetryEvent | null = null
+let e2eTelemetryTimer: ReturnType<typeof setInterval> | null = null
 const e2eDeviceListeners = new Set<(event: DeviceFoundEvent) => void>()
+const e2eLiveStateListeners = new Set<(event: LiveStateEvent) => void>()
+const e2eTelemetryListeners = new Set<(event: TelemetryEvent) => void>()
 
 function emitE2eDevice(event: DeviceFoundEvent): void {
   for (const listener of e2eDeviceListeners) {
@@ -602,8 +609,115 @@ function clearE2eScanTimer(): void {
   e2eScanTimer = null
 }
 
+function makeE2eTelemetry(): TelemetryEvent {
+  const now = Date.now()
+  const wobble = Math.sin(now / 1000)
+  return {
+    hasFault: false,
+    faultCode: 0,
+    pitch: wobble * 3,
+    roll: wobble,
+    balancePitch: wobble * 2,
+    balanceCurrent: 0.6,
+    speed: 12 + wobble,
+    batteryVoltage: 75.6,
+    batteryPercent: 75,
+    motorCurrent: 8 + wobble,
+    batteryCurrent: -3.4,
+    erpm: 2400,
+    dutyCycle: 0.18,
+    state: 0,
+    stateName: 'RUNNING',
+    switchState: 0,
+    adc1: 1.2,
+    adc2: 1.1,
+    odometer: 1234,
+    tempMosfet: 36,
+    tempMotor: 33,
+    avgLatency: 18,
+    lastPacketAt: now,
+  }
+}
+
+function getE2eLiveState(): LiveStateEvent {
+  const connected = e2eConnectedBoardId != null
+  return {
+    board: {
+      phase: connected ? 'connected' : 'idle',
+      selectedBoardId: e2eSelectedBoardId,
+      connectedBoardId: e2eConnectedBoardId,
+      bleId: connected ? E2E_BOARD_SCAN_RESULT.id : null,
+      name: connected ? E2E_BOARD_SCAN_RESULT.name : null,
+      connectionSeq: e2eConnectionSeq,
+      lastTelemetryAt: e2eLastTelemetry?.lastPacketAt ?? null,
+      recentTelemetry: e2eLastTelemetry ? [e2eLastTelemetry] : [],
+      error: null,
+      autoConnect: true,
+    },
+    gps: {
+      phase: 'idle',
+      latestFix: null,
+      latestApproximateFix: null,
+      latestPreciseFix: null,
+      recentLocations: [],
+      error: null,
+    },
+    scan: {
+      phase: e2eScanActive ? 'scanning' : 'idle',
+      devices: e2eScanActive ? [E2E_BOARD_SCAN_RESULT] : [],
+      error: null,
+    },
+    recording: {
+      enabled: false,
+      activeBoardId: connected ? e2eConnectedBoardId : null,
+      startedAt: null,
+    },
+  }
+}
+
+function emitE2eLiveState(): void {
+  const state = getE2eLiveState()
+  for (const listener of e2eLiveStateListeners) {
+    listener(state)
+  }
+}
+
+function clearE2eTelemetryTimer(): void {
+  if (!e2eTelemetryTimer) return
+  clearInterval(e2eTelemetryTimer)
+  e2eTelemetryTimer = null
+}
+
+function emitE2eTelemetry(): void {
+  if (!e2eConnectedBoardId) return
+  e2eLastTelemetry = makeE2eTelemetry()
+  for (const listener of e2eTelemetryListeners) {
+    listener(e2eLastTelemetry)
+  }
+  emitE2eLiveState()
+}
+
+function startE2eBoardSession(boardId: string): void {
+  e2eSelectedBoardId = boardId
+  e2eConnectedBoardId = boardId
+  e2eConnectionSeq += 1
+  e2eScanActive = false
+  clearE2eScanTimer()
+  clearE2eTelemetryTimer()
+  emitE2eTelemetry()
+  e2eTelemetryTimer = setInterval(emitE2eTelemetry, 1000)
+}
+
+function stopE2eBoardSession(): void {
+  e2eConnectedBoardId = null
+  e2eLastTelemetry = null
+  clearE2eTelemetryTimer()
+  emitE2eLiveState()
+}
+
 function withE2eScanState(state: LiveStateEvent): LiveStateEvent {
   if (!E2E_ENABLED) return state
+  if (e2eSelectedBoardId || e2eConnectedBoardId) return getE2eLiveState()
   return {
     ...state,
     scan: {
@@ -704,11 +818,21 @@ export function stopGeigerSimulation(): void {
 
 /** Select saved board by app board id. Native reads BLE id/name from its DB and owns connect. */
 export async function selectBoard(boardId: string): Promise<void> {
+  if (E2E_ENABLED) {
+    startE2eBoardSession(boardId)
+    return
+  }
+
   return native.selectBoard(boardId)
 }
 
 /** Stop native board session. GPS monitoring may continue independently. */
 export async function stopBoard(): Promise<void> {
+  if (E2E_ENABLED) {
+    stopE2eBoardSession()
+    return
+  }
+
   return native.stopBoard()
 }
 
@@ -738,11 +862,18 @@ export function getDiagnosticStatus(): DiagnosticStatus {
 
 /** Read native-owned live state. UI should mirror this, not invent connection state. */
 export function getLiveState(): LiveStateEvent {
+  if (E2E_ENABLED && (e2eSelectedBoardId || e2eConnectedBoardId)) return getE2eLiveState()
   return withE2eScanState(native.getLiveState())
 }
 
 /** Persist native auto-connect target. Native can use this while JS is frozen. */
 export function setSelectedBoard(boardId: string | null): void {
+  if (E2E_ENABLED) {
+    e2eSelectedBoardId = boardId
+    emitE2eLiveState()
+    return
+  }
+
   native.setSelectedBoard(boardId)
 }
 
@@ -971,10 +1102,20 @@ export function addErrorListener(cb: (event: ErrorEvent) => void): EventSubscrip
 }
 
 export function addLiveStateListener(cb: (event: LiveStateEvent) => void): EventSubscription {
+  if (E2E_ENABLED) {
+    e2eLiveStateListeners.add(cb)
+    return { remove: () => e2eLiveStateListeners.delete(cb) }
+  }
+
   return emitter.addListener('onLiveState', cb)
 }
 
 export function addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {
+  if (E2E_ENABLED) {
+    e2eTelemetryListeners.add(cb)
+    return { remove: () => e2eTelemetryListeners.delete(cb) }
+  }
+
   return emitter.addListener('onTelemetry', cb)
 }
 
