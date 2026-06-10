@@ -9,15 +9,39 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK command-line tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -L --retry 3 --fail \
+            -o /tmp/commandlinetools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip
+          unzip -q /tmp/commandlinetools.zip -d /tmp/cmdline-tools
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+          mv /tmp/cmdline-tools/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.1.12297006"
       - run: bun install
-      - run: bun run ts
-      - run: bun run lint
-      - run: bun run test:bun
+      - run: bun run copy:shared
+      - run: bun x expo prebuild --platform android --no-install
+      - run: bun run check
 
   build:
     runs-on: ubuntu-latest
