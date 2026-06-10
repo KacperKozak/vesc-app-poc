@@ -48,6 +48,10 @@ _Avoid_: Playback, logs
 A map-visible point in Ride History that explains a ride boundary, connection loss, interruption, or notable recording condition.
 _Avoid_: Telemetry marker, debug marker, log point
 
+**Media History Asset**:
+A phone photo or video whose capture time falls inside a selected Ride Recording and which can be placed using a nearby recording-backed GPS fix. The asset remains owned by the OS photo library and is never copied into Ride History.
+_Avoid_: Ride photo, recording media, uploaded media
+
 **Map Point**:
 A user-authored map-visible location that is independent from Ride Recording and Ride History. A Map Point may describe a direction target, trail feature, viewpoint, charging place, or similar location.
 _Avoid_: Marker, GPS point, telemetry marker
@@ -95,6 +99,7 @@ _Avoid_: Error log, debug session, crash report
 - A **Privacy Zone** limits what **Ride Recording** data is retained without changing **Live State**.
 - A **Ride Recording** becomes part of **Ride History**.
 - A **Ride History Marker** belongs to **Ride History** and may explain where a **Ride Recording** lost or regained board data.
+- A **Media History Asset** is a local-only view of an OS photo-library asset matched to one selected **Ride Recording** by capture time and placed from a nearby recording-backed **GPS Fix**.
 - A **Tune Snapshot** belongs to the currently connected **Board** and is read-only.
 - A **Tune Profile** belongs to a **Board** and stores semantic field values independently of firmware schema.
 - A **Tune History Entry** captures the previous state of a **Tune Profile** before each explicit save.
