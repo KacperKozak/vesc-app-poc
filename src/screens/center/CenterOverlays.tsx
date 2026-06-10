@@ -664,13 +664,15 @@ export function CenterOverlays({
         pointerEvents={telemetryInteractive ? 'box-none' : 'none'}
         style={styles.telemetryOffscreenIndicators}
       >
-        {map.offscreenMapIndicators.map((indicator) => (
-          <OffscreenMapIndicator
-            key={indicator.id}
-            indicator={indicator}
-            onPress={() => map.onOffscreenIndicatorPress(indicator)}
-          />
-        ))}
+        {mode === 'telemetry'
+          ? map.offscreenMapIndicators.map((indicator) => (
+              <OffscreenMapIndicator
+                key={indicator.id}
+                indicator={indicator}
+                onPress={() => map.onOffscreenIndicatorPress(indicator)}
+              />
+            ))
+          : null}
       </View>
 
       <View

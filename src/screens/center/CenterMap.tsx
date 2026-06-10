@@ -303,6 +303,23 @@ function projectCoordinateToEdgePoint(
   }
 }
 
+function repositionOffscreenMapIndicators(
+  current: OffscreenMapIndicatorState[],
+  camera: CameraSnapshot,
+  layout: MapLayout,
+): OffscreenMapIndicatorState[] {
+  const next = current.flatMap((indicator) => {
+    const point = projectCoordinateToEdgePoint(
+      { longitude: indicator.coordinate[0], latitude: indicator.coordinate[1] },
+      camera,
+      layout,
+    )
+    const positioned = clampedEdgeIndicator(indicator, point, layout)
+    return positioned ? [positioned] : []
+  })
+  return nearlySameIndicator(current, next) ? current : next
+}
+
 function usableCoordinate(location: { longitude: number; latitude: number } | null | undefined) {
   if (!location) return null
   if (!Number.isFinite(location.longitude) || !Number.isFinite(location.latitude)) return null
@@ -1551,12 +1568,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       gestures: { isGestureActive: boolean }
     }) => {
       const [longitude, latitude] = state.properties.center
-      currentCameraRef.current = {
+      const camera = {
         centerCoordinate: [longitude, latitude],
         zoomLevel: state.properties.zoom,
         heading: state.properties.heading,
         pitch: state.properties.pitch,
-      }
+      } satisfies CameraSnapshot
+      currentCameraRef.current = camera
+      setOffscreenMapIndicators((current) =>
+        repositionOffscreenMapIndicators(current, camera, mapLayout),
+      )
       const [targetLongitude, targetLatitude] = gpsCamera.centerCoordinate
       if (
         Math.abs(longitude - targetLongitude) < 0.0001 &&
@@ -1613,6 +1634,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       gpsCamera.centerCoordinate,
       headingFollowMode,
       historyActive,
+      mapLayout,
       onHeadingChange,
       onMapInteraction,
       perspectiveEnabled,
