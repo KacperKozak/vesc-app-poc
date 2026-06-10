@@ -215,6 +215,7 @@ function FullMapControls({
 
   return (
     <>
+      {searchOpen ? <MapVignette mode="map" idPrefix="search-map-vignette" topOnly /> : null}
       {searchOpen ? (
         <View style={[styles.mapSearchSheet, { top }]}>
           <View style={styles.mapSearchBar}>
@@ -230,7 +231,17 @@ function FullMapControls({
               returnKeyType="search"
               style={styles.mapSearchInput}
             />
-            <IconButton icon={XIcon} size="lg" onPress={closeSearch} />
+            <Pressable
+              accessibilityLabel="Close search"
+              accessibilityRole="button"
+              onPress={closeSearch}
+              style={({ pressed }) => [
+                styles.mapSearchClose,
+                pressed && styles.mapSearchClosePressed,
+              ]}
+            >
+              <XIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+            </Pressable>
           </View>
           {searchLoading || searchError || showNoResults || searchResults.length > 0 ? (
             <View style={styles.mapSearchResults}>
@@ -282,7 +293,7 @@ function FullMapControls({
       ) : (
         <IconButton
           icon={MagnifyingGlassIcon}
-          size="lg"
+          size="md"
           onPress={openSearch}
           style={[styles.mapSearchButton, { top }]}
         />
@@ -648,6 +659,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     zIndex: 32,
+    borderColor: theme.neutral.borderMuted,
+    backgroundColor: theme.neutral.mapOverlaySelector,
   },
   mapSearchSheet: {
     position: 'absolute',
@@ -657,8 +670,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   mapSearchBar: {
-    minHeight: 54,
-    borderRadius: 27,
+    height: 50,
+    borderRadius: 25,
     borderWidth: 1,
     borderColor: theme.neutral.borderMuted,
     backgroundColor: theme.neutral.mapOverlaySelector,
@@ -675,6 +688,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     paddingVertical: 10,
+  },
+  mapSearchClose: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapSearchClosePressed: {
+    opacity: 0.55,
   },
   mapSearchResults: {
     borderRadius: 20,
