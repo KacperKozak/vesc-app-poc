@@ -10,7 +10,6 @@ import android.os.Vibrator
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import expo.modules.vescble.telemetry.AlertRuleEntity
-import expo.modules.vescble.telemetry.normalizeBatteryConfig
 import kotlin.math.abs
 
 private const val TTS_PREFIX = "tts:"
@@ -118,17 +117,16 @@ internal class VescAlertEngine {
     fun evaluate(
         rules: List<AlertRuleEntity>,
         t: RefloatTelemetry,
-        batteryConfig: Map<String, Any?>? = null,
+        batteryPercent: Double? = null,
     ): List<FiredAlert> {
         if (rules.isEmpty()) return emptyList()
         val now = System.currentTimeMillis()
         val fired = mutableListOf<FiredAlert>()
-        val batteryMargin = if (batteryConfig != null) batteryHysteresisMargin(batteryConfig) else null
 
-        if (batteryMargin != null) {
+        if (batteryPercent != null) {
             for (rule in rules) {
                 if (rule.controlId == "battery" && rule.thresholdMax == null) {
-                    if (armedState[rule.id] == false && t.batteryVoltage > rule.threshold + batteryMargin) {
+                    if (armedState[rule.id] == false && batteryPercent > rule.threshold + BATTERY_HYSTERESIS_PERCENT) {
                         armedState[rule.id] = true
                     }
                 }
@@ -137,12 +135,13 @@ internal class VescAlertEngine {
 
         for (rule in rules) {
             val value = extractAlertValue(rule.controlId, t) ?: continue
+            val compareValue = if (rule.controlId == "battery" && batteryPercent != null) batteryPercent else value
             val aboveDir = alertDirectionIsAbove(rule.controlId)
-            val triggered = if (aboveDir) value >= rule.threshold else value <= rule.threshold
+            val triggered = if (aboveDir) compareValue >= rule.threshold else compareValue <= rule.threshold
             if (!triggered) continue
-            val rangeDepth = alertRangeDepth(value, rule.threshold, rule.thresholdMax, aboveDir)
+            val rangeDepth = alertRangeDepth(compareValue, rule.threshold, rule.thresholdMax, aboveDir)
             if (rangeDepth == null) {
-                if (rule.controlId == "battery" && batteryMargin != null) {
+                if (rule.controlId == "battery" && batteryPercent != null) {
                     if (armedState[rule.id] == false) continue
                     armedState[rule.id] = false
                 } else {
@@ -169,22 +168,6 @@ internal class VescAlertEngine {
         )
     }
 
-    private fun batteryHysteresisMargin(config: Map<String, Any?>): Double? {
-        val normalized = normalizeBatteryConfig(config) ?: return null
-        return when (normalized["mode"] as? String) {
-            "preset" -> {
-                val seriesCount = (normalized["seriesCount"] as? Number)?.toInt() ?: return null
-                0.1 * seriesCount
-            }
-            "manual" -> {
-                val minV = (normalized["minVoltage"] as? Number)?.toDouble() ?: return null
-                val maxV = (normalized["maxVoltage"] as? Number)?.toDouble() ?: return null
-                (maxV - minV) * 0.03
-            }
-            else -> null
-        }
-    }
-
     private fun alertDirectionIsAbove(controlId: String): Boolean =
         telemetryMetricByControlId[controlId]?.alertAbove ?: true
 
@@ -199,6 +182,10 @@ internal class VescAlertEngine {
         if (span <= 0.0) return null
         val depth = if (aboveDir) value - threshold else threshold - value
         return (depth / span).coerceIn(0.0, 1.0)
+    }
+
+    companion object {
+        internal const val BATTERY_HYSTERESIS_PERCENT = 3.0
     }
 
     private fun extractAlertValue(controlId: String, t: RefloatTelemetry): Double? = when (controlId) {

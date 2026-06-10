@@ -106,13 +106,41 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
       removeSelectedSession: s.removeSelectedSession,
     })),
   )
-  const { targetLocation, setTargetLocation, clearTargetLocation } = useMapStore(
+  const {
+    mapPoints,
+    selectedMapPointId,
+    hiddenMapPointKinds,
+    loadMapPoints,
+    saveMapPoint,
+    replaceDirectionPoint,
+    clearDirectionPoint,
+    removeMapPoint,
+    toggleMapPointSelection,
+    clearSelectedMapPoints,
+    toggleMapPointKindVisibility,
+  } = useMapStore(
     useShallow((s) => ({
-      targetLocation: s.targetLocation,
-      setTargetLocation: s.setTargetLocation,
-      clearTargetLocation: s.clearTargetLocation,
+      mapPoints: s.mapPoints,
+      selectedMapPointId: s.selectedMapPointId,
+      hiddenMapPointKinds: s.hiddenMapPointKinds,
+      loadMapPoints: s.load,
+      saveMapPoint: s.saveMapPoint,
+      replaceDirectionPoint: s.replaceDirectionPoint,
+      clearDirectionPoint: s.clearDirectionPoint,
+      removeMapPoint: s.removeMapPoint,
+      toggleMapPointSelection: s.toggleMapPointSelection,
+      clearSelectedMapPoints: s.clearSelectedMapPoints,
+      toggleMapPointKindVisibility: s.toggleMapPointKindVisibility,
     })),
   )
+  const directionPoint = useMemo(
+    () => mapPoints.find((point) => point.kind === 'direction') ?? null,
+    [mapPoints],
+  )
+
+  useEffect(() => {
+    void loadMapPoints()
+  }, [loadMapPoints])
 
   useEffect(() => {
     setSeekTimeMs(null)
@@ -314,9 +342,17 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
     rotationLocked,
     perspectiveEnabled,
     setPerspectiveEnabled,
-    targetLocation,
-    setTargetLocation,
-    clearTargetLocation,
+    directionPoint,
+    mapPoints,
+    selectedMapPointId,
+    hiddenMapPointKinds,
+    saveMapPoint,
+    replaceDirectionPoint,
+    clearDirectionPoint,
+    removeMapPoint,
+    toggleMapPointSelection,
+    clearSelectedMapPoints,
+    toggleMapPointKindVisibility,
     sessions,
     selectedSession,
     sessionSamples,

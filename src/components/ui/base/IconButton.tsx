@@ -9,8 +9,8 @@ import {
 
 import { interaction, theme } from '@/constants/theme'
 
-const SIZES = { sm: 38, lg: 54 } as const
-const ICON_SIZES = { sm: 18, lg: 22 } as const
+const SIZES = { sm: 38, md: 50, lg: 54 } as const
+const ICON_SIZES = { sm: 18, md: 21, lg: 22 } as const
 
 interface IconButtonProps {
   icon: Icon

@@ -8,12 +8,14 @@ interface MapVignetteProps {
   mode: CenterViewState
   panelHeight?: number
   idPrefix?: string
+  topOnly?: boolean
 }
 
 export function MapVignette({
   mode,
   panelHeight = 0,
   idPrefix = 'map-vignette',
+  topOnly = false,
 }: MapVignetteProps) {
   const { height: screenHeight } = useWindowDimensions()
   const radialId = `${idPrefix}-radial`
@@ -71,9 +73,13 @@ export function MapVignette({
               <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
             </LinearGradient>
           </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${radialId})`} />
+          {!topOnly ? (
+            <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${radialId})`} />
+          ) : null}
           <Rect x="0" y="0" width="100%" height="34%" fill={`url(#${topId})`} />
-          <Rect x="0" y="60%" width="100%" height="40%" fill={`url(#${bottomId})`} />
+          {!topOnly ? (
+            <Rect x="0" y="60%" width="100%" height="40%" fill={`url(#${bottomId})`} />
+          ) : null}
         </Svg>
       </Animated.View>
       <Animated.View style={[styles.layer, historyStyle]}>

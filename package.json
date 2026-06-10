@@ -1,6 +1,6 @@
 {
   "name": "vibe-wheel",
-  "version": "0.50.0",
+  "version": "0.51.0",
   "private": true,
   "workspaces": [
     "modules/*"
@@ -8,7 +8,8 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "export NODE_BINARY=$(command -v node); export PATH=$(dirname \"$NODE_BINARY\"):$PATH; REACT_NATIVE_PACKAGER_HOSTNAME=localhost expo run:android",
+    "android": "bun run copy:shared && export NODE_BINARY=$(command -v node); export PATH=$(dirname \"$NODE_BINARY\"):$PATH; REACT_NATIVE_PACKAGER_HOSTNAME=localhost expo run:android",
+    "android:e2e": "EXPO_PUBLIC_E2E=1 bun run android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
@@ -17,11 +18,12 @@
     "copy:shared": "bun run scripts/copy-shared.ts",
     "skills-check": "bun run scripts/skills-check.ts",
     "screenshot": "bun run scripts/screenshot.ts",
+    "e2e": "maestro test e2e/flows/e2e.yaml",
     "test": "bun run copy:shared && bun run test:bun && bun run test:android",
     "test:bun": "bun test",
     "test:android": "export NODE_BINARY=$(command -v node); export PATH=$(dirname \"$NODE_BINARY\"):$PATH; cd android && ./gradlew :vesc-ble:testDebugUnitTest",
     "ts": "tsc --noEmit",
-    "build:release": "export NODE_BINARY=$(command -v node); export PATH=$(dirname \"$NODE_BINARY\"):$PATH; cd android && ./gradlew assembleRelease",
+    "build:release": "bun run copy:shared && export NODE_BINARY=$(command -v node); export PATH=$(dirname \"$NODE_BINARY\"):$PATH; cd android && ./gradlew assembleRelease",
     "release": "bun run scripts/release.ts",
     "release:fix": "bun run scripts/release.ts --patch",
     "check": "bun run ts && bun run lint && bun run format:check && bun run knip && bun run test",

@@ -1,7 +1,11 @@
-import { useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { ActivityIndicator, View, Text, StyleSheet } from 'react-native'
 
-import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
+import {
+  CenterMap,
+  type CenterMapHandle,
+  type OffscreenMapIndicatorState,
+} from '@/screens/center/CenterMap'
 import { CenterOverlays } from '@/screens/center/CenterOverlays'
 import { useCenterScreenController } from '@/screens/center/useCenterScreenController'
 import type { Board } from '@/store/boardStore'
@@ -35,13 +39,34 @@ export function CenterScreen({
   onToggleRecordDebug,
 }: CenterScreenProps) {
   const mapRef = useRef<CenterMapHandle>(null)
+  const [offscreenMapIndicators, setOffscreenMapIndicators] = useState<
+    OffscreenMapIndicatorState[]
+  >([])
   const controller = useCenterScreenController({ mapRef })
+  const dismissMapSelector = controller.dismissMapSelector
+  const [mapInteractionRevision, setMapInteractionRevision] = useState(0)
+  const handleMapInteraction = useCallback(() => {
+    dismissMapSelector()
+    setMapInteractionRevision((revision) => revision + 1)
+  }, [dismissMapSelector])
+  const handleOffscreenIndicatorPress = useCallback(
+    (indicator: OffscreenMapIndicatorState) => {
+      controller.dismissMapSelector()
+      if (indicator.type === 'gps') {
+        mapRef.current?.recenterLive({ resetPadding: true })
+        return
+      }
+      controller.handleMapFocus()
+      mapRef.current?.focusCoordinate(indicator.coordinate)
+    },
+    [controller],
+  )
 
   if (!boardsLoaded) {
     return (
       <View style={styles.container}>
         <View style={styles.empty}>
-          <ActivityIndicator size="small" color="#3b82f6" />
+          <ActivityIndicator size="small" color={theme.wheel.color} />
           <Text style={styles.emptySubtitle}>Loading boards...</Text>
         </View>
       </View>
@@ -67,16 +92,30 @@ export function CenterScreen({
         perspectiveEnabled={controller.perspectiveEnabled}
         onPerspectiveChange={controller.setPerspectiveEnabled}
         onHeadingChange={controller.setHeading}
-        onLongPressTarget={controller.setTargetLocation}
-        onMapInteraction={controller.dismissMapSelector}
-        targetLocation={controller.targetLocation}
-        onClearTarget={controller.clearTargetLocation}
+        onLongPressTarget={(target) =>
+          void controller.replaceDirectionPoint(target.latitude, target.longitude)
+        }
+        onMapInteraction={handleMapInteraction}
+        onMapPress={() => {
+          handleMapInteraction()
+          controller.clearSelectedMapPoints()
+        }}
+        onEnterMapMode={controller.handleMapFocus}
+        onOffscreenMapIndicatorsChange={setOffscreenMapIndicators}
+        directionPoint={controller.directionPoint}
+        mapPoints={controller.mapPoints}
+        selectedMapPointId={controller.selectedMapPointId}
+        hiddenMapPointKinds={controller.hiddenMapPointKinds}
+        onToggleMapPointSelection={controller.toggleMapPointSelection}
+        onRemoveMapPoint={(id) => void controller.removeMapPoint(id)}
+        onClearDirectionPoint={() => void controller.clearDirectionPoint()}
         weatherActive={controller.weatherActive}
         seekPosition={controller.seekGpsPosition}
       />
       <CenterOverlays
         mode={controller.mode}
         mapRef={mapRef}
+        mapInteractionRevision={mapInteractionRevision}
         board={{
           boards,
           activeBoardId,
@@ -103,6 +142,12 @@ export function CenterScreen({
           exitWeather: controller.exitWeatherMode,
           refreshWeather: controller.refreshWeather,
           weatherLocation: controller.liveLocations.at(-1) ?? controller.latestApproximateLocation,
+          replaceDirectionPoint: controller.replaceDirectionPoint,
+          addMapPoint: controller.saveMapPoint,
+          hiddenMapPointKinds: controller.hiddenMapPointKinds,
+          toggleMapPointKindVisibility: controller.toggleMapPointKindVisibility,
+          offscreenMapIndicators,
+          onOffscreenIndicatorPress: handleOffscreenIndicatorPress,
         }}
         history={{
           enterHistoryMode: controller.enterHistoryMode,

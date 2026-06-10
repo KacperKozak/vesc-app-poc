@@ -29,7 +29,7 @@ import {
   type ElementRef,
 } from 'react'
 import { Animated, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
-import type { LocationEvent } from 'vesc-ble'
+import type { LocationEvent, MapPoint, MapPointKind } from 'vesc-ble'
 
 import { InfoModal } from '@/components/ui/modals/InfoModal'
 import { MapPin } from '@/components/domain/map/MapPin'
@@ -42,6 +42,12 @@ import {
   type MapNavigationMode,
   type MapStyleKey,
 } from '@/constants/mapStyles'
+import { getMapPointKindIcon } from '@/constants/mapPointIcons'
+import {
+  getMapPointKindColor,
+  getMapPointKindLabel,
+  getMapPointKindTextColor,
+} from '@/constants/mapPoints'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
@@ -49,8 +55,14 @@ import {
   getLiveGpsPresentation,
   getReliableGpsBearingFromFixes,
 } from '@/helpers/liveGpsPresentation'
-import { distanceMeters, makeCircleFeature, makeTrailLineString } from '@/helpers/mapGeometry'
+import {
+  distanceMeters,
+  isPointOutsideVisibleMapArea,
+  makeCircleFeature,
+  makeTrailLineString,
+} from '@/helpers/mapGeometry'
 import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
+import { isMapPointKindVisible } from '@/lib/mapPointVisibility'
 import {
   getHistoryMetricColorRange,
   getMetricRampColor,
@@ -90,6 +102,8 @@ export interface CenterMapHandle {
   togglePerspective: () => void
   setPadding: (bottom: number) => void
   zoomToLevel: (zoom: number) => void
+  focusCoordinate: (coordinate: [number, number]) => void
+  getViewfinderCoordinate: () => Promise<{ latitude: number; longitude: number }>
 }
 
 interface SelectedHistoryMarker {
@@ -111,8 +125,8 @@ const DESTINATION_POINT_TEXT_COLOR = theme.gps.text
 const HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS = 50
 const HISTORY_ROUTE_HIGHLIGHT_DELAY_MS = 500
 const HISTORY_ROUTE_HIGHLIGHT_WIDTH = 0.24
-const HISTORY_ROUTE_HIGHLIGHT_COLOR = 'rgba(255, 255, 255, 0.98)'
-const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = 'rgba(255, 255, 255, 0)'
+const HISTORY_ROUTE_HIGHLIGHT_COLOR = theme.neutral.routeHighlight
+const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = theme.neutral.routeHighlightTransparent
 const HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS = 1400
 const HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS = 5200
 const HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM = 260
@@ -121,8 +135,13 @@ interface MapLayout {
   height: number
 }
 
-interface OffscreenGpsIndicatorState {
-  id: 'gps' | 'target'
+export interface OffscreenMapIndicatorState {
+  id: string
+  type: 'gps' | 'direction' | 'mapPoint'
+  coordinate: [number, number]
+  color: string
+  textColor: string
+  icon: Icon
   x: number
   y: number
   angleDeg: number
@@ -191,8 +210,8 @@ function smoothHeadingStep(current: number, target: number, elapsedMs: number): 
 }
 
 function nearlySameIndicator(
-  current: OffscreenGpsIndicatorState[],
-  next: OffscreenGpsIndicatorState[],
+  current: OffscreenMapIndicatorState[],
+  next: OffscreenMapIndicatorState[],
 ) {
   if (current.length !== next.length) return false
   return next.every((nextIndicator, index) => {
@@ -207,11 +226,19 @@ function nearlySameIndicator(
 }
 
 function clampedEdgeIndicator(
-  id: OffscreenGpsIndicatorState['id'],
+  trackedPoint: Pick<
+    OffscreenMapIndicatorState,
+    'id' | 'type' | 'coordinate' | 'color' | 'textColor' | 'icon'
+  >,
   point: { x: number; y: number },
   layout: MapLayout,
-): OffscreenGpsIndicatorState | null {
-  if (point.x >= 0 && point.x <= layout.width && point.y >= 0 && point.y <= layout.height) {
+): OffscreenMapIndicatorState | null {
+  if (
+    !isPointOutsideVisibleMapArea(point, layout, {
+      top: OFFSCREEN_GPS_EDGE_TOP_INSET,
+      bottom: OFFSCREEN_GPS_EDGE_BOTTOM_INSET,
+    })
+  ) {
     return null
   }
 
@@ -239,7 +266,7 @@ function clampedEdgeIndicator(
   if (!Number.isFinite(scale)) return null
 
   return {
-    id,
+    ...trackedPoint,
     x: Math.min(right, Math.max(left, centerX + deltaX * scale)),
     y: Math.min(bottom, Math.max(top, centerY + deltaY * scale)),
     angleDeg: (Math.atan2(deltaX, -deltaY) * 180) / Math.PI,
@@ -276,6 +303,23 @@ function projectCoordinateToEdgePoint(
   }
 }
 
+function repositionOffscreenMapIndicators(
+  current: OffscreenMapIndicatorState[],
+  camera: CameraSnapshot,
+  layout: MapLayout,
+): OffscreenMapIndicatorState[] {
+  const next = current.flatMap((indicator) => {
+    const point = projectCoordinateToEdgePoint(
+      { longitude: indicator.coordinate[0], latitude: indicator.coordinate[1] },
+      camera,
+      layout,
+    )
+    const positioned = clampedEdgeIndicator(indicator, point, layout)
+    return positioned ? [positioned] : []
+  })
+  return nearlySameIndicator(current, next) ? current : next
+}
+
 function usableCoordinate(location: { longitude: number; latitude: number } | null | undefined) {
   if (!location) return null
   if (!Number.isFinite(location.longitude) || !Number.isFinite(location.latitude)) return null
@@ -304,43 +348,48 @@ function buildHistoryMarkerMessage(selection: SelectedHistoryMarker): string {
   return lines.join('\n')
 }
 
-function OffscreenGpsIndicator({
+export function OffscreenMapIndicator({
   indicator,
   onPress,
 }: {
-  indicator: OffscreenGpsIndicatorState
+  indicator: OffscreenMapIndicatorState
   onPress: () => void
 }) {
-  const IconComponent = indicator.id === 'gps' ? CrosshairSimpleIcon : MapPinIcon
-  const color = indicator.id === 'gps' ? GPS_POINT_TEXT_COLOR : DESTINATION_POINT_TEXT_COLOR
-  const borderColor = indicator.id === 'gps' ? GPS_POINT_COLOR : DESTINATION_POINT_COLOR
+  const IconComponent = indicator.icon
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={
-        indicator.id === 'gps' ? 'Recenter map on current position' : 'Clear target point'
+        indicator.type === 'gps'
+          ? 'Recenter map on current position'
+          : indicator.type === 'direction'
+            ? 'Show direction point'
+            : 'Show selected map point'
       }
       onPress={onPress}
       style={({ pressed }) => [
-        styles.offscreenGpsIndicator,
+        styles.offscreenMapIndicator,
         {
           left: indicator.x - OFFSCREEN_GPS_INDICATOR_SIZE / 2,
           top: indicator.y - OFFSCREEN_GPS_INDICATOR_SIZE / 2,
         },
-        pressed && styles.offscreenGpsIndicatorPressed,
+        pressed && styles.offscreenMapIndicatorPressed,
       ]}
     >
       <View
         pointerEvents="none"
         style={[
-          styles.offscreenGpsArrowOrbit,
+          styles.offscreenMapArrowOrbit,
           { transform: [{ rotate: `${indicator.angleDeg}deg` }] },
         ]}
       >
-        <ArrowUpIcon size={22} color={color} weight="bold" />
+        <ArrowUpIcon size={22} color={indicator.textColor} weight="bold" />
       </View>
-      <View pointerEvents="none" style={[styles.offscreenGpsIcon, { borderColor }]}>
-        <IconComponent size={24} color={color} weight="bold" />
+      <View
+        pointerEvents="none"
+        style={[styles.offscreenMapIcon, { borderColor: indicator.color }]}
+      >
+        <IconComponent size={24} color={indicator.textColor} weight="bold" />
       </View>
     </Pressable>
   )
@@ -348,6 +397,7 @@ function OffscreenGpsIndicator({
 
 interface CenterMapLayersProps {
   historyActive: boolean
+  expandSelectedMapPoints: boolean
   isMapy: boolean
   isOneDark: boolean
   showBuildings3d: boolean
@@ -361,7 +411,6 @@ interface CenterMapLayersProps {
   } | null
   accuracyFix: { longitude: number; latitude: number } | null
   accuracyShape: ReturnType<typeof makeCircleFeature> | null
-  gpsFix: { longitude: number; latitude: number } | null
   gpsBearingDeg: number | null
   rideRoute: [number, number][]
   seekPosition: HistoryGpsSample | null
@@ -369,8 +418,14 @@ interface CenterMapLayersProps {
   activeHistoryMapMetric: HistoryMetricKey
   rideMarkers: HistoryMarker[]
   rideGpsSamples: HistoryGpsSample[]
-  targetLocation: { latitude: number; longitude: number } | null
-  onClearTarget: () => void
+  directionPoint: MapPoint | null
+  mapPoints: MapPoint[]
+  selectedMapPointId: string | null
+  hiddenMapPointKinds: MapPointKind[]
+  onClearDirectionPoint: () => void
+  onToggleMapPointSelection: (id: string) => void
+  onRemoveMapPoint: (id: string) => void
+  onSuppressNextMapPress: () => void
   onSelectMarker: (selection: SelectedHistoryMarker) => void
 }
 
@@ -378,13 +433,11 @@ function LiveMapLayers({
   liveTrailShape,
   accuracyFix,
   accuracyShape,
-  gpsFix,
   gpsBearingDeg,
 }: {
   liveTrailShape: CenterMapLayersProps['liveTrailShape']
   accuracyFix: CenterMapLayersProps['accuracyFix']
   accuracyShape: CenterMapLayersProps['accuracyShape']
-  gpsFix: CenterMapLayersProps['gpsFix']
   gpsBearingDeg: CenterMapLayersProps['gpsBearingDeg']
 }) {
   return (
@@ -421,14 +474,12 @@ function LiveMapLayers({
               />
             </ShapeSource>
           )}
-          {gpsFix && (
-            <MapPin
-              id="center-gps-position"
-              coordinate={[gpsFix.longitude, gpsFix.latitude]}
-              color={GPS_POINT_COLOR}
-              bearingDeg={gpsBearingDeg}
-            />
-          )}
+          <MapPin
+            id="center-gps-position"
+            coordinate={[accuracyFix.longitude, accuracyFix.latitude]}
+            color={GPS_POINT_COLOR}
+            bearingDeg={gpsBearingDeg}
+          />
         </>
       )}
     </>
@@ -443,6 +494,7 @@ function HistoryMapLayers({
   activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
+  onSuppressNextMapPress,
   onSelectMarker,
 }: {
   rideRouteShape: CenterMapLayersProps['rideRouteShape']
@@ -452,6 +504,7 @@ function HistoryMapLayers({
   activeHistoryMapMetric: CenterMapLayersProps['activeHistoryMapMetric']
   rideMarkers: CenterMapLayersProps['rideMarkers']
   rideGpsSamples: CenterMapLayersProps['rideGpsSamples']
+  onSuppressNextMapPress: CenterMapLayersProps['onSuppressNextMapPress']
   onSelectMarker: CenterMapLayersProps['onSelectMarker']
 }) {
   const [highlightProgress, setHighlightProgress] = useState(0)
@@ -543,7 +596,10 @@ function HistoryMapLayers({
             coordinate={renderCoordinate}
             color={HISTORY_MARKER_COLORS[marker.type]}
             icon={HISTORY_MARKER_ICONS[marker.type]}
-            onSelected={() => onSelectMarker({ marker, gps })}
+            onSelected={() => {
+              onSuppressNextMapPress()
+              onSelectMarker({ marker, gps })
+            }}
           />
         ),
       )}
@@ -809,6 +865,7 @@ function getHistoryRouteHighlightDurationMs(route: [number, number][]) {
 
 function CenterMapLayers({
   historyActive,
+  expandSelectedMapPoints,
   isMapy,
   isOneDark,
   showBuildings3d,
@@ -818,7 +875,6 @@ function CenterMapLayers({
   rideRouteShape,
   accuracyFix,
   accuracyShape,
-  gpsFix,
   gpsBearingDeg,
   rideRoute,
   seekPosition,
@@ -826,10 +882,25 @@ function CenterMapLayers({
   activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
-  targetLocation,
-  onClearTarget,
+  directionPoint,
+  mapPoints,
+  selectedMapPointId,
+  hiddenMapPointKinds,
+  onClearDirectionPoint,
+  onToggleMapPointSelection,
+  onRemoveMapPoint,
+  onSuppressNextMapPress,
   onSelectMarker,
 }: CenterMapLayersProps) {
+  const selectedMapPoint = useMemo(
+    () =>
+      mapPoints.find(
+        (point) =>
+          point.id === selectedMapPointId && isMapPointKindVisible(point.kind, hiddenMapPointKinds),
+      ) ?? null,
+    [hiddenMapPointKinds, mapPoints, selectedMapPointId],
+  )
+
   return (
     <>
       {showBuildings3d && (
@@ -839,7 +910,9 @@ function CenterMapLayers({
           minZoomLevel={14}
           maxZoomLevel={22}
           style={{
-            fillExtrusionColor: isOneDark ? '#3e4451' : '#e5e7eb',
+            fillExtrusionColor: isOneDark
+              ? theme.neutral.mapBuildingDark
+              : theme.neutral.mapBuildingLight,
             fillExtrusionHeight: ['coalesce', ['get', 'height'], 12],
             fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
             fillExtrusionOpacity: isOneDark ? 0.65 : 0.42,
@@ -867,6 +940,7 @@ function CenterMapLayers({
           activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
+          onSuppressNextMapPress={onSuppressNextMapPress}
           onSelectMarker={onSelectMarker}
         />
       ) : (
@@ -874,18 +948,47 @@ function CenterMapLayers({
           liveTrailShape={liveTrailShape}
           accuracyFix={accuracyFix}
           accuracyShape={accuracyShape}
-          gpsFix={gpsFix}
           gpsBearingDeg={gpsBearingDeg}
         />
       )}
-      {targetLocation && !historyActive && (
+      {directionPoint && !historyActive && (
         <MapPin
-          id="center-target-position"
-          coordinate={[targetLocation.longitude, targetLocation.latitude]}
+          id="center-direction-position"
+          coordinate={[directionPoint.longitude, directionPoint.latitude]}
           color={DESTINATION_POINT_COLOR}
-          onSelected={onClearTarget}
+          onSelected={() => {
+            onSuppressNextMapPress()
+            onClearDirectionPoint()
+          }}
         />
       )}
+      {!historyActive &&
+        mapPoints
+          .filter(
+            (point) =>
+              point.kind !== 'direction' && isMapPointKindVisible(point.kind, hiddenMapPointKinds),
+          )
+          .map((point) => (
+            <MapPin
+              key={point.id}
+              id={`center-map-point-${point.id}`}
+              coordinate={[point.longitude, point.latitude]}
+              color={getMapPointKindColor(point.kind)}
+              icon={getMapPointKindIcon(point.kind)}
+              iconColor={getMapPointKindTextColor(point.kind)}
+              selected={selectedMapPoint?.id === point.id}
+              expandSelected={expandSelectedMapPoints}
+              label={getMapPointKindLabel(point.kind)}
+              onSelected={() => {
+                onSuppressNextMapPress()
+                onToggleMapPointSelection(point.id)
+              }}
+              onRemove={() => {
+                onSuppressNextMapPress()
+                onRemoveMapPoint(point.id)
+              }}
+            />
+          ))}
     </>
   )
 }
@@ -907,8 +1010,16 @@ interface CenterMapProps {
   onHeadingChange: (heading: number) => void
   onLongPressTarget: (target: { latitude: number; longitude: number }) => void
   onMapInteraction: () => void
-  targetLocation: { latitude: number; longitude: number } | null
-  onClearTarget: () => void
+  onMapPress: () => void
+  onEnterMapMode: () => void
+  onOffscreenMapIndicatorsChange: (indicators: OffscreenMapIndicatorState[]) => void
+  directionPoint: MapPoint | null
+  mapPoints: MapPoint[]
+  selectedMapPointId: string | null
+  hiddenMapPointKinds: MapPointKind[]
+  onToggleMapPointSelection: (id: string) => void
+  onRemoveMapPoint: (id: string) => void
+  onClearDirectionPoint: () => void
   weatherActive: boolean
   seekPosition: HistoryGpsSample | null
   historyPreview:
@@ -936,9 +1047,17 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     onHeadingChange,
     onLongPressTarget,
     onMapInteraction,
-    targetLocation,
+    onMapPress,
+    onEnterMapMode,
+    onOffscreenMapIndicatorsChange,
+    directionPoint,
+    mapPoints,
+    selectedMapPointId,
+    hiddenMapPointKinds,
+    onToggleMapPointSelection,
+    onRemoveMapPoint,
     weatherActive,
-    onClearTarget,
+    onClearDirectionPoint,
     seekPosition,
     historyPreview,
   },
@@ -949,6 +1068,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const mapRevealedRef = useRef(false)
   const mapViewRef = useRef<ElementRef<typeof Mapbox.MapView> | null>(null)
   const offscreenProjectionRequestRef = useRef(0)
+  const suppressNextMapPressRef = useRef(false)
+  const suppressNextMapPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mapOpacity] = useState(() => new Animated.Value(0))
   const [cameraReady, setCameraReady] = useState(false)
   const [selectedHistoryMarker, setSelectedHistoryMarker] = useState<SelectedHistoryMarker | null>(
@@ -958,8 +1079,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const [cameraHeading, setCameraHeading] = useState(0)
   const [initialApproximateFix, setInitialApproximateFix] = useState<LocationEvent | null>(null)
   const [mapLayout, setMapLayout] = useState<MapLayout>({ width: 0, height: 0 })
-  const [offscreenGpsIndicators, setOffscreenGpsIndicators] = useState<
-    OffscreenGpsIndicatorState[]
+  const [offscreenMapIndicators, setOffscreenMapIndicators] = useState<
+    OffscreenMapIndicatorState[]
   >([])
 
   const gpsFix = liveLocations.at(-1) ?? null
@@ -1002,7 +1123,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     ],
   )
   const { cameraFix, accuracyFix, accuracyRadiusM, directionBearingDeg } = gpsPresentation
-  const offscreenGpsCoordinate = useMemo(
+  const offscreenMapGpsCoordinate = useMemo(
     () =>
       usableCoordinate(gpsFix) ??
       usableCoordinate(latestApproximateLocation) ??
@@ -1010,6 +1131,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       usableCoordinate(accuracyFix) ??
       usableCoordinate(cameraFix),
     [accuracyFix, cameraFix, gpsFix, initialApproximateFix, latestApproximateLocation],
+  )
+  const selectedMapPoint = useMemo(
+    () =>
+      mapPoints.find(
+        (point) =>
+          point.kind !== 'direction' &&
+          point.id === selectedMapPointId &&
+          isMapPointKindVisible(point.kind, hiddenMapPointKinds),
+      ) ?? null,
+    [hiddenMapPointKinds, mapPoints, selectedMapPointId],
   )
   const retainedGpsBearing = gpsPresentation.nextReliableBearing
   const gpsHeadingMode = mapNavigationMode === 'gpsHeading'
@@ -1066,6 +1197,21 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
     [rideGpsSamples],
   )
+
+  const getViewfinderCoordinateFromMap = useCallback(async () => {
+    const mapView = mapViewRef.current
+    if (!mapView || mapLayout.width <= 0 || mapLayout.height <= 0) return null
+
+    const coordinate = await mapView.getCoordinateFromView([
+      mapLayout.width / 2,
+      mapLayout.height / 2,
+    ])
+    const [longitude, latitude] = coordinate
+    if (typeof longitude !== 'number' || typeof latitude !== 'number') return null
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null
+    return { longitude, latitude }
+  }, [mapLayout.height, mapLayout.width])
+
   const {
     cameraRef,
     currentCameraRef,
@@ -1095,6 +1241,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     followAnimationDuration: headingFollowMode
       ? phoneHeadingAnimationDuration()
       : MAP_DEFAULTS.followAnimationDuration,
+    getViewfinderCoordinateFromMap,
     onHeadingChange,
     onPerspectiveChange,
   })
@@ -1115,40 +1262,63 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     )
   }, [])
 
-  const updateOffscreenGpsIndicator = useCallback(() => {
+  const updateOffscreenMapIndicators = useCallback(() => {
     const camera = currentCameraRef.current
     const mapView = mapViewRef.current
     if (
       mapView == null ||
       historyActive ||
-      (offscreenGpsCoordinate == null && targetLocation == null) ||
+      (offscreenMapGpsCoordinate == null && directionPoint == null && selectedMapPoint == null) ||
       mapLayout.width <= 0 ||
       mapLayout.height <= 0
     ) {
       offscreenProjectionRequestRef.current += 1
-      setOffscreenGpsIndicators((current) => (current.length === 0 ? current : []))
+      setOffscreenMapIndicators((current) => (current.length === 0 ? current : []))
       return
     }
 
     const requestId = offscreenProjectionRequestRef.current + 1
     offscreenProjectionRequestRef.current = requestId
     const trackedPoints = [
-      ...(offscreenGpsCoordinate
+      ...(offscreenMapGpsCoordinate
         ? [
             {
-              id: 'gps' as const,
-              coordinate: [offscreenGpsCoordinate.longitude, offscreenGpsCoordinate.latitude] as [
-                number,
-                number,
-              ],
+              id: 'gps',
+              type: 'gps' as const,
+              coordinate: [
+                offscreenMapGpsCoordinate.longitude,
+                offscreenMapGpsCoordinate.latitude,
+              ] as [number, number],
+              color: GPS_POINT_COLOR,
+              textColor: GPS_POINT_TEXT_COLOR,
+              icon: CrosshairSimpleIcon,
             },
           ]
         : []),
-      ...(targetLocation
+      ...(directionPoint
         ? [
             {
-              id: 'target' as const,
-              coordinate: [targetLocation.longitude, targetLocation.latitude] as [number, number],
+              id: 'direction',
+              type: 'direction' as const,
+              coordinate: [directionPoint.longitude, directionPoint.latitude] as [number, number],
+              color: DESTINATION_POINT_COLOR,
+              textColor: DESTINATION_POINT_TEXT_COLOR,
+              icon: MapPinIcon,
+            },
+          ]
+        : []),
+      ...(selectedMapPoint
+        ? [
+            {
+              id: `map-point-${selectedMapPoint.id}`,
+              type: 'mapPoint' as const,
+              coordinate: [selectedMapPoint.longitude, selectedMapPoint.latitude] as [
+                number,
+                number,
+              ],
+              color: getMapPointKindColor(selectedMapPoint.kind),
+              textColor: getMapPointKindTextColor(selectedMapPoint.kind),
+              icon: getMapPointKindIcon(selectedMapPoint.kind),
             },
           ]
         : []),
@@ -1166,7 +1336,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           const [x, y] = trackedPoint.point
           if (typeof x !== 'number' || typeof y !== 'number') return []
 
-          const detectedIndicator = clampedEdgeIndicator(trackedPoint.id, { x, y }, mapLayout)
+          const detectedIndicator = clampedEdgeIndicator(trackedPoint, { x, y }, mapLayout)
           if (!detectedIndicator) return []
           if (!camera) return [detectedIndicator]
 
@@ -1178,36 +1348,43 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
             camera,
             mapLayout,
           )
-          const positionedIndicator = clampedEdgeIndicator(
-            trackedPoint.id,
-            positionedPoint,
-            mapLayout,
-          )
+          const positionedIndicator = clampedEdgeIndicator(trackedPoint, positionedPoint, mapLayout)
           return [positionedIndicator ?? detectedIndicator]
         })
-        setOffscreenGpsIndicators((current) =>
+        setOffscreenMapIndicators((current) =>
           nearlySameIndicator(current, next) ? current : next,
         )
       })
       .catch(() => {
         if (offscreenProjectionRequestRef.current !== requestId) return
-        setOffscreenGpsIndicators((current) => (current.length === 0 ? current : []))
+        setOffscreenMapIndicators((current) => (current.length === 0 ? current : []))
       })
-  }, [currentCameraRef, historyActive, mapLayout, offscreenGpsCoordinate, targetLocation])
+  }, [
+    currentCameraRef,
+    directionPoint,
+    historyActive,
+    mapLayout,
+    offscreenMapGpsCoordinate,
+    selectedMapPoint,
+  ])
 
   const handleOffscreenIndicatorPress = useCallback(
-    (indicator: OffscreenGpsIndicatorState) => {
+    (indicator: OffscreenMapIndicatorState) => {
       onMapInteraction()
       if (indicator.id === 'gps') {
         recenterLive({ resetPadding: true })
         return
       }
-      if (!targetLocation) return
+      if (indicator.type === 'direction' && !directionPoint) return
+      if (indicator.type === 'mapPoint') onEnterMapMode()
 
       setFollowGps(false)
       const currentCamera = currentCameraRef.current
       cameraRef.current?.setCamera({
-        centerCoordinate: [targetLocation.longitude, targetLocation.latitude],
+        centerCoordinate:
+          indicator.type === 'direction' && directionPoint
+            ? [directionPoint.longitude, directionPoint.latitude]
+            : indicator.coordinate,
         zoomLevel: currentCamera?.zoomLevel,
         heading: currentCamera?.heading,
         pitch: currentCamera?.pitch,
@@ -1215,7 +1392,15 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         animationMode: 'easeTo',
       })
     },
-    [cameraRef, currentCameraRef, onMapInteraction, recenterLive, setFollowGps, targetLocation],
+    [
+      cameraRef,
+      currentCameraRef,
+      directionPoint,
+      onEnterMapMode,
+      onMapInteraction,
+      recenterLive,
+      setFollowGps,
+    ],
   )
 
   useEffect(() => {
@@ -1333,11 +1518,48 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
 
   const handleLongPress = useCallback(
     (feature: { geometry: { coordinates: number[] } }) => {
+      if (historyActive) return
       onMapInteraction()
       const [longitude, latitude] = feature.geometry.coordinates
       onLongPressTarget({ latitude, longitude })
     },
-    [onLongPressTarget, onMapInteraction],
+    [historyActive, onLongPressTarget, onMapInteraction],
+  )
+
+  const handleSuppressNextMapPress = useCallback(() => {
+    if (suppressNextMapPressTimeoutRef.current) {
+      clearTimeout(suppressNextMapPressTimeoutRef.current)
+    }
+    suppressNextMapPressRef.current = true
+    suppressNextMapPressTimeoutRef.current = setTimeout(() => {
+      suppressNextMapPressRef.current = false
+      suppressNextMapPressTimeoutRef.current = null
+    }, 250)
+  }, [])
+
+  const handleMapPress = useCallback(() => {
+    if (suppressNextMapPressRef.current) {
+      suppressNextMapPressRef.current = false
+      if (suppressNextMapPressTimeoutRef.current) {
+        clearTimeout(suppressNextMapPressTimeoutRef.current)
+        suppressNextMapPressTimeoutRef.current = null
+      }
+      return
+    }
+    onMapPress()
+  }, [onMapPress])
+
+  useEffect(() => {
+    onOffscreenMapIndicatorsChange(offscreenMapIndicators)
+  }, [offscreenMapIndicators, onOffscreenMapIndicatorsChange])
+
+  useEffect(
+    () => () => {
+      if (suppressNextMapPressTimeoutRef.current) {
+        clearTimeout(suppressNextMapPressTimeoutRef.current)
+      }
+    },
+    [],
   )
 
   const handleCameraChanged = useCallback(
@@ -1346,12 +1568,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       gestures: { isGestureActive: boolean }
     }) => {
       const [longitude, latitude] = state.properties.center
-      currentCameraRef.current = {
+      const camera = {
         centerCoordinate: [longitude, latitude],
         zoomLevel: state.properties.zoom,
         heading: state.properties.heading,
         pitch: state.properties.pitch,
-      }
+      } satisfies CameraSnapshot
+      currentCameraRef.current = camera
+      setOffscreenMapIndicators((current) =>
+        repositionOffscreenMapIndicators(current, camera, mapLayout),
+      )
       const [targetLongitude, targetLatitude] = gpsCamera.centerCoordinate
       if (
         Math.abs(longitude - targetLongitude) < 0.0001 &&
@@ -1397,7 +1623,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       )
       onHeadingChange(state.properties.heading)
       setShowRadar(state.properties.zoom <= RADAR_MAX_ZOOM)
-      updateOffscreenGpsIndicator()
+      updateOffscreenMapIndicators()
     },
     [
       cameraRef,
@@ -1408,20 +1634,21 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       gpsCamera.centerCoordinate,
       headingFollowMode,
       historyActive,
+      mapLayout,
       onHeadingChange,
       onMapInteraction,
       perspectiveEnabled,
       phoneHeadingMode,
       setFollowGps,
       setFollowZoomLevel,
-      updateOffscreenGpsIndicator,
+      updateOffscreenMapIndicators,
     ],
   )
 
   useEffect(() => {
-    const frame = requestAnimationFrame(updateOffscreenGpsIndicator)
+    const frame = requestAnimationFrame(updateOffscreenMapIndicators)
     return () => cancelAnimationFrame(frame)
-  }, [updateOffscreenGpsIndicator])
+  }, [updateOffscreenMapIndicators])
 
   if (!MAPBOX_ACCESS_TOKEN) {
     return (
@@ -1456,7 +1683,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         logoEnabled={false}
         attributionEnabled={false}
         onDidFinishLoadingMap={handleMapLoaded}
-        onPress={onMapInteraction}
+        onPress={handleMapPress}
         onLongPress={handleLongPress}
         onCameraChanged={handleCameraChanged}
       >
@@ -1470,6 +1697,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         />
         <CenterMapLayers
           historyActive={historyActive}
+          expandSelectedMapPoints={mode === 'map'}
           isMapy={isMapy}
           isOneDark={isOneDark}
           showBuildings3d={showBuildings3d}
@@ -1479,7 +1707,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           rideRouteShape={rideRouteShape}
           accuracyFix={accuracyFix}
           accuracyShape={accuracyShape}
-          gpsFix={gpsFix}
           gpsBearingDeg={gpsPinBearingDeg}
           rideRoute={rideRoute}
           seekPosition={seekPosition}
@@ -1487,8 +1714,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
-          targetLocation={targetLocation}
-          onClearTarget={onClearTarget}
+          directionPoint={directionPoint}
+          mapPoints={mapPoints}
+          selectedMapPointId={selectedMapPointId}
+          hiddenMapPointKinds={hiddenMapPointKinds}
+          onClearDirectionPoint={onClearDirectionPoint}
+          onToggleMapPointSelection={onToggleMapPointSelection}
+          onRemoveMapPoint={onRemoveMapPoint}
+          onSuppressNextMapPress={handleSuppressNextMapPress}
           onSelectMarker={setSelectedHistoryMarker}
         />
       </Mapbox.MapView>
@@ -1509,13 +1742,15 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         </Text>
       ) : null}
       {mode === 'telemetry' ? <MapVignette mode={mode} idPrefix="telemetry-map-vignette" /> : null}
-      {offscreenGpsIndicators.map((indicator) => (
-        <OffscreenGpsIndicator
-          key={indicator.id}
-          indicator={indicator}
-          onPress={() => handleOffscreenIndicatorPress(indicator)}
-        />
-      ))}
+      {mode !== 'telemetry'
+        ? offscreenMapIndicators.map((indicator) => (
+            <OffscreenMapIndicator
+              key={indicator.id}
+              indicator={indicator}
+              onPress={() => handleOffscreenIndicatorPress(indicator)}
+            />
+          ))
+        : null}
       <View style={styles.edgeGuardLeft} pointerEvents="box-only" />
       <View style={styles.edgeGuardRight} pointerEvents="box-only" />
     </Animated.View>
@@ -1531,7 +1766,7 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFill,
   },
-  offscreenGpsIndicator: {
+  offscreenMapIndicator: {
     position: 'absolute',
     width: OFFSCREEN_GPS_INDICATOR_SIZE,
     height: OFFSCREEN_GPS_INDICATOR_SIZE,
@@ -1539,10 +1774,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  offscreenGpsIndicatorPressed: {
+  offscreenMapIndicatorPressed: {
     opacity: 0.55,
   },
-  offscreenGpsIcon: {
+  offscreenMapIcon: {
     width: 34,
     height: 34,
     borderRadius: 17,
@@ -1557,7 +1792,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 5,
   },
-  offscreenGpsArrowOrbit: {
+  offscreenMapArrowOrbit: {
     position: 'absolute',
     width: OFFSCREEN_GPS_INDICATOR_SIZE,
     height: OFFSCREEN_GPS_INDICATOR_SIZE,
