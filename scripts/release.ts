@@ -56,7 +56,10 @@ async function rollbackLocalRelease(state: {
   if (state.published) return
 
   console.log('\n→ Rolling back local release changes')
-  await $`git merge --abort`.cwd(root).nothrow()
+  const mergeHead = join(root, '.git/MERGE_HEAD')
+  if (await Bun.file(mergeHead).exists()) {
+    await $`git merge --abort`.cwd(root).nothrow()
+  }
 
   if (state.devSha) {
     await $`git checkout dev`.cwd(root).nothrow()
@@ -102,7 +105,7 @@ async function ensureOnlyExpectedChanges(expectedPaths: string[]) {
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map((line) => line.slice(3))
+    .map((line) => line.slice(2).trim())
     .map((path) => path.replace(/^.* -> /, ''))
 
   const unexpectedPaths = changedPaths.filter((path) => !expectedPaths.includes(path))
@@ -180,10 +183,10 @@ try {
   await copyApk(apkLabel)
 
   if (isDevBranch) {
-    await ensureOnlyExpectedChanges(['package.json', 'android/app/build.gradle'])
+    await ensureOnlyExpectedChanges(['package.json'])
     await run(
       'Commit release version',
-      `git add package.json android/app/build.gradle && git commit -m "${apkLabel.slice(1)}"`,
+      `git add package.json && git commit -m "${apkLabel.slice(1)}"`,
     )
     await run('Switch to main', 'git checkout main')
     await run('Merge dev → main', `git merge dev --no-ff -m "release: ${apkLabel.slice(1)}"`)
