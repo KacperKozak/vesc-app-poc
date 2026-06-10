@@ -4,13 +4,23 @@ import {
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
   ClockCounterClockwiseIcon,
+  MagnifyingGlassIcon,
+  MapPinIcon,
   FunnelIcon,
   PlusIcon,
   SlidersHorizontalIcon,
   XIcon,
 } from 'phosphor-react-native'
 import { useCallback, useEffect, useState, type RefObject } from 'react'
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { MapPointKind } from 'vesc-ble'
@@ -30,6 +40,7 @@ import {
   MAP_POINT_KIND_OPTIONS,
 } from '@/constants/mapPoints'
 import { theme } from '@/constants/theme'
+import { searchMapResults, type MapSearchResult } from '@/lib/map/search'
 import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
 import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
@@ -80,6 +91,7 @@ interface CenterMapOverlayProps {
   exitWeather: () => void
   refreshWeather: () => void
   weatherLocation: { latitude: number; longitude: number } | null
+  replaceDirectionPoint: (latitude: number, longitude: number) => Promise<unknown>
   addMapPoint: (kind: MapPointKind, latitude: number, longitude: number) => Promise<unknown>
   hiddenMapPointKinds: MapPointKind[]
   toggleMapPointKindVisibility: (kind: MapPointKind) => void
@@ -116,6 +128,7 @@ interface CenterHistoryOverlayProps {
 interface CenterOverlaysProps {
   mode: CenterViewState
   mapRef: RefObject<CenterMapHandle | null>
+  mapInteractionRevision: number
   board: CenterBoardOverlayProps
   map: CenterMapOverlayProps
   history: CenterHistoryOverlayProps
@@ -133,13 +146,98 @@ function isCompactMapPointKind(kind: MapPointKind) {
 interface FullMapControlsProps {
   mapRef: RefObject<CenterMapHandle | null>
   map: CenterMapOverlayProps
+  mapInteractionRevision: number
   top: number
   bottom: number
 }
 
-function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
+function FullMapControls({
+  mapRef,
+  map,
+  mapInteractionRevision,
+  top,
+  bottom,
+}: FullMapControlsProps) {
+  const [searchOpenedAtRevision, setSearchOpenedAtRevision] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<MapSearchResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const searchOpen = searchOpenedAtRevision === mapInteractionRevision
+
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (!searchOpen || query.length < 2) {
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => {
+      setSearchLoading(true)
+      void searchMapResults(query, {
+        proximity: map.weatherLocation,
+        signal: controller.signal,
+      })
+        .then((results) => {
+          setSearchResults(results)
+          setSearchLoading(false)
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return
+          setSearchResults([])
+          setSearchError(error instanceof Error ? error.message : 'Mapbox search failed')
+          setSearchLoading(false)
+        })
+    }, 260)
+
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [map.weatherLocation, searchOpen, searchQuery])
+
+  const openSearch = useCallback(() => {
+    setSearchOpenedAtRevision(mapInteractionRevision)
+  }, [mapInteractionRevision])
+
+  const closeSearch = useCallback(() => {
+    setSearchOpenedAtRevision(null)
+    setSearchQuery('')
+    setSearchResults([])
+    setSearchError(null)
+    setSearchLoading(false)
+  }, [])
+
+  const handleSearchQueryChange = useCallback((query: string) => {
+    setSearchQuery(query)
+    setSearchError(null)
+    setSearchResults([])
+    if (query.trim().length < 2) {
+      setSearchLoading(false)
+    } else {
+      setSearchLoading(true)
+    }
+  }, [])
+
+  const handleSearchSelect = useCallback(
+    (result: MapSearchResult) => {
+      setSearchOpenedAtRevision(null)
+      setSearchQuery(result.title)
+      mapRef.current?.focusCoordinate([result.longitude, result.latitude])
+      void map.replaceDirectionPoint(result.latitude, result.longitude)
+    },
+    [map, mapRef],
+  )
+
+  const handleSearchSubmit = useCallback(() => {
+    const first = searchResults[0]
+    if (first) handleSearchSelect(first)
+  }, [handleSearchSelect, searchResults])
+
+  const showNoResults =
+    !searchLoading && !searchError && searchQuery.trim().length >= 2 && searchResults.length === 0
 
   const toggleAddMenu = useCallback(() => {
     setFilterMenuOpen(false)
@@ -170,6 +268,89 @@ function FullMapControls({ mapRef, map, top, bottom }: FullMapControlsProps) {
   return (
     <>
       {addMenuOpen ? <CenterPlacementPointer /> : null}
+      {searchOpen ? <MapVignette mode="map" idPrefix="search-map-vignette" topOnly /> : null}
+      {searchOpen ? (
+        <View style={[styles.mapSearchSheet, { top }]}>
+          <View style={styles.mapSearchBar}>
+            <MagnifyingGlassIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+            <TextInput
+              autoFocus
+              selectTextOnFocus
+              value={searchQuery}
+              onChangeText={handleSearchQueryChange}
+              onSubmitEditing={handleSearchSubmit}
+              placeholder="Address or place"
+              placeholderTextColor={theme.neutral.textMuted}
+              returnKeyType="search"
+              style={styles.mapSearchInput}
+            />
+            <Pressable
+              accessibilityLabel="Close search"
+              accessibilityRole="button"
+              onPress={closeSearch}
+              style={({ pressed }) => [
+                styles.mapSearchClose,
+                pressed && styles.mapSearchClosePressed,
+              ]}
+            >
+              <XIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+            </Pressable>
+          </View>
+          {searchLoading || searchError || showNoResults || searchResults.length > 0 ? (
+            <View style={styles.mapSearchResults}>
+              {searchLoading ? (
+                <View style={styles.mapSearchStatusRow}>
+                  <ActivityIndicator size="small" color={theme.wheel.color} />
+                  <Text style={styles.mapSearchStatusText}>Searching Mapbox</Text>
+                </View>
+              ) : null}
+              {searchError ? (
+                <View style={styles.mapSearchStatusRow}>
+                  <Text style={styles.mapSearchErrorText}>{searchError}</Text>
+                </View>
+              ) : null}
+              {showNoResults ? (
+                <View style={styles.mapSearchStatusRow}>
+                  <Text style={styles.mapSearchStatusText}>No results</Text>
+                </View>
+              ) : null}
+              {searchResults.map((result, index) => (
+                <Pressable
+                  key={result.id}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.mapSearchResult,
+                    pressed && styles.mapSearchResultPressed,
+                  ]}
+                  onPress={() => handleSearchSelect(result)}
+                >
+                  <View style={styles.mapSearchResultIcon}>
+                    <MapPinIcon size={16} color={theme.gps.text} weight="duotone" />
+                  </View>
+                  <View style={styles.mapSearchResultText}>
+                    <Text style={styles.mapSearchResultTitle} numberOfLines={1}>
+                      {result.title}
+                    </Text>
+                    <Text style={styles.mapSearchResultSubtitle} numberOfLines={1}>
+                      {result.subtitle}
+                    </Text>
+                  </View>
+                  {index < searchResults.length - 1 ? (
+                    <View style={styles.mapSearchResultBorder} />
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <IconButton
+          icon={MagnifyingGlassIcon}
+          size="md"
+          onPress={openSearch}
+          style={[styles.mapSearchButton, { top }]}
+        />
+      )}
       <View pointerEvents="box-none" style={[styles.weatherPillContainer, { top }]}>
         <WeatherPill location={map.weatherLocation} onPress={map.enterWeather} />
       </View>
@@ -320,7 +501,14 @@ function CenterPlacementPointer() {
   )
 }
 
-export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOverlaysProps) {
+export function CenterOverlays({
+  mode,
+  mapRef,
+  mapInteractionRevision,
+  board,
+  map,
+  history,
+}: CenterOverlaysProps) {
   const insets = useSafeAreaInsets()
   const aboveStripBottom = STRIP_CONTENT_HEIGHT + Math.max(insets.bottom * 0.5, 8) + 8
   const historyPanelBottom = Math.max(insets.bottom, 16) + 8
@@ -493,6 +681,7 @@ export function CenterOverlays({ mode, mapRef, board, map, history }: CenterOver
           <FullMapControls
             mapRef={mapRef}
             map={map}
+            mapInteractionRevision={mapInteractionRevision}
             top={Math.max(insets.top, 8)}
             bottom={aboveStripBottom - 112}
           />
@@ -652,6 +841,118 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     zIndex: 30,
+  },
+  mapSearchButton: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 32,
+    borderColor: theme.neutral.borderMuted,
+    backgroundColor: theme.neutral.mapOverlaySelector,
+  },
+  mapSearchSheet: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 36,
+    gap: 8,
+  },
+  mapSearchBar: {
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: theme.neutral.borderMuted,
+    backgroundColor: theme.neutral.mapOverlaySelector,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 14,
+    paddingRight: 0,
+  },
+  mapSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.neutral.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+    paddingVertical: 10,
+  },
+  mapSearchClose: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapSearchClosePressed: {
+    opacity: 0.55,
+  },
+  mapSearchResults: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.neutral.borderMuted,
+    backgroundColor: theme.neutral.mapOverlaySelector,
+  },
+  mapSearchStatusRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+  },
+  mapSearchStatusText: {
+    color: theme.neutral.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mapSearchErrorText: {
+    color: theme.error.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mapSearchResult: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingLeft: 8,
+    paddingRight: 14,
+    position: 'relative',
+  },
+  mapSearchResultPressed: {
+    opacity: 0.55,
+  },
+  mapSearchResultIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: theme.gps.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.neutral.surfaceDeep,
+  },
+  mapSearchResultText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mapSearchResultTitle: {
+    color: theme.neutral.textPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  mapSearchResultSubtitle: {
+    color: theme.neutral.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  mapSearchResultBorder: {
+    position: 'absolute',
+    left: 54,
+    right: 0,
+    bottom: 0,
+    height: 1,
+    backgroundColor: theme.neutral.borderMuted,
   },
   mapSelectors: {
     position: 'absolute',

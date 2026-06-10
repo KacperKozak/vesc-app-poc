@@ -43,6 +43,12 @@ export function CenterScreen({
     OffscreenMapIndicatorState[]
   >([])
   const controller = useCenterScreenController({ mapRef })
+  const dismissMapSelector = controller.dismissMapSelector
+  const [mapInteractionRevision, setMapInteractionRevision] = useState(0)
+  const handleMapInteraction = useCallback(() => {
+    dismissMapSelector()
+    setMapInteractionRevision((revision) => revision + 1)
+  }, [dismissMapSelector])
   const handleOffscreenIndicatorPress = useCallback(
     (indicator: OffscreenMapIndicatorState) => {
       controller.dismissMapSelector()
@@ -89,9 +95,9 @@ export function CenterScreen({
         onLongPressTarget={(target) =>
           void controller.replaceDirectionPoint(target.latitude, target.longitude)
         }
-        onMapInteraction={controller.dismissMapSelector}
+        onMapInteraction={handleMapInteraction}
         onMapPress={() => {
-          controller.dismissMapSelector()
+          handleMapInteraction()
           controller.clearSelectedMapPoints()
         }}
         onEnterMapMode={controller.handleMapFocus}
@@ -109,6 +115,7 @@ export function CenterScreen({
       <CenterOverlays
         mode={controller.mode}
         mapRef={mapRef}
+        mapInteractionRevision={mapInteractionRevision}
         board={{
           boards,
           activeBoardId,
@@ -135,6 +142,7 @@ export function CenterScreen({
           exitWeather: controller.exitWeatherMode,
           refreshWeather: controller.refreshWeather,
           weatherLocation: controller.liveLocations.at(-1) ?? controller.latestApproximateLocation,
+          replaceDirectionPoint: controller.replaceDirectionPoint,
           addMapPoint: controller.saveMapPoint,
           hiddenMapPointKinds: controller.hiddenMapPointKinds,
           toggleMapPointKindVisibility: controller.toggleMapPointKindVisibility,
