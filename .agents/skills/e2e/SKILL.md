@@ -13,10 +13,13 @@ Fast loop for local Android Maestro flows. Goal: agents can run E2E often withou
 - Default command:
 
 ```sh
-zsh -lc 'bun run e2e'
+zsh -lc 'bun run e2e --all'
 ```
 
-- Main flow: `e2e/flows/e2e.yaml`.
+- `bun run e2e --all` runs every public flow in `e2e/flows/`.
+- `bun run e2e --flow connect-board` runs one flow by name from `e2e/flows/connect-board.yaml`.
+- `bun run e2e` opens a simple interactive selector.
+- Helper flows start with `_` and are hidden from the selector.
 - Keep project code clean: do not patch `package.json` or source files to solve local tool/env problems.
 
 ## Fast Loop
@@ -30,14 +33,14 @@ adb devices
 2. Run E2E:
 
 ```sh
-zsh -lc 'bun run e2e'
+zsh -lc 'bun run e2e --all'
 ```
 
 3. On failure, rerun only the smallest needed command. Do not run full `check`.
 
 ## App State
 
-The main flow clears app state itself.
+Public flows clear app state themselves through `_launch.yaml`.
 
 The expected installed app is Expo dev-client package `com.anonymous.vescpoc`. Flow selects local Metro server from the dev-client launcher, then exercises add-board happy path.
 

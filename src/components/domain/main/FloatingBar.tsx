@@ -134,12 +134,15 @@ export function FloatingBar({
   return (
     <View style={[styles.wrapper, { bottom: bottomOffset }]} pointerEvents="box-none">
       {pill?.kind === 'spinner' && (
-        <View style={[styles.pill, { borderColor: pill.color + '55' }]}>
+        <View
+          style={[styles.pill, { borderColor: pill.color + '55' }]}
+          testID="floating-bar-status"
+        >
           <ActivityIndicator size="small" color={pill.color} />
           <Text style={[styles.pillText, { color: pill.color }]} numberOfLines={1}>
             {pill.text}
           </Text>
-          <Pressable style={styles.pillButton} onPress={pill.onPress}>
+          <Pressable style={styles.pillButton} onPress={pill.onPress} testID="floating-bar-cancel">
             <Text style={styles.pillButtonText}>Cancel</Text>
           </Pressable>
         </View>

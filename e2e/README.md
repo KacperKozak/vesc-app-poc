@@ -12,11 +12,26 @@ Maestro flows exercise the installed app like a user: tap, type, assert visible 
 bun run android:e2e
 ```
 
-4. Run the E2E flow:
+4. Run all E2E flows:
+
+```sh
+bun run e2e --all
+```
+
+Run one flow by file name:
+
+```sh
+bun run e2e --flow connect-board
+```
+
+Run without flags to pick from an interactive selector:
 
 ```sh
 bun run e2e
 ```
+
+Public flows live in `e2e/flows/*.yaml`. Helper flows start with `_` and are hidden from
+the selector.
 
 The first example clears app state, opens the board selector, taps Add new board, uses `EXPO_PUBLIC_E2E=1` to surface a fake BLE scan result named `E2E VESC Board`, creates `E2E Board`, keeps default battery config, saves, then checks the board name appears on the main screen.
 
