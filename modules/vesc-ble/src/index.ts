@@ -1,5 +1,7 @@
 import { requireNativeModule, type EventSubscription } from 'expo-modules-core'
 
+import { e2eFake } from './e2eFake'
+
 // ---------------------------------------------------------------------------
 // Event payloads
 // ---------------------------------------------------------------------------
@@ -579,41 +581,6 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
 const native = requireNativeModule<VescBleNativeModule>('VescBle')
 const emitter = native
 const E2E_ENABLED = process.env.EXPO_PUBLIC_E2E === '1'
-const E2E_BOARD_SCAN_RESULT: DeviceFoundEvent = {
-  id: 'E2:E2:E2:E2:E2:01',
-  name: 'E2E VESC Board',
-  rssi: -48,
-  serviceUUIDs: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'],
-}
-
-let e2eScanActive = false
-let e2eScanTimer: ReturnType<typeof setTimeout> | null = null
-const e2eDeviceListeners = new Set<(event: DeviceFoundEvent) => void>()
-
-function emitE2eDevice(event: DeviceFoundEvent): void {
-  for (const listener of e2eDeviceListeners) {
-    listener(event)
-  }
-}
-
-function clearE2eScanTimer(): void {
-  if (!e2eScanTimer) return
-  clearTimeout(e2eScanTimer)
-  e2eScanTimer = null
-}
-
-function withE2eScanState(state: LiveStateEvent): LiveStateEvent {
-  if (!E2E_ENABLED) return state
-  return {
-    ...state,
-    scan: {
-      ...state.scan,
-      phase: e2eScanActive ? 'scanning' : 'idle',
-      devices: e2eScanActive ? [E2E_BOARD_SCAN_RESULT] : [],
-      error: null,
-    },
-  }
-}
 
 // ---------------------------------------------------------------------------
 // API
@@ -622,12 +589,7 @@ function withE2eScanState(state: LiveStateEvent): LiveStateEvent {
 /** Start BLE scan — emits onDevice events for every advertisement received. */
 export function scan(): void {
   if (E2E_ENABLED) {
-    e2eScanActive = true
-    clearE2eScanTimer()
-    e2eScanTimer = setTimeout(() => {
-      e2eScanTimer = null
-      if (e2eScanActive) emitE2eDevice(E2E_BOARD_SCAN_RESULT)
-    }, 300)
+    e2eFake.scan()
     return
   }
 
@@ -637,8 +599,7 @@ export function scan(): void {
 /** Stop ongoing BLE scan. */
 export function stopScan(): void {
   if (E2E_ENABLED) {
-    e2eScanActive = false
-    clearE2eScanTimer()
+    e2eFake.stopScan()
     return
   }
 
@@ -704,11 +665,21 @@ export function stopGeigerSimulation(): void {
 
 /** Select saved board by app board id. Native reads BLE id/name from its DB and owns connect. */
 export async function selectBoard(boardId: string): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.selectBoard(boardId)
+    return
+  }
+
   return native.selectBoard(boardId)
 }
 
 /** Stop native board session. GPS monitoring may continue independently. */
 export async function stopBoard(): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.stopBoard()
+    return
+  }
+
   return native.stopBoard()
 }
 
@@ -738,11 +709,17 @@ export function getDiagnosticStatus(): DiagnosticStatus {
 
 /** Read native-owned live state. UI should mirror this, not invent connection state. */
 export function getLiveState(): LiveStateEvent {
-  return withE2eScanState(native.getLiveState())
+  if (E2E_ENABLED) return e2eFake.getLiveState(native.getLiveState())
+  return native.getLiveState()
 }
 
 /** Persist native auto-connect target. Native can use this while JS is frozen. */
 export function setSelectedBoard(boardId: string | null): void {
+  if (E2E_ENABLED) {
+    e2eFake.setSelectedBoard(boardId)
+    return
+  }
+
   native.setSelectedBoard(boardId)
 }
 
@@ -883,10 +860,17 @@ export async function clearTelemetryHistory(): Promise<void> {
 }
 
 export async function getBoards(): Promise<Board[]> {
+  if (E2E_ENABLED) {
+    return e2eFake.getBoards()
+  }
   return native.getBoards()
 }
 
 export async function upsertBoard(board: Board): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.upsertBoard(board)
+    return
+  }
   return native.upsertBoard(board)
 }
 
@@ -943,6 +927,9 @@ export async function deleteMapPoint(id: string): Promise<void> {
 }
 
 export async function getSettings(): Promise<AppSettings> {
+  if (E2E_ENABLED) {
+    return e2eFake.getSettings()
+  }
   return native.getSettings()
 }
 
@@ -950,7 +937,17 @@ export async function updateSetting(
   key: string,
   value: number | boolean | string | Record<string, unknown> | null,
 ): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.updateSetting(key, value)
+    return
+  }
   return native.updateSetting(key, value)
+}
+
+export function seedE2EData(flow: string): void {
+  if (E2E_ENABLED) {
+    e2eFake.seedE2EData(flow)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -959,8 +956,7 @@ export async function updateSetting(
 
 export function addDeviceListener(cb: (event: DeviceFoundEvent) => void): EventSubscription {
   if (E2E_ENABLED) {
-    e2eDeviceListeners.add(cb)
-    return { remove: () => e2eDeviceListeners.delete(cb) }
+    return e2eFake.addDeviceListener(cb)
   }
 
   return emitter.addListener('onDevice', cb)
@@ -971,10 +967,18 @@ export function addErrorListener(cb: (event: ErrorEvent) => void): EventSubscrip
 }
 
 export function addLiveStateListener(cb: (event: LiveStateEvent) => void): EventSubscription {
+  if (E2E_ENABLED) {
+    return e2eFake.addLiveStateListener(cb)
+  }
+
   return emitter.addListener('onLiveState', cb)
 }
 
 export function addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {
+  if (E2E_ENABLED) {
+    return e2eFake.addTelemetryListener(cb)
+  }
+
   return emitter.addListener('onTelemetry', cb)
 }
 
