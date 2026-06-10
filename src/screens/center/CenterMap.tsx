@@ -384,7 +384,6 @@ interface CenterMapLayersProps {
   } | null
   accuracyFix: { longitude: number; latitude: number } | null
   accuracyShape: ReturnType<typeof makeCircleFeature> | null
-  gpsFix: { longitude: number; latitude: number } | null
   gpsBearingDeg: number | null
   rideRoute: [number, number][]
   seekPosition: HistoryGpsSample | null
@@ -407,13 +406,11 @@ function LiveMapLayers({
   liveTrailShape,
   accuracyFix,
   accuracyShape,
-  gpsFix,
   gpsBearingDeg,
 }: {
   liveTrailShape: CenterMapLayersProps['liveTrailShape']
   accuracyFix: CenterMapLayersProps['accuracyFix']
   accuracyShape: CenterMapLayersProps['accuracyShape']
-  gpsFix: CenterMapLayersProps['gpsFix']
   gpsBearingDeg: CenterMapLayersProps['gpsBearingDeg']
 }) {
   return (
@@ -450,14 +447,12 @@ function LiveMapLayers({
               />
             </ShapeSource>
           )}
-          {gpsFix && (
-            <MapPin
-              id="center-gps-position"
-              coordinate={[gpsFix.longitude, gpsFix.latitude]}
-              color={GPS_POINT_COLOR}
-              bearingDeg={gpsBearingDeg}
-            />
-          )}
+          <MapPin
+            id="center-gps-position"
+            coordinate={[accuracyFix.longitude, accuracyFix.latitude]}
+            color={GPS_POINT_COLOR}
+            bearingDeg={gpsBearingDeg}
+          />
         </>
       )}
     </>
@@ -853,7 +848,6 @@ function CenterMapLayers({
   rideRouteShape,
   accuracyFix,
   accuracyShape,
-  gpsFix,
   gpsBearingDeg,
   rideRoute,
   seekPosition,
@@ -927,7 +921,6 @@ function CenterMapLayers({
           liveTrailShape={liveTrailShape}
           accuracyFix={accuracyFix}
           accuracyShape={accuracyShape}
-          gpsFix={gpsFix}
           gpsBearingDeg={gpsBearingDeg}
         />
       )}
@@ -1682,7 +1675,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           rideRouteShape={rideRouteShape}
           accuracyFix={accuracyFix}
           accuracyShape={accuracyShape}
-          gpsFix={gpsFix}
           gpsBearingDeg={gpsPinBearingDeg}
           rideRoute={rideRoute}
           seekPosition={seekPosition}
