@@ -111,7 +111,6 @@ interface SelectedHistoryMarker {
   gps: HistoryGpsSample
 }
 
-const RADAR_MAX_ZOOM = 10
 const HEADING_SMOOTHING_TAU_MS = 180
 const HEADING_SNAP_DEG = 0.08
 const OFFSCREEN_GPS_INDICATOR_SIZE = 64
@@ -402,7 +401,6 @@ interface CenterMapLayersProps {
   isOneDark: boolean
   showBuildings3d: boolean
   weatherActive: boolean
-  showRadar: boolean
   liveTrailShape: ReturnType<typeof makeTrailLineString> | null
   rideRouteShape: {
     type: 'Feature'
@@ -870,7 +868,6 @@ function CenterMapLayers({
   isOneDark,
   showBuildings3d,
   weatherActive,
-  showRadar,
   liveTrailShape,
   rideRouteShape,
   accuracyFix,
@@ -930,7 +927,7 @@ function CenterMapLayers({
           <RasterLayer id="center-mapy-tiles-layer" sourceID="center-mapy-tiles" style={{}} />
         </RasterSource>
       ) : null}
-      <RainViewerOverlay visible={weatherActive || showRadar} />
+      <RainViewerOverlay visible={weatherActive} />
       {historyActive ? (
         <HistoryMapLayers
           rideRouteShape={rideRouteShape}
@@ -1075,7 +1072,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const [selectedHistoryMarker, setSelectedHistoryMarker] = useState<SelectedHistoryMarker | null>(
     null,
   )
-  const [showRadar, setShowRadar] = useState(true)
   const [cameraHeading, setCameraHeading] = useState(0)
   const [initialApproximateFix, setInitialApproximateFix] = useState<LocationEvent | null>(null)
   const [mapLayout, setMapLayout] = useState<MapLayout>({ width: 0, height: 0 })
@@ -1622,7 +1618,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         Math.abs(current - state.properties.heading) > 0.5 ? state.properties.heading : current,
       )
       onHeadingChange(state.properties.heading)
-      setShowRadar(state.properties.zoom <= RADAR_MAX_ZOOM)
       updateOffscreenMapIndicators()
     },
     [
@@ -1702,7 +1697,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           isOneDark={isOneDark}
           showBuildings3d={showBuildings3d}
           weatherActive={weatherActive}
-          showRadar={showRadar}
           liveTrailShape={liveTrailShape}
           rideRouteShape={rideRouteShape}
           accuracyFix={accuracyFix}
@@ -1736,7 +1730,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
         dismissLabel="Close"
         onDismiss={() => setSelectedHistoryMarker(null)}
       />
-      {weatherActive || showRadar ? (
+      {weatherActive ? (
         <Text style={styles.radarAttribution} pointerEvents="none">
           Weather data by RainViewer
         </Text>
