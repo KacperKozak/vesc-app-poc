@@ -2,6 +2,17 @@ export function zoomLevelForDelta(delta: number): number {
   return Math.max(3, Math.min(19, Math.log2(360 / Math.max(delta, 0.0001))))
 }
 
+export function isPointOutsideVisibleMapArea(
+  point: { x: number; y: number },
+  layout: { width: number; height: number },
+  verticalInsets: { top: number; bottom: number },
+): boolean {
+  const top = Math.min(verticalInsets.top, layout.height / 2)
+  const bottom = Math.max(top, layout.height - verticalInsets.bottom)
+
+  return point.x < 0 || point.x > layout.width || point.y < top || point.y > bottom
+}
+
 export function makeCircleFeature(
   longitude: number,
   latitude: number,

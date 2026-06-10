@@ -55,7 +55,12 @@ import {
   getLiveGpsPresentation,
   getReliableGpsBearingFromFixes,
 } from '@/helpers/liveGpsPresentation'
-import { distanceMeters, makeCircleFeature, makeTrailLineString } from '@/helpers/mapGeometry'
+import {
+  distanceMeters,
+  isPointOutsideVisibleMapArea,
+  makeCircleFeature,
+  makeTrailLineString,
+} from '@/helpers/mapGeometry'
 import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
 import { isMapPointKindVisible } from '@/lib/mapPointVisibility'
 import {
@@ -228,7 +233,12 @@ function clampedEdgeIndicator(
   point: { x: number; y: number },
   layout: MapLayout,
 ): OffscreenMapIndicatorState | null {
-  if (point.x >= 0 && point.x <= layout.width && point.y >= 0 && point.y <= layout.height) {
+  if (
+    !isPointOutsideVisibleMapArea(point, layout, {
+      top: OFFSCREEN_GPS_EDGE_TOP_INSET,
+      bottom: OFFSCREEN_GPS_EDGE_BOTTOM_INSET,
+    })
+  ) {
     return null
   }
 
