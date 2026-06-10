@@ -1,5 +1,6 @@
 import { router } from 'expo-router'
 import * as Haptics from 'expo-haptics'
+import * as Linking from 'expo-linking'
 import {
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
@@ -23,9 +24,11 @@ import {
 } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { MapPointKind } from 'vesc-ble'
+import type { HistoryMarker, MapPointKind } from 'vesc-ble'
 
 import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
+import { Button } from '@/components/ui/base/Button'
+import { MediaHistoryViewer } from '@/components/domain/history/MediaHistoryViewer'
 import { FloatingBar } from '@/components/domain/main/FloatingBar'
 import { HistorySessionSheet } from '@/components/domain/history/HistorySessionSheet'
 import { IconButton } from '@/components/ui/base/IconButton'
@@ -62,6 +65,7 @@ import { MapVignette } from '@/screens/center/MapVignette'
 import { TopBar } from '@/screens/center/TopBar'
 import type { Board } from '@/store/boardStore'
 import type { HistorySession, TelemetryMinuteBucket, TelemetrySample } from '@/store/historyStore'
+import type { MediaHistoryAsset } from '@/lib/history/mediaHistory'
 import { useWeatherStore } from '@/store/weatherStore'
 
 interface CenterBoardOverlayProps {
@@ -103,6 +107,7 @@ interface CenterHistoryOverlayProps {
   enterHistoryMode: () => void
   selectedSession: HistorySession | null
   sessionSamples: TelemetrySample[]
+  sessionMarkers: HistoryMarker[]
   previousRide: HistorySession | null
   nextRide: HistorySession | null
   canPreviousRide: boolean
@@ -123,6 +128,18 @@ interface CenterHistoryOverlayProps {
   removeSession: () => void
   onSeek: (timeMs: number) => void
   setActiveHistoryMapMetric: (metric: HistoryMetricKey) => void
+  mediaHistory: {
+    enabled: boolean
+    permission: 'unknown' | 'full' | 'limited' | 'denied'
+    assets: MediaHistoryAsset[]
+    loading: boolean
+    error: string | null
+    toggle: () => void
+    refresh: () => void
+    manageLimitedAccess: () => Promise<void>
+  }
+  openMediaAssets: MediaHistoryAsset[]
+  closeMedia: () => void
 }
 
 interface CenterOverlaysProps {
@@ -749,7 +766,10 @@ export function CenterOverlays({
           <HistoryControls
             loading={historyBusy}
             canRemove={true}
+            mediaEnabled={history.mediaHistory.enabled}
+            mediaLoading={history.mediaHistory.loading}
             onBack={history.exitHistory}
+            onToggleMedia={history.mediaHistory.toggle}
             onRemove={handleRemovePress}
           />
         </>
@@ -785,7 +805,10 @@ export function CenterOverlays({
           <HistoryControls
             loading={historyBusy}
             canRemove={false}
+            mediaEnabled={history.mediaHistory.enabled}
+            mediaLoading={history.mediaHistory.loading}
             onBack={history.exitHistory}
+            onToggleMedia={history.mediaHistory.toggle}
             onRemove={() => undefined}
           />
         </>
@@ -815,6 +838,42 @@ export function CenterOverlays({
             {history.historyError}
           </Text>
         </View>
+      ) : null}
+
+      {mode === 'history' &&
+      history.mediaHistory.enabled &&
+      (history.mediaHistory.permission === 'limited' ||
+        history.mediaHistory.permission === 'denied' ||
+        history.mediaHistory.error) ? (
+        <View style={[styles.mediaStatus, { top: Math.max(insets.top, 8) + 48 }]}>
+          <Text style={styles.mediaStatusText} selectable>
+            {history.mediaHistory.error ??
+              (history.mediaHistory.permission === 'limited'
+                ? 'Media access limited. Some ride photos or videos may be hidden.'
+                : 'Photo-library access denied. Ride History remains available.')}
+          </Text>
+          <Button
+            label={
+              history.mediaHistory.permission === 'limited' ? 'Manage access' : 'Open settings'
+            }
+            size="sm"
+            variant="secondary"
+            onPress={
+              history.mediaHistory.permission === 'limited'
+                ? history.mediaHistory.manageLimitedAccess
+                : Linking.openSettings
+            }
+          />
+        </View>
+      ) : null}
+
+      {history.openMediaAssets.length > 0 ? (
+        <MediaHistoryViewer
+          assets={history.openMediaAssets}
+          samples={history.sessionSamples}
+          markers={history.sessionMarkers}
+          onClose={history.closeMedia}
+        />
       ) : null}
 
       <ConfirmModal
@@ -1207,6 +1266,26 @@ const styles = StyleSheet.create({
   historyErrorText: {
     color: theme.error.text,
     fontSize: 12,
+    fontWeight: '700',
+  },
+  mediaStatus: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 45,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: theme.neutral.mapOverlaySelector,
+    borderWidth: 1,
+    borderColor: theme.neutral.borderMuted,
+  },
+  mediaStatusText: {
+    flex: 1,
+    color: theme.neutral.textSecondary,
+    fontSize: 11,
     fontWeight: '700',
   },
   mapLoading: {
