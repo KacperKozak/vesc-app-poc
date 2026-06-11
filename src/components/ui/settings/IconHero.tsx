@@ -6,15 +6,30 @@ import { theme } from '@/constants/theme'
 
 type IconHeroProps = {
   icon: Icon
-  description: string
+  title?: string
+  description?: string
   children?: ReactNode
+  iconSize?: number
+  iconColor?: string
+  iconWeight?: 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duotone'
 }
 
-export function IconHero({ icon: IconComponent, description, children }: IconHeroProps) {
+export function IconHero({
+  icon: IconComponent,
+  title,
+  description,
+  children,
+  iconSize = 64,
+  iconColor = theme.neutral.textMuted,
+  iconWeight = 'thin',
+}: IconHeroProps) {
   return (
     <View style={styles.container}>
-      <IconComponent size={64} color={theme.neutral.textMuted} weight="thin" />
-      <Text style={styles.description}>{description}</Text>
+      <View style={styles.iconBg}>
+        <IconComponent size={iconSize} color={iconColor} weight={iconWeight} />
+      </View>
+      {title ? <Text style={styles.title}>{title}</Text> : null}
+      {description ? <Text style={styles.description}>{description}</Text> : null}
       {children}
     </View>
   )
@@ -24,9 +39,23 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 0,
+    paddingTop: 8,
     paddingBottom: 32,
     gap: 12,
+  },
+  iconBg: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: theme.neutral.surfaceDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    color: theme.neutral.textPrimary,
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   description: {
     color: theme.neutral.textMuted,
