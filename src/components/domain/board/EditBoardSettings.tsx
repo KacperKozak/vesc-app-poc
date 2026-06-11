@@ -1,9 +1,16 @@
 import { StyleSheet, Text, View } from 'react-native'
-import { BatteryChargingIcon, BluetoothIcon, IdentificationCardIcon } from 'phosphor-react-native'
+import {
+  BatteryChargingIcon,
+  BluetoothIcon,
+  IdentificationCardIcon,
+  LightningIcon,
+} from 'phosphor-react-native'
 
 import { BoardSettingRow } from '@/components/domain/board/BoardSettingRow'
 import { Button } from '@/components/ui/base/Button'
+import { IconHero } from '@/components/ui/settings/IconHero'
 import { SettingsCard } from '@/components/ui/settings/SettingsCard'
+import { SettingsRow } from '@/components/ui/settings/SettingsRow'
 import { SettingsSectionTitle } from '@/components/ui/settings/SettingsSectionTitle'
 import { theme } from '@/constants/theme'
 import type { BatterySummary } from '@/lib/boardSetup'
@@ -37,14 +44,23 @@ export function EditBoardSettings({
 }: EditBoardSettingsProps) {
   return (
     <>
+      <IconHero
+        icon={LightningIcon}
+        title={name.trim() || 'Unnamed board'}
+        description={description.trim() || 'No description'}
+        iconSize={48}
+        iconColor={theme.wheel.color}
+        iconWeight="duotone"
+      />
+
       <SettingsSectionTitle>Board</SettingsSectionTitle>
       <SettingsCard>
         <BoardSettingRow
           icon={IdentificationCardIcon}
           iconColor={theme.wheel.text}
-          label={name.trim() || 'Unnamed board'}
-          value={description.trim() || 'No description'}
-          hint="Name and notes"
+          label="Name and notes"
+          value={name.trim() || 'Unnamed board'}
+          hint={description.trim() || 'No description'}
           onPress={onOpenInfo}
           testID="edit-board-info-row"
         />
@@ -63,65 +79,45 @@ export function EditBoardSettings({
         />
       </SettingsCard>
 
-      <View style={styles.pairing}>
-        <View style={styles.pairingCopy}>
-          <View style={styles.pairingTitleRow}>
-            <BluetoothIcon size={14} color={theme.teal.text} weight="duotone" />
-            <Text style={styles.pairingTitle}>BLE pairing</Text>
-          </View>
-          <Text style={styles.pairingValue} numberOfLines={1}>
-            {pairedBleId ? pairedBleName || pairedBleId : 'No device paired'}
-          </Text>
-        </View>
-        <Button
-          label={pairedBleId ? 'Change' : 'Pair'}
-          variant="secondary"
-          size="sm"
-          loading={pairingSaving}
-          onPress={onOpenPairing}
-          testID="edit-board-pair-button"
+      <SettingsSectionTitle>BLE pairing</SettingsSectionTitle>
+      <SettingsCard>
+        <SettingsRow
+          icon={BluetoothIcon}
+          iconColor={theme.teal.color}
+          label="BLE pairing"
+          hint={pairedBleId ? pairedBleName || pairedBleId : 'No device paired'}
+          right={
+            <View style={styles.buttonGroup}>
+              <Button
+                label={pairedBleId ? 'Change' : 'Pair'}
+                variant="secondary"
+                size="sm"
+                loading={pairingSaving}
+                onPress={onOpenPairing}
+                testID="edit-board-pair-button"
+              />
+              {pairedBleId ? (
+                <Button
+                  label="Clear"
+                  variant="destructive"
+                  size="sm"
+                  loading={pairingSaving}
+                  onPress={onClearPairing}
+                  testID="edit-board-clear-pairing-button"
+                />
+              ) : null}
+            </View>
+          }
         />
-        {pairedBleId ? (
-          <Button
-            label="Clear"
-            variant="secondary"
-            size="sm"
-            loading={pairingSaving}
-            onPress={onClearPairing}
-            testID="edit-board-clear-pairing-button"
-          />
-        ) : null}
-      </View>
+      </SettingsCard>
     </>
   )
 }
 
 const styles = StyleSheet.create({
-  pairing: {
-    marginTop: 20,
+  buttonGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  pairingCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  pairingTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  pairingTitle: {
-    color: theme.neutral.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  pairingValue: {
-    color: theme.neutral.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
   },
 })
