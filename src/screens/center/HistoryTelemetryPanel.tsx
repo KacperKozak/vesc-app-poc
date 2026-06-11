@@ -1,37 +1,37 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
   ImagesSquareIcon,
 } from 'phosphor-react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { TelemetryLineChart } from '@/components/ui/charts/TelemetryLineChart'
-import { IconButton } from '@/components/ui/base/IconButton'
-import {
-  type ExcludedRange,
-  type TelemetryChartPoint,
-  computeAutoRange,
-  toExcludedRanges,
-} from '@/components/ui/charts/chartMath'
 import {
   OPTIONAL_CHART_METRICS,
   toggleOptionalChartMetric,
   type OptionalChartMetric,
 } from '@/components/domain/history/historyChartMetrics'
+import { IconButton } from '@/components/ui/base/IconButton'
+import {
+  computeAutoRange,
+  toExcludedRanges,
+  type ExcludedRange,
+  type TelemetryChartPoint,
+} from '@/components/ui/charts/chartMath'
+import { TelemetryLineChart } from '@/components/ui/charts/TelemetryLineChart'
 import { telemetry } from '@/constants/telemetry'
-import { downsampleTimeSeries, findNearestSampleIndexByTime } from '@/lib/history/playback'
+import { interaction, theme } from '@/constants/theme'
+import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
 import {
   getHistoryMetricColorRange,
   getMetricRampColor,
   type HistoryMetricKey,
 } from '@/lib/history/metricColorScale'
-import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
+import { downsampleTimeSeries, findNearestSampleIndexByTime } from '@/lib/history/playback'
 import { useHistoryStore, type TelemetrySample } from '@/store/historyStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { interaction, theme } from '@/constants/theme'
 
 interface HistoryTelemetryPanelProps {
   startAtMs: number | null
@@ -669,8 +669,8 @@ const styles = StyleSheet.create({
   },
   mediaCountBadge: {
     position: 'absolute',
-    top: -3,
-    right: -3,
+    top: 0,
+    right: 0,
     minWidth: 18,
     height: 18,
     paddingHorizontal: 4,
