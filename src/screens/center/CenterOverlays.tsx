@@ -21,7 +21,12 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, {
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { HistoryMarker, MapPointKind } from 'vesc-ble'
 
@@ -168,6 +173,20 @@ interface FullMapControlsProps {
   bottom: number
 }
 
+const centerPlacementPointerEntering = () => {
+  'worklet'
+  return {
+    initialValues: {
+      opacity: 0,
+      transform: [{ scale: 1.8 }],
+    },
+    animations: {
+      opacity: withTiming(1, { duration: 260 }),
+      transform: [{ scale: withTiming(1, { duration: 260 }) }],
+    },
+  }
+}
+
 function FullMapControls({
   mapRef,
   map,
@@ -258,18 +277,21 @@ function FullMapControls({
 
   const toggleAddMenu = useCallback(() => {
     setFilterMenuOpen(false)
-    setAddMenuOpen((open) => !open)
-  }, [])
+    mapRef.current?.zoomBy(addMenuOpen ? -0.45 : 0.45)
+    setAddMenuOpen(!addMenuOpen)
+  }, [addMenuOpen, mapRef])
 
   const toggleFilterMenu = useCallback(() => {
+    if (addMenuOpen) mapRef.current?.zoomBy(-0.45)
     setAddMenuOpen(false)
     setFilterMenuOpen((open) => !open)
-  }, [])
+  }, [addMenuOpen, mapRef])
 
   const handleSelectMapPoint = useCallback(
     async (kind: MapPointKind) => {
       const center = await mapRef.current?.getViewfinderCoordinate()
       if (!center) return
+      mapRef.current?.zoomBy(-0.45)
       setAddMenuOpen(false)
       void map.addMapPoint(kind, center.latitude, center.longitude)
     },
@@ -511,10 +533,15 @@ function FullMapControls({
 
 function CenterPlacementPointer() {
   return (
-    <View pointerEvents="none" style={styles.centerPlacementPointer}>
+    <Animated.View
+      pointerEvents="none"
+      entering={centerPlacementPointerEntering}
+      exiting={FadeOut.duration(140)}
+      style={styles.centerPlacementPointer}
+    >
       <View style={styles.centerPlacementBall} />
       <View style={styles.centerPlacementDot} />
-    </View>
+    </Animated.View>
   )
 }
 
@@ -1155,13 +1182,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.neutral.surfaceDeep,
   },
   centerPlacementPointer: {
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
+    ...StyleSheet.absoluteFill,
     zIndex: 29,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateX: -12 }, { translateY: -12 }],
   },
   centerPlacementBall: {
     width: 24,

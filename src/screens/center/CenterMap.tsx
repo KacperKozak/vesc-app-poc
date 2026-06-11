@@ -107,6 +107,7 @@ export interface CenterMapHandle {
   resetRotation: () => void
   togglePerspective: () => void
   setPadding: (bottom: number) => void
+  zoomBy: (delta: number) => void
   zoomToLevel: (zoom: number) => void
   focusCoordinate: (coordinate: [number, number]) => void
   getViewfinderCoordinate: () => Promise<{ latitude: number; longitude: number }>
