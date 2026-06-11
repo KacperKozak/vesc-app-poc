@@ -4,14 +4,15 @@ import {
   BluetoothIcon,
   IdentificationCardIcon,
   LightningIcon,
+  TrashIcon,
 } from 'phosphor-react-native'
 
 import { BoardSettingRow } from '@/components/domain/board/BoardSettingRow'
 import { Button } from '@/components/ui/base/Button'
+import { IconButton } from '@/components/ui/base/IconButton'
 import { IconHero } from '@/components/ui/settings/IconHero'
 import { SettingsCard } from '@/components/ui/settings/SettingsCard'
 import { SettingsRow } from '@/components/ui/settings/SettingsRow'
-import { SettingsSectionTitle } from '@/components/ui/settings/SettingsSectionTitle'
 import { theme } from '@/constants/theme'
 import type { BatterySummary } from '@/lib/boardSetup'
 
@@ -27,6 +28,7 @@ interface EditBoardSettingsProps {
   onOpenBattery: () => void
   onOpenPairing: () => void
   onClearPairing: () => Promise<void> | void
+  onRemove: () => void
 }
 
 export function EditBoardSettings({
@@ -41,6 +43,7 @@ export function EditBoardSettings({
   onOpenBattery,
   onOpenPairing,
   onClearPairing,
+  onRemove,
 }: EditBoardSettingsProps) {
   return (
     <>
@@ -53,7 +56,6 @@ export function EditBoardSettings({
         iconWeight="duotone"
       />
 
-      <SettingsSectionTitle>Board</SettingsSectionTitle>
       <SettingsCard>
         <BoardSettingRow
           icon={IdentificationCardIcon}
@@ -66,7 +68,6 @@ export function EditBoardSettings({
         />
       </SettingsCard>
 
-      <SettingsSectionTitle>Battery</SettingsSectionTitle>
       <SettingsCard>
         <BoardSettingRow
           icon={BatteryChargingIcon}
@@ -79,7 +80,6 @@ export function EditBoardSettings({
         />
       </SettingsCard>
 
-      <SettingsSectionTitle>BLE pairing</SettingsSectionTitle>
       <SettingsCard>
         <SettingsRow
           icon={BluetoothIcon}
@@ -110,6 +110,11 @@ export function EditBoardSettings({
           }
         />
       </SettingsCard>
+
+      <View style={styles.removeSection}>
+        <IconButton icon={TrashIcon} destructive onPress={onRemove} />
+        <Text style={styles.removeLabel}>Remove board</Text>
+      </View>
     </>
   )
 }
@@ -119,5 +124,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  removeSection: {
+    marginTop: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  removeLabel: {
+    color: theme.error.text,
+    fontSize: 13,
+    fontWeight: '600',
   },
 })

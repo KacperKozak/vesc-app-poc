@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams, useNavigation } from 'expo-router'
-import { TrashIcon } from 'phosphor-react-native'
+import { PencilSimpleIcon } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
 import { BoardBatteryEditorModal } from '@/components/domain/board/BoardBatteryEditorModal'
@@ -45,12 +45,7 @@ export default function EditBoardScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <IconButton
-          icon={TrashIcon}
-          destructive
-          onPress={() => setRemoveConfirmVisible(true)}
-          style={styles.headerAction}
-        />
+        <PencilSimpleIcon size={20} color={theme.neutral.textSecondary} weight="duotone" />
       ),
     })
   }, [navigation])
@@ -95,6 +90,7 @@ export default function EditBoardScreen() {
             onOpenBattery={() => setBatteryModalVisible(true)}
             onOpenPairing={handleOpenPairing}
             onClearPairing={form.clearPairing}
+            onRemove={() => setRemoveConfirmVisible(true)}
           />
         </ScrollView>
       </SafeAreaView>
