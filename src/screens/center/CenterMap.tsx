@@ -34,6 +34,7 @@ import type { LocationEvent, MapPoint, MapPointKind } from 'vesc-ble'
 import { InfoModal } from '@/components/ui/modals/InfoModal'
 import { MapPin } from '@/components/domain/map/MapPin'
 import { RainViewerOverlay } from '@/components/domain/map/RainViewerOverlay'
+import { MediaHistoryPin } from '@/components/domain/history/MediaHistoryPin'
 import { MAPBOX_ACCESS_TOKEN, MAPY_TILE_URL_TEMPLATE } from '@/config/mapy'
 import {
   BLANK_STYLE,
@@ -62,6 +63,11 @@ import {
   makeTrailLineString,
 } from '@/helpers/mapGeometry'
 import { resolveMarkerRenderData } from '@/lib/history/markerOverlap'
+import {
+  clusterMediaHistoryAssets,
+  MEDIA_CLUSTER_DISTANCE_M,
+  type MediaHistoryAsset,
+} from '@/lib/history/mediaHistory'
 import { isMapPointKindVisible } from '@/lib/mapPointVisibility'
 import {
   getHistoryMetricColorRange,
@@ -416,6 +422,8 @@ interface CenterMapLayersProps {
   activeHistoryMapMetric: HistoryMetricKey
   rideMarkers: HistoryMarker[]
   rideGpsSamples: HistoryGpsSample[]
+  mediaAssets: MediaHistoryAsset[]
+  mapZoom: number
   directionPoint: MapPoint | null
   mapPoints: MapPoint[]
   selectedMapPointId: string | null
@@ -425,6 +433,7 @@ interface CenterMapLayersProps {
   onRemoveMapPoint: (id: string) => void
   onSuppressNextMapPress: () => void
   onSelectMarker: (selection: SelectedHistoryMarker) => void
+  onOpenMedia: (asset: MediaHistoryAsset) => void
 }
 
 function LiveMapLayers({
@@ -492,8 +501,11 @@ function HistoryMapLayers({
   activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
+  mediaAssets,
+  mapZoom,
   onSuppressNextMapPress,
   onSelectMarker,
+  onOpenMedia,
 }: {
   rideRouteShape: CenterMapLayersProps['rideRouteShape']
   rideRoute: CenterMapLayersProps['rideRoute']
@@ -502,8 +514,11 @@ function HistoryMapLayers({
   activeHistoryMapMetric: CenterMapLayersProps['activeHistoryMapMetric']
   rideMarkers: CenterMapLayersProps['rideMarkers']
   rideGpsSamples: CenterMapLayersProps['rideGpsSamples']
+  mediaAssets: CenterMapLayersProps['mediaAssets']
+  mapZoom: CenterMapLayersProps['mapZoom']
   onSuppressNextMapPress: CenterMapLayersProps['onSuppressNextMapPress']
   onSelectMarker: CenterMapLayersProps['onSelectMarker']
+  onOpenMedia: CenterMapLayersProps['onOpenMedia']
 }) {
   const [highlightProgress, setHighlightProgress] = useState(0)
   const highlightDurationMs = useMemo(
@@ -546,6 +561,14 @@ function HistoryMapLayers({
         gradientsEnabled,
       }),
     [activeHistoryMapMetric, gradientsEnabled, hotRanges, rideGpsSamples, rideTelemetrySamples],
+  )
+  const mediaClusters = useMemo(
+    () =>
+      clusterMediaHistoryAssets(
+        mediaAssets,
+        MEDIA_CLUSTER_DISTANCE_M * 2 ** Math.max(0, Math.min(8, 16 - mapZoom)),
+      ),
+    [mapZoom, mediaAssets],
   )
 
   return (
@@ -601,6 +624,16 @@ function HistoryMapLayers({
           />
         ),
       )}
+      {mediaClusters.map((cluster) => (
+        <MediaHistoryPin
+          key={cluster.id}
+          cluster={cluster}
+          onPress={() => {
+            onSuppressNextMapPress()
+            onOpenMedia(cluster.assets[0])
+          }}
+        />
+      ))}
     </>
   )
 }
@@ -879,6 +912,8 @@ function CenterMapLayers({
   activeHistoryMapMetric,
   rideMarkers,
   rideGpsSamples,
+  mediaAssets,
+  mapZoom,
   directionPoint,
   mapPoints,
   selectedMapPointId,
@@ -888,6 +923,7 @@ function CenterMapLayers({
   onRemoveMapPoint,
   onSuppressNextMapPress,
   onSelectMarker,
+  onOpenMedia,
 }: CenterMapLayersProps) {
   const selectedMapPoint = useMemo(
     () =>
@@ -937,8 +973,11 @@ function CenterMapLayers({
           activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
+          mediaAssets={mediaAssets}
+          mapZoom={mapZoom}
           onSuppressNextMapPress={onSuppressNextMapPress}
           onSelectMarker={onSelectMarker}
+          onOpenMedia={onOpenMedia}
         />
       ) : (
         <LiveMapLayers
@@ -997,6 +1036,8 @@ interface CenterMapProps {
   rideGpsSamples: HistoryGpsSample[]
   rideTelemetrySamples: TelemetrySample[]
   rideMarkers: HistoryMarker[]
+  mediaAssets: MediaHistoryAsset[]
+  onOpenMedia: (asset: MediaHistoryAsset) => void
   activeHistoryMapMetric: HistoryMetricKey
   historyActive: boolean
   mapStyleKey: MapStyleKey
@@ -1034,6 +1075,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     rideGpsSamples,
     rideTelemetrySamples,
     rideMarkers,
+    mediaAssets,
+    onOpenMedia,
     activeHistoryMapMetric,
     historyActive,
     mapStyleKey,
@@ -1073,6 +1116,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     null,
   )
   const [cameraHeading, setCameraHeading] = useState(0)
+  const [cameraZoom, setCameraZoom] = useState<number>(MAP_DEFAULTS.fallbackZoom)
   const [initialApproximateFix, setInitialApproximateFix] = useState<LocationEvent | null>(null)
   const [mapLayout, setMapLayout] = useState<MapLayout>({ width: 0, height: 0 })
   const [offscreenMapIndicators, setOffscreenMapIndicators] = useState<
@@ -1617,6 +1661,9 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       setCameraHeading((current) =>
         Math.abs(current - state.properties.heading) > 0.5 ? state.properties.heading : current,
       )
+      setCameraZoom((current) =>
+        Math.abs(current - state.properties.zoom) > 0.25 ? state.properties.zoom : current,
+      )
       onHeadingChange(state.properties.heading)
       updateOffscreenMapIndicators()
     },
@@ -1708,6 +1755,8 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           activeHistoryMapMetric={activeHistoryMapMetric}
           rideMarkers={rideMarkers}
           rideGpsSamples={rideGpsSamples}
+          mediaAssets={mediaAssets}
+          mapZoom={cameraZoom}
           directionPoint={directionPoint}
           mapPoints={mapPoints}
           selectedMapPointId={selectedMapPointId}
@@ -1717,6 +1766,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           onRemoveMapPoint={onRemoveMapPoint}
           onSuppressNextMapPress={handleSuppressNextMapPress}
           onSelectMarker={setSelectedHistoryMarker}
+          onOpenMedia={onOpenMedia}
         />
       </Mapbox.MapView>
       <InfoModal

@@ -23,9 +23,10 @@ import {
 } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { MapPointKind } from 'vesc-ble'
+import type { HistoryMarker, MapPointKind } from 'vesc-ble'
 
 import { ConfirmModal } from '@/components/ui/modals/ConfirmModal'
+import { MediaHistoryViewer } from '@/components/domain/history/MediaHistoryViewer'
 import { FloatingBar } from '@/components/domain/main/FloatingBar'
 import { HistorySessionSheet } from '@/components/domain/history/HistorySessionSheet'
 import { IconButton } from '@/components/ui/base/IconButton'
@@ -62,6 +63,7 @@ import { MapVignette } from '@/screens/center/MapVignette'
 import { TopBar } from '@/screens/center/TopBar'
 import type { Board } from '@/store/boardStore'
 import type { HistorySession, TelemetryMinuteBucket, TelemetrySample } from '@/store/historyStore'
+import type { MediaHistoryAsset, MediaHistoryMatchDiagnostics } from '@/lib/history/mediaHistory'
 import { useWeatherStore } from '@/store/weatherStore'
 
 interface CenterBoardOverlayProps {
@@ -103,6 +105,7 @@ interface CenterHistoryOverlayProps {
   enterHistoryMode: () => void
   selectedSession: HistorySession | null
   sessionSamples: TelemetrySample[]
+  sessionMarkers: HistoryMarker[]
   previousRide: HistorySession | null
   nextRide: HistorySession | null
   canPreviousRide: boolean
@@ -123,6 +126,20 @@ interface CenterHistoryOverlayProps {
   removeSession: () => void
   onSeek: (timeMs: number) => void
   setActiveHistoryMapMetric: (metric: HistoryMetricKey) => void
+  mediaHistory: {
+    enabled: boolean
+    permission: 'unknown' | 'full' | 'limited' | 'denied'
+    assets: MediaHistoryAsset[]
+    mediaCount: number
+    diagnostics: MediaHistoryMatchDiagnostics
+    loading: boolean
+    error: string | null
+    toggle: () => void
+    refresh: () => void
+    manageLimitedAccess: () => Promise<void>
+  }
+  openMediaAssetId: string | null
+  closeMedia: () => void
 }
 
 interface CenterOverlaysProps {
@@ -734,6 +751,9 @@ export function CenterOverlays({
             samples={history.sessionSamples}
             canPrevious={history.canPreviousRide}
             canNext={!!history.nextRide}
+            mediaEnabled={history.mediaHistory.enabled}
+            mediaLoading={history.mediaHistory.loading}
+            mediaCount={history.mediaHistory.mediaCount}
             onPrevious={() => {
               void history.selectPreviousRide()
             }}
@@ -741,6 +761,7 @@ export function CenterOverlays({
               void history.selectNextRide()
             }}
             onOpenList={() => history.setHistorySheetVisible(true)}
+            onToggleMedia={history.mediaHistory.toggle}
             onSeek={history.onSeek}
             onMetricInteraction={history.setActiveHistoryMapMetric}
             onHeightChange={setPanelHeight}
@@ -774,9 +795,13 @@ export function CenterOverlays({
             samples={[]}
             canPrevious={false}
             canNext={false}
+            mediaEnabled={history.mediaHistory.enabled}
+            mediaLoading={history.mediaHistory.loading}
+            mediaCount={history.mediaHistory.mediaCount}
             onPrevious={() => undefined}
             onNext={() => undefined}
             onOpenList={() => history.setHistorySheetVisible(true)}
+            onToggleMedia={history.mediaHistory.toggle}
             onSeek={history.onSeek}
             onMetricInteraction={history.setActiveHistoryMapMetric}
             onHeightChange={setPanelHeight}
@@ -815,6 +840,17 @@ export function CenterOverlays({
             {history.historyError}
           </Text>
         </View>
+      ) : null}
+
+      {history.openMediaAssetId ? (
+        <MediaHistoryViewer
+          key={history.openMediaAssetId}
+          assets={history.mediaHistory.assets}
+          initialAssetId={history.openMediaAssetId}
+          samples={history.sessionSamples}
+          markers={history.sessionMarkers}
+          onClose={history.closeMedia}
+        />
       ) : null}
 
       <ConfirmModal
