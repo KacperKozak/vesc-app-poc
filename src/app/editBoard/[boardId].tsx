@@ -48,6 +48,7 @@ export default function EditBoardScreen() {
           onPress={() => setInfoModalVisible(true)}
           style={styles.headerAction}
           hitSlop={8}
+          testID="edit-board-header"
         >
           <PencilSimpleIcon size={20} color={theme.neutral.textSecondary} weight="duotone" />
         </Pressable>
