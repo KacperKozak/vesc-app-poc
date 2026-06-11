@@ -1,19 +1,12 @@
-import { StyleSheet, Text, View } from 'react-native'
-import {
-  BatteryChargingIcon,
-  BluetoothIcon,
-  IdentificationCardIcon,
-  LightningIcon,
-  TrashIcon,
-} from 'phosphor-react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { BatteryChargingIcon, BluetoothIcon, LightningIcon, TrashIcon } from 'phosphor-react-native'
 
 import { BoardSettingRow } from '@/components/domain/board/BoardSettingRow'
 import { Button } from '@/components/ui/base/Button'
-import { IconButton } from '@/components/ui/base/IconButton'
 import { IconHero } from '@/components/ui/settings/IconHero'
 import { SettingsCard } from '@/components/ui/settings/SettingsCard'
 import { SettingsRow } from '@/components/ui/settings/SettingsRow'
-import { theme } from '@/constants/theme'
+import { interaction, theme } from '@/constants/theme'
 import type { BatterySummary } from '@/lib/boardSetup'
 
 interface EditBoardSettingsProps {
@@ -24,7 +17,6 @@ interface EditBoardSettingsProps {
   pairingSaving?: boolean
   keepMissingBatteryConfig: boolean
   batterySummary: BatterySummary
-  onOpenInfo: () => void
   onOpenBattery: () => void
   onOpenPairing: () => void
   onClearPairing: () => Promise<void> | void
@@ -39,7 +31,6 @@ export function EditBoardSettings({
   pairingSaving = false,
   keepMissingBatteryConfig,
   batterySummary,
-  onOpenInfo,
   onOpenBattery,
   onOpenPairing,
   onClearPairing,
@@ -55,18 +46,6 @@ export function EditBoardSettings({
         iconColor={theme.wheel.color}
         iconWeight="duotone"
       />
-
-      <SettingsCard>
-        <BoardSettingRow
-          icon={IdentificationCardIcon}
-          iconColor={theme.wheel.text}
-          label="Name and notes"
-          value={name.trim() || 'Unnamed board'}
-          hint={description.trim() || 'No description'}
-          onPress={onOpenInfo}
-          testID="edit-board-info-row"
-        />
-      </SettingsCard>
 
       <SettingsCard>
         <BoardSettingRow
@@ -111,10 +90,14 @@ export function EditBoardSettings({
         />
       </SettingsCard>
 
-      <View style={styles.removeSection}>
-        <IconButton icon={TrashIcon} destructive onPress={onRemove} />
+      <Pressable
+        style={({ pressed }) => [styles.removeSection, pressed && styles.removeSectionPressed]}
+        android_ripple={interaction.ripple}
+        onPress={onRemove}
+      >
+        <TrashIcon size={14} color={theme.error.text} weight="bold" />
         <Text style={styles.removeLabel}>Remove board</Text>
-      </View>
+      </Pressable>
     </>
   )
 }
@@ -130,11 +113,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  removeSectionPressed: {
+    backgroundColor: interaction.pressedBg,
   },
   removeLabel: {
     color: theme.error.text,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
 })
