@@ -11,19 +11,23 @@ export default function AboutScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <IconHero icon={UsersIcon} description="The people who built this app." />
+        <IconHero
+          icon={UsersIcon}
+          title="About us"
+          description="The people who built this app, with a little less seriousness."
+        />
         <SettingsCard>
           <SettingsRow
             icon={CrownIcon}
             iconColor={theme.wheel.color}
-            label="Kacper Kozak (Zwłoki)"
-            hint="Founder & Author"
+            label="Kacper Kozak"
+            hint="Look mom, I'm a king."
           />
           <SettingsRow
             icon={PaletteIcon}
             iconColor={theme.highlight.color}
-            label="Bartosz Kozak (Kosak)"
-            hint="UI Design & Frontend"
+            label="Bartosz Kozak"
+            hint="One more feature, app will hold it."
           />
         </SettingsCard>
       </ScrollView>
