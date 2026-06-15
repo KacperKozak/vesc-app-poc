@@ -40,6 +40,7 @@ import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
 import expo.modules.vescble.telemetry.BatterySocEstimator
+import expo.modules.vescble.telemetry.BatterySocSmoother
 import expo.modules.vescble.telemetry.DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
 import expo.modules.vescble.telemetry.MAX_LIVE_HISTORY_LIMIT_MINUTES
 import expo.modules.vescble.telemetry.MIN_LIVE_HISTORY_LIMIT_MINUTES
@@ -301,6 +302,7 @@ class VescForegroundService : Service() {
         )
     }
     private val alertEngine = VescAlertEngine()
+    private val batteryAlertSmoother = BatterySocSmoother()
     private var activeGeigerRuleIds: Set<String> = emptySet()
     private val alertFeedback by lazy { VescAlertFeedback(this, mainHandler) }
     private val diagnosticsRecorder: DiagnosticsRecorder by lazy {
@@ -747,6 +749,7 @@ class VescForegroundService : Service() {
         boardError = null
         telemetry = null
         loadBatteryConfig(start.boardConfig.appBoardId)
+        batteryAlertSmoother.reset()
         telemetryPipeline.beginSession(session, start.boardConfig)
         packetReassembler.reset()
         gattClient.resetDiagnostics()
@@ -1034,7 +1037,10 @@ class VescForegroundService : Service() {
                     batteryConfigCache,
                     parsed.batteryCurrent,
                 )
-                val firedAlerts = evaluateAlerts(parsed, batteryPct)
+                // Display uses the responsive value; alerts use a smoothed value so load-driven
+                // % swings near a threshold don't repeatedly flap the alert hysteresis.
+                val alertBatteryPct = batteryPct?.let { batteryAlertSmoother.smooth(it, now) }
+                val firedAlerts = evaluateAlerts(parsed, alertBatteryPct)
                 val eventMap = processed.eventMap
                 if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
                 eventMap["generation"] = currentSessionId
