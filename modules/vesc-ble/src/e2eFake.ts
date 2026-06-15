@@ -1,6 +1,13 @@
 import type { EventSubscription } from 'expo-modules-core'
 
-import type { AppSettings, Board, DeviceFoundEvent, LiveStateEvent, TelemetryEvent } from './index'
+import type {
+  AppSettings,
+  Board,
+  DeviceFoundEvent,
+  LiveStateEvent,
+  TelemetryEvent,
+  TransportDetectionResult,
+} from './index'
 
 const E2E_BOARD_SCAN_RESULT: DeviceFoundEvent = {
   id: 'E2:E2:E2:E2:E2:01',
@@ -198,6 +205,11 @@ export const e2eFake = {
 
   stopBoard(): void {
     stopBoardSession()
+  },
+
+  detectBoardTransport(_boardId: string): TransportDetectionResult {
+    stopBoardSession()
+    return { outcome: 'resolved', candidates: ['direct'], transport: 'direct' }
   },
 
   getLiveState(baseState: LiveStateEvent): LiveStateEvent {

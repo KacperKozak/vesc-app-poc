@@ -75,6 +75,13 @@ export default function EditBoardScreen() {
     })
   }
 
+  const handleDetectTransport = () => {
+    router.push({
+      pathname: routes.editBoardTransport,
+      params: { boardId },
+    })
+  }
+
   if (!editingBoard) return null
 
   return (
@@ -90,11 +97,13 @@ export default function EditBoardScreen() {
             pairedBleId={form.pairedBleId}
             pairedBleName={form.pairedBleName}
             pairingSaving={form.saving === 'pairing'}
+            transport={editingBoard.transport}
             keepMissingBatteryConfig={form.keepMissingBatteryConfig}
             batterySummary={form.batterySummary}
             onOpenBattery={() => setBatteryModalVisible(true)}
             onOpenPairing={handleOpenPairing}
             onClearPairing={form.clearPairing}
+            onDetectTransport={handleDetectTransport}
             onRemove={() => setRemoveConfirmVisible(true)}
           />
         </ScrollView>

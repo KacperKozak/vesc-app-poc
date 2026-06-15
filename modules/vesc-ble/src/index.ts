@@ -710,6 +710,10 @@ export async function stopBoard(): Promise<void> {
  * Telemetry Sample. Tears down any live Board Session first.
  */
 export async function detectBoardTransport(boardId: string): Promise<TransportDetectionResult> {
+  if (E2E_ENABLED) {
+    return e2eFake.detectBoardTransport(boardId)
+  }
+
   return native.detectBoardTransport(boardId)
 }
 

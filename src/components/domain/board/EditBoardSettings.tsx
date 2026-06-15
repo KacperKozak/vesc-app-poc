@@ -1,5 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { BatteryChargingIcon, BluetoothIcon, LightningIcon, TrashIcon } from 'phosphor-react-native'
+import {
+  ArrowsLeftRightIcon,
+  BatteryChargingIcon,
+  BluetoothIcon,
+  LightningIcon,
+  TrashIcon,
+} from 'phosphor-react-native'
+import type { BoardTransport } from 'vesc-ble'
 
 import { BoardSettingRow } from '@/components/domain/board/BoardSettingRow'
 import { Button } from '@/components/ui/base/Button'
@@ -7,6 +14,7 @@ import { IconHero } from '@/components/ui/settings/IconHero'
 import { SettingsCard } from '@/components/ui/settings/SettingsCard'
 import { SettingsRow } from '@/components/ui/settings/SettingsRow'
 import { interaction, theme } from '@/constants/theme'
+import { formatBoardTransport } from '@/lib/boardTransport'
 import type { BatterySummary } from '@/lib/boardSetup'
 
 interface EditBoardSettingsProps {
@@ -15,11 +23,13 @@ interface EditBoardSettingsProps {
   pairedBleId: string
   pairedBleName: string
   pairingSaving?: boolean
+  transport: BoardTransport | null
   keepMissingBatteryConfig: boolean
   batterySummary: BatterySummary
   onOpenBattery: () => void
   onOpenPairing: () => void
   onClearPairing: () => Promise<void> | void
+  onDetectTransport: () => void
   onRemove: () => void
 }
 
@@ -29,11 +39,13 @@ export function EditBoardSettings({
   pairedBleId,
   pairedBleName,
   pairingSaving = false,
+  transport,
   keepMissingBatteryConfig,
   batterySummary,
   onOpenBattery,
   onOpenPairing,
   onClearPairing,
+  onDetectTransport,
   onRemove,
 }: EditBoardSettingsProps) {
   return (
@@ -86,6 +98,24 @@ export function EditBoardSettings({
                 />
               ) : null}
             </View>
+          }
+        />
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsRow
+          icon={ArrowsLeftRightIcon}
+          iconColor={theme.wheel.color}
+          label="Board Transport"
+          hint={formatBoardTransport(transport)}
+          right={
+            <Button
+              label={transport == null ? 'Detect' : 'Re-detect'}
+              variant="secondary"
+              size="sm"
+              onPress={onDetectTransport}
+              testID="edit-board-detect-transport-button"
+            />
           }
         />
       </SettingsCard>
