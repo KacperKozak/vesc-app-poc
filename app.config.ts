@@ -74,6 +74,7 @@ const config: ExpoConfig = {
       },
     ],
     'expo-video',
+    './plugins/withGradleJvmArgs',
   ],
   experiments: {
     typedRoutes: true,
