@@ -23,6 +23,9 @@ interface LiveTelemetryValues {
   batteryPercent: SharedValue<number | null>
   motorTemp: SharedValue<number | null>
   controllerTemp: SharedValue<number | null>
+  pitch: SharedValue<number | null>
+  adc1: SharedValue<number | null>
+  adc2: SharedValue<number | null>
   lastPacketAt: SharedValue<number | null>
   avgLatencyMs: SharedValue<number | null>
 }
@@ -37,7 +40,10 @@ export interface LiveTelemetryRuntime {
   values: LiveTelemetryValues
   syncConnectionSeq: (connectionSeq: number) => void
   seedFromLiveState: (state: LiveStateEvent) => LiveTelemetrySnapshot
-  ingestTelemetry: (telemetry: TelemetryEvent) => boolean
+  /** Hot path: per-frame scalar tick. Updates live SharedValues only — no buffer, no snapshot. */
+  ingestTick: (tick: TelemetryEvent) => void
+  /** Cold path: batched full samples into the history buffer. Returns last accepted lastPacketAt, or null. */
+  ingestHistoryBatch: (samples: TelemetryEvent[]) => number | null
   ingestLocation: (location: LocationEvent) => void
   reset: () => LiveTelemetrySnapshot
   getSnapshot: () => LiveTelemetrySnapshot
@@ -66,6 +72,9 @@ function createValues(): LiveTelemetryValues {
     batteryPercent: makeMutable<number | null>(null),
     motorTemp: makeMutable<number | null>(null),
     controllerTemp: makeMutable<number | null>(null),
+    pitch: makeMutable<number | null>(null),
+    adc1: makeMutable<number | null>(null),
+    adc2: makeMutable<number | null>(null),
     lastPacketAt: makeMutable<number | null>(null),
     avgLatencyMs: makeMutable<number | null>(null),
   }
@@ -80,6 +89,9 @@ function clearValues(values: LiveTelemetryValues): void {
   values.batteryPercent.value = null
   values.motorTemp.value = null
   values.controllerTemp.value = null
+  values.pitch.value = null
+  values.adc1.value = null
+  values.adc2.value = null
   values.lastPacketAt.value = null
   values.avgLatencyMs.value = null
 }
@@ -94,6 +106,9 @@ function updateValuesFromTelemetry(values: LiveTelemetryValues, telemetry: Telem
   values.motorTemp.value =
     telemetry.tempMotor != null && telemetry.tempMotor > 0 ? telemetry.tempMotor : null
   values.controllerTemp.value = finite(telemetry.tempMosfet)
+  values.pitch.value = finite(telemetry.pitch)
+  values.adc1.value = finite(telemetry.adc1)
+  values.adc2.value = finite(telemetry.adc2)
   values.lastPacketAt.value = finite(telemetry.lastPacketAt)
   values.avgLatencyMs.value = finite(telemetry.avgLatency)
 }
@@ -180,17 +195,21 @@ export function createLiveTelemetryRuntime({
       return publishSnapshot()
     },
 
-    ingestTelemetry(telemetry) {
-      if (telemetry.generation != null && telemetry.generation !== connectionSeq) {
-        return false
-      }
+    ingestTick(tick) {
+      if (tick.generation != null && tick.generation !== connectionSeq) return
+      updateValuesFromTelemetry(values, tick)
+    },
 
-      appendTelemetryAndLocation(telemetry)
-      const latestTelemetry = getLatestTelemetry(buffer)
-      if (latestTelemetry) updateValuesFromTelemetry(values, latestTelemetry)
-      else clearValues(values)
+    ingestHistoryBatch(samples) {
+      let lastAccepted: number | null = null
+      for (const sample of samples) {
+        if (sample.generation != null && sample.generation !== connectionSeq) continue
+        appendTelemetryAndLocation(sample)
+        lastAccepted = sample.lastPacketAt
+      }
+      if (lastAccepted == null) return null
       markPending()
-      return true
+      return lastAccepted
     },
 
     ingestLocation(location) {

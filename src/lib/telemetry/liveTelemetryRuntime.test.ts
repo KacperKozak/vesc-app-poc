@@ -99,37 +99,44 @@ describe('live telemetry runtime', () => {
     ])
   })
 
-  test('ignores stale generation frames', () => {
+  test('ignores stale generation frames on both paths', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
 
-    runtime.ingestTelemetry(telemetry({ generation: 6, speed: 30 }))
+    runtime.ingestTick(telemetry({ generation: 6, speed: 30 }))
+    const accepted = runtime.ingestHistoryBatch([telemetry({ generation: 6, speed: 30 })])
 
+    expect(accepted).toBe(null)
     expect(runtime.values.speedKmh.value).toBe(null)
     expect(runtime.getSnapshot().liveStatus.boardSampleCount).toBe(0)
   })
 
-  test('ingests current generation frames into hot values and summary', () => {
+  test('tick updates hot values; history batch updates buffer and summary', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
 
-    runtime.ingestTelemetry(telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 }))
-
+    runtime.ingestTick(telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 }))
     expect(runtime.values.speedKmh.value).toBe(22)
     expect(runtime.values.dutyPercent.value).toBe(25)
     expect(runtime.values.avgLatencyMs.value).toBe(11)
+
+    runtime.ingestHistoryBatch([telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 })])
     expect(runtime.consumePendingSnapshot()?.liveStatus.boardAvgLatencyMs).toBe(11)
   })
 
-  test('does not regress hot values when older current-generation telemetry arrives late', () => {
+  test('history batch orders out-of-order samples; hot values follow tick', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
 
-    runtime.ingestTelemetry(telemetry({ lastPacketAt: 20_000, speed: -30, avgLatency: 9 }))
-    runtime.ingestTelemetry(telemetry({ lastPacketAt: 10_000, speed: -5, avgLatency: 40 }))
+    runtime.ingestTick(telemetry({ lastPacketAt: 20_000, speed: -30, avgLatency: 9 }))
+    const accepted = runtime.ingestHistoryBatch([
+      telemetry({ lastPacketAt: 20_000, speed: -30, avgLatency: 9 }),
+      telemetry({ lastPacketAt: 10_000, speed: -5, avgLatency: 40 }),
+    ])
 
     expect(runtime.values.speedKmh.value).toBe(30)
     expect(runtime.values.avgLatencyMs.value).toBe(9)
+    expect(accepted).toBe(10_000)
     const snapshot = runtime.consumePendingSnapshot()
     expect(snapshot?.liveStatus.boardLastPacketAt).toBe(20_000)
     const speeds = runtime
@@ -177,12 +184,15 @@ describe('live telemetry runtime', () => {
     })
   })
 
-  test('coalesces telemetry frames until a publish is requested', () => {
+  test('coalesces a history batch into a single pending publish', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
 
-    runtime.ingestTelemetry(telemetry({ lastPacketAt: 1_000, speed: 1 }))
-    runtime.ingestTelemetry(telemetry({ lastPacketAt: 1_050, speed: 2 }))
+    runtime.ingestTick(telemetry({ lastPacketAt: 1_050, speed: 2 }))
+    runtime.ingestHistoryBatch([
+      telemetry({ lastPacketAt: 1_000, speed: 1 }),
+      telemetry({ lastPacketAt: 1_050, speed: 2 }),
+    ])
 
     expect(runtime.values.speedKmh.value).toBe(2)
     runtime.consumePendingSnapshot()
@@ -200,8 +210,9 @@ describe('live telemetry runtime', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
 
-    runtime.ingestTelemetry(telemetry({ lastPacketAt: 1_000, speed: 46 }))
-    runtime.ingestTelemetry(
+    runtime.ingestHistoryBatch([telemetry({ lastPacketAt: 1_000, speed: 46 })])
+    runtime.ingestTick(telemetry({ lastPacketAt: 2_000, speed: 4 }))
+    runtime.ingestHistoryBatch([
       telemetry({
         lastPacketAt: 2_000,
         speed: 4,
@@ -209,7 +220,7 @@ describe('live telemetry runtime', () => {
           { lastPacketAt: 1_000, metricExclusions: { max_speed: true, max_duty: true } },
         ],
       }),
-    )
+    ])
 
     expect(runtime.values.speedKmh.value).toBe(4)
     expect(runtime.getTelemetry()[0].speed).toBe(46)
@@ -222,7 +233,8 @@ describe('live telemetry runtime', () => {
   test('reset clears hot values and snapshot', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
-    runtime.ingestTelemetry(telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 }))
+    runtime.ingestTick(telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 }))
+    runtime.ingestHistoryBatch([telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 })])
     runtime.ingestLocation(location({ timestamp: 12_000 }))
 
     const snapshot = runtime.reset()

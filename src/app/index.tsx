@@ -9,6 +9,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { useBleAppLifecycle } from '@/hooks/useBleAppLifecycle'
 import { useBoardConnection } from '@/hooks/useBoardConnection'
 import { CenterScreen } from '@/screens/CenterScreen'
+import { PollRateBadge } from '@/components/debug/PollRateBadge'
 import { theme } from '@/constants/theme'
 
 export default function MainScreen() {
@@ -90,6 +91,7 @@ export default function MainScreen() {
         onAddBoard={connection.handleAddBoard}
         onToggleRecordDebug={() => connection.setRecordDebugSession(!connection.recordDebugSession)}
       />
+      <PollRateBadge />
     </View>
   )
 }

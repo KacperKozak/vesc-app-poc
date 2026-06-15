@@ -12,7 +12,8 @@ import {
   addDeviceListener,
   addErrorListener,
   addLiveStateListener,
-  addTelemetryListener,
+  addLiveTickListener,
+  addTelemetryHistoryListener,
   addBmsListener,
   addLocationListener,
   type BoardPhase,
@@ -81,12 +82,12 @@ type BleSet = {
 }
 
 let liveSub: EventSubscription | null = null
-let telemetrySub: EventSubscription | null = null
+let liveTickSub: EventSubscription | null = null
+let historySub: EventSubscription | null = null
 let bmsSub: EventSubscription | null = null
 let locationSub: EventSubscription | null = null
 let scanSub: EventSubscription | null = null
 let scanErrorSub: EventSubscription | null = null
-let liveHistoryPublishTimer: ReturnType<typeof setTimeout> | null = null
 let settingsUnsubscribe: (() => void) | null = null
 
 let pendingDevices: Map<string, ScannedDevice> = new Map()
@@ -94,8 +95,6 @@ let scanFlushTimer: ReturnType<typeof setTimeout> | null = null
 const SCAN_FLUSH_MS = 500
 
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
-const LIVE_HISTORY_PUBLISH_MS = 1000
-const LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT = 3
 
 function scannedDeviceName(id: string, name?: string): string {
   const candidate = name?.trim()
@@ -113,20 +112,15 @@ const EMPTY_LIVE_STATUS: LiveStatusSummary = {
   gpsAccuracyM: null,
 }
 
-function clearLiveHistoryPublishTimer(): void {
-  if (!liveHistoryPublishTimer) return
-  clearTimeout(liveHistoryPublishTimer)
-  liveHistoryPublishTimer = null
-}
-
 function removeLiveSubscriptions(): void {
-  clearLiveHistoryPublishTimer()
   liveSub?.remove()
-  telemetrySub?.remove()
+  liveTickSub?.remove()
+  historySub?.remove()
   bmsSub?.remove()
   locationSub?.remove()
   liveSub = null
-  telemetrySub = null
+  liveTickSub = null
+  historySub = null
   bmsSub = null
   locationSub = null
 }
@@ -183,9 +177,6 @@ function cleanupBleStoreModule(): void {
 function applyLiveState(state: LiveStateEvent, set: BleSet): void {
   const hasRecentSamples =
     state.board.recentTelemetry.length > 0 || state.gps.recentLocations.length > 0
-  if (hasRecentSamples) {
-    clearLiveHistoryPublishTimer()
-  }
   if (!hasRecentSamples) {
     liveTelemetryRuntime.syncConnectionSeq(state.board.connectionSeq)
   }
@@ -216,7 +207,6 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
 }
 
 function resetLivePresentation(set: BleSet): void {
-  clearLiveHistoryPublishTimer()
   const live = liveTelemetryRuntime.reset()
   set({
     lastTelemetryAt: null,
@@ -228,15 +218,9 @@ function resetLivePresentation(set: BleSet): void {
   })
 }
 
-function scheduleLiveHistoryPublish(set: BleSet): void {
-  if (liveHistoryPublishTimer) return
-  liveHistoryPublishTimer = setTimeout(() => {
-    liveHistoryPublishTimer = null
-    publishPendingLiveHistory(set)
-  }, LIVE_HISTORY_PUBLISH_MS)
-}
-
-function publishPendingLiveHistory(set: BleSet): void {
+// Native already batches history (~3Hz), so we publish each batch straight to the store —
+// no JS-side throttle. The 31Hz tick path never touches the store.
+function publishLiveSnapshot(set: BleSet): void {
   const live = liveTelemetryRuntime.consumePendingSnapshot()
   if (!live) return
   set({
@@ -251,21 +235,19 @@ function installLiveSubscriptions(set: BleSet): void {
   if (!liveSub) {
     liveSub = addLiveStateListener((state) => applyLiveState(state, set))
   }
-  if (!telemetrySub) {
-    telemetrySub = addTelemetryListener((telemetry) => {
-      const shouldPublishImmediately =
-        liveTelemetryRuntime.getSnapshot().liveStatus.boardSampleCount <
-        LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT
-      const accepted = liveTelemetryRuntime.ingestTelemetry(telemetry)
-      if (!accepted) return
-      set({
-        lastTelemetryAt: telemetry.lastPacketAt,
-      })
-      if (shouldPublishImmediately) {
-        publishPendingLiveHistory(set)
-        return
-      }
-      scheduleLiveHistoryPublish(set)
+  if (!liveTickSub) {
+    // Hot path: per-frame scalar tick → SharedValues only. No store write, no React render.
+    liveTickSub = addLiveTickListener((tick) => {
+      liveTelemetryRuntime.ingestTick(tick)
+    })
+  }
+  if (!historySub) {
+    // Cold path: batched full samples → history buffer → store publish (~3Hz) for charts.
+    historySub = addTelemetryHistoryListener((batch) => {
+      const lastAccepted = liveTelemetryRuntime.ingestHistoryBatch(batch.samples)
+      if (lastAccepted == null) return
+      set({ lastTelemetryAt: lastAccepted })
+      publishLiveSnapshot(set)
     })
   }
   if (!bmsSub) {
@@ -276,7 +258,7 @@ function installLiveSubscriptions(set: BleSet): void {
   if (!locationSub) {
     locationSub = addLocationListener((location) => {
       liveTelemetryRuntime.ingestLocation(location)
-      scheduleLiveHistoryPublish(set)
+      publishLiveSnapshot(set)
     })
   }
 }

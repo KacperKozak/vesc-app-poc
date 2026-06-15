@@ -540,11 +540,19 @@ export interface DatabaseBackupResult {
 // Typed emitter
 // ---------------------------------------------------------------------------
 
+/** Batched history payload: full samples flushed by native a few times per second. */
+export interface TelemetryHistoryEvent {
+  samples: TelemetryEvent[]
+}
+
 type VescBleEvents = {
   onDevice: (event: DeviceFoundEvent) => void
   onError: (event: ErrorEvent) => void
   onLiveState: (event: LiveStateEvent) => void
-  onTelemetry: (event: TelemetryEvent) => void
+  /** High-frequency (per-frame) scalar tick for live gauges. No history, no nested arrays. */
+  onLiveTick: (event: TelemetryEvent) => void
+  /** Batched full samples (~3Hz) for history buffer, charts and sparklines. */
+  onTelemetryHistory: (event: TelemetryHistoryEvent) => void
   onBms: (event: BmsEvent) => void
   onLocation: (event: LocationEvent) => void
   onTelemetryRebuildProgress: (event: TelemetryRebuildProgressEvent) => void
@@ -1063,12 +1071,22 @@ export function addLiveStateListener(cb: (event: LiveStateEvent) => void): Event
   return emitter.addListener('onLiveState', cb)
 }
 
-export function addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {
+export function addLiveTickListener(cb: (event: TelemetryEvent) => void): EventSubscription {
   if (E2E_ENABLED) {
-    return e2eFake.addTelemetryListener(cb)
+    return e2eFake.addLiveTickListener(cb)
   }
 
-  return emitter.addListener('onTelemetry', cb)
+  return emitter.addListener('onLiveTick', cb)
+}
+
+export function addTelemetryHistoryListener(
+  cb: (event: TelemetryHistoryEvent) => void,
+): EventSubscription {
+  if (E2E_ENABLED) {
+    return e2eFake.addTelemetryHistoryListener(cb)
+  }
+
+  return emitter.addListener('onTelemetryHistory', cb)
 }
 
 export function addBmsListener(cb: (event: BmsEvent) => void): EventSubscription {

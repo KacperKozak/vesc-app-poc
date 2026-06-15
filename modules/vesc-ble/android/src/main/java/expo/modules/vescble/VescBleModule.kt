@@ -68,7 +68,8 @@ class VescBleModule : Module() {
       "onDevice",
       "onError",
       "onLiveState",
-      "onTelemetry",
+      "onLiveTick",
+      "onTelemetryHistory",
       "onBms",
       "onLocation",
       "onTelemetryRebuildProgress",
@@ -81,8 +82,10 @@ class VescBleModule : Module() {
     OnStopObserving("onError") { stopObserving("onError") }
     OnStartObserving("onLiveState") { startObserving("onLiveState") }
     OnStopObserving("onLiveState") { stopObserving("onLiveState") }
-    OnStartObserving("onTelemetry") { startObserving("onTelemetry") }
-    OnStopObserving("onTelemetry") { stopObserving("onTelemetry") }
+    OnStartObserving("onLiveTick") { startObserving("onLiveTick") }
+    OnStopObserving("onLiveTick") { stopObserving("onLiveTick") }
+    OnStartObserving("onTelemetryHistory") { startObserving("onTelemetryHistory") }
+    OnStopObserving("onTelemetryHistory") { stopObserving("onTelemetryHistory") }
     OnStartObserving("onBms") { startObserving("onBms") }
     OnStopObserving("onBms") { stopObserving("onBms") }
     OnStartObserving("onLocation") { startObserving("onLocation") }
@@ -517,7 +520,8 @@ class VescBleModule : Module() {
         deviceName = boardName,
         transport = BoardTransport.fromBridge(link["transport"]),
         hasBms = link["hasBms"] as? Boolean,
-        pollIntervalMs = 500L,
+        // Test: 0 floor = pure response-paced (send next poll as soon as the reply lands).
+        pollIntervalMs = 0L,
         recordingEnabled = requestedDebugRecordingEnabled,
         telemetryRecordingEnabled = false,
         autoReconnect = true,

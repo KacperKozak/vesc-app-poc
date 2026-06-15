@@ -63,6 +63,7 @@ private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP
 
 private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
 private const val TELEMETRY_STALE_MS = 4_000L
+private const val HISTORY_FLUSH_INTERVAL_MS = 300L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
 
@@ -597,6 +598,8 @@ class VescForegroundService : Service() {
     private val currentSessionId: Long get() = boardSession?.id ?: sessionSequence
     private val isPollingCapable get() = isPollingCapable(canId, directConnection)
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
+    private val historySamples = ArrayDeque<Map<String, Any?>>()
+    private var historyFlushHandle: Cancellable? = null
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
@@ -973,6 +976,7 @@ class VescForegroundService : Service() {
                     return
                 }
                 val sessionToken = boardSession ?: return
+                pollingLoop.onResponse()
                 val processed = telemetryPipeline.process(parsed, sessionToken) ?: return
                 markBoardReady()
                 telemetry = parsed
@@ -988,11 +992,14 @@ class VescForegroundService : Service() {
                 if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
                 eventMap["generation"] = currentSessionId
                 eventMap["batteryPercent"] = batteryEstimate
-                val emitMap = if (processed.metricExclusionUpdates.isNotEmpty()) {
+                val historySample = if (processed.metricExclusionUpdates.isNotEmpty()) {
                     eventMap + mapOf("metricExclusionUpdates" to processed.metricExclusionUpdates)
                 } else eventMap
                 presenter.show(boardStatus, telemetry = parsed, batteryPercent = batteryEstimate)
-                emitEvent("onTelemetry", emitMap)
+                // Hot path: tiny scalar tick every frame drives the live gauges (SharedValues, no React render).
+                emitEvent("onLiveTick", buildLiveTick(parsed, batteryEstimate, currentSessionId, firedAlerts))
+                // Cold path: full samples buffered and flushed in batches for history/charts.
+                enqueueHistorySample(historySample)
                 recordingCoordinator.recordTelemetry(processed.capture)
             }
         }
@@ -1259,6 +1266,7 @@ class VescForegroundService : Service() {
             ),
         )
         pollingLoop.start(session, sessionToken, transport)
+        startHistoryFlush()
     }
 
     private fun currentBoardTransport(): BoardTransport? = boardTransport(canId, directConnection)
@@ -1266,6 +1274,56 @@ class VescForegroundService : Service() {
     private fun stopPolling() {
         pollingLoop.stop()
         telemetryPipeline.cancelStaleWatchdog()
+        stopHistoryFlush()
+    }
+
+    private fun buildLiveTick(
+        parsed: RefloatTelemetry,
+        batteryPercent: Double?,
+        generation: Long,
+        firedAlerts: List<Map<String, Any?>>,
+    ): Map<String, Any?> {
+        val tick = parsed.toMap().toMutableMap()
+        tick.remove("location")
+        tick["batteryPercent"] = batteryPercent
+        tick["generation"] = generation
+        if (firedAlerts.isNotEmpty()) tick["firedAlerts"] = firedAlerts
+        return tick
+    }
+
+    private fun enqueueHistorySample(sample: Map<String, Any?>) {
+        historySamples.addLast(sample)
+    }
+
+    private fun startHistoryFlush() {
+        if (historyFlushHandle != null) return
+        scheduleHistoryFlush()
+    }
+
+    private fun scheduleHistoryFlush() {
+        val session = boardSession ?: return
+        historyFlushHandle = scheduler.postDelayedForSession(
+            session,
+            HISTORY_FLUSH_INTERVAL_MS,
+            ::isCurrentBoardSession,
+        ) {
+            flushHistorySamples()
+            scheduleHistoryFlush()
+        }
+    }
+
+    private fun flushHistorySamples() {
+        if (historySamples.isEmpty()) return
+        val batch = historySamples.toList()
+        historySamples.clear()
+        emitEvent("onTelemetryHistory", mapOf("samples" to batch))
+    }
+
+    private fun stopHistoryFlush() {
+        historyFlushHandle?.cancel()
+        historyFlushHandle = null
+        flushHistorySamples()
+        historySamples.clear()
     }
 
     private fun boardReadyTimeoutMs(): Long =

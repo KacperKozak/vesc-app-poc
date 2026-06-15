@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
 import { Sparkline } from '@/components/ui/charts/Sparkline'
+import { TickText } from '@/components/ui/base/TickText'
 import { BatteryIndicator } from '@/components/domain/cards/BatteryIndicator'
 import { interaction, theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
@@ -11,8 +12,10 @@ import { routes } from '@/navigation/routes'
 import { liveSelectors, useLiveMetric } from '@/hooks/useLiveMetric'
 import { useBleStore } from '@/store/bleStore'
 import { useLiveWindowMs } from '@/store/settingsStore'
+import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
 
 const FOOTPAD_ACTIVE_V = 0.8
+const PITCH_CLAMP_DEG = 18
 export const STRIP_CONTENT_HEIGHT = 160
 
 interface BottomTelemetryStripProps {
@@ -22,27 +25,43 @@ interface BottomTelemetryStripProps {
 export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripProps) {
   const insets = useSafeAreaInsets()
   const windowMs = useLiveWindowMs()
+  // Sparklines need the windowed history series (cold path, ~3Hz).
   const motorTempSeries = useLiveMetric(liveSelectors.motorTemp)
   const controllerTempSeries = useLiveMetric(liveSelectors.controllerTemp)
   const motorCurrentSeries = useLiveMetric(liveSelectors.motorCurrent)
   const batteryCurrentSeries = useLiveMetric(liveSelectors.batteryCurrent)
-  const adc1Series = useLiveMetric(liveSelectors.footpadAdc1)
-  const adc2Series = useLiveMetric(liveSelectors.footpadAdc2)
-  const pitchSeries = useLiveMetric(liveSelectors.pitch)
   const bleStatus = useBleStore((s) => s.status)
-
-  const motorTemp = motorTempSeries.at(-1)?.value ?? null
-  const controllerTemp = controllerTempSeries.at(-1)?.value ?? null
-  const motorCurrent = motorCurrentSeries.at(-1)?.value ?? null
-  const batteryCurrent = batteryCurrentSeries.at(-1)?.value ?? null
-  const adc1 = adc1Series.at(-1)?.value ?? null
-  const adc2 = adc2Series.at(-1)?.value ?? null
-  const pitch = pitchSeries.at(-1)?.value ?? 0
-  const pitchDeg = Math.max(-18, Math.min(18, pitch))
   const imuConnected = bleStatus === 'connected'
+  // Live numbers, IMU tilt and footpad dots read SharedValues (hot path, ~31Hz, no re-render).
+  const tick = liveTelemetryRuntime.values
+
   const revealStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: revealProgress ? 74 * revealProgress.value : 0 }],
   }))
+
+  const imuLineStyle = useAnimatedStyle(() => {
+    const p = tick.pitch.value ?? 0
+    const clamped = Math.max(-PITCH_CLAMP_DEG, Math.min(PITCH_CLAMP_DEG, p))
+    return { transform: [{ rotate: `${imuConnected ? clamped : 0}deg` }] }
+  })
+
+  const footpad1Style = useAnimatedStyle(() => {
+    const a = tick.adc1.value
+    const active = a != null && a > FOOTPAD_ACTIVE_V
+    return {
+      borderColor: active ? theme.gps.text : theme.neutral.textDim,
+      backgroundColor: active ? theme.gps.text : 'transparent',
+    }
+  })
+
+  const footpad2Style = useAnimatedStyle(() => {
+    const a = tick.adc2.value
+    const active = a != null && a > FOOTPAD_ACTIVE_V
+    return {
+      borderColor: active ? theme.gps.text : theme.neutral.textDim,
+      backgroundColor: active ? theme.gps.text : 'transparent',
+    }
+  })
 
   return (
     <Animated.View
@@ -58,9 +77,12 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
             testID="telemetry-motor-temp-cell"
           >
             <Text style={styles.subLabel}>Motor</Text>
-            <Text style={styles.value} numberOfLines={1}>
-              {fmtVal(motorTemp, telemetry.motorTemp.formatWithUnit)}
-            </Text>
+            <TickText
+              value={tick.motorTemp}
+              decimals={telemetry.motorTemp.decimals}
+              unit={telemetry.motorTemp.unit}
+              style={styles.value}
+            />
             <Sparkline
               points={motorTempSeries}
               color={telemetry.motorTemp.color}
@@ -78,9 +100,12 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
             testID="telemetry-controller-temp-cell"
           >
             <Text style={styles.subLabel}>Ctrl</Text>
-            <Text style={styles.value} numberOfLines={1}>
-              {fmtVal(controllerTemp, telemetry.controllerTemp.formatWithUnit)}
-            </Text>
+            <TickText
+              value={tick.controllerTemp}
+              decimals={telemetry.controllerTemp.decimals}
+              unit={telemetry.controllerTemp.unit}
+              style={styles.value}
+            />
             <Sparkline
               points={controllerTempSeries}
               color={telemetry.controllerTemp.color}
@@ -98,9 +123,12 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
             testID="telemetry-motor-current-cell"
           >
             <Text style={styles.subLabel}>Motor</Text>
-            <Text style={styles.value} numberOfLines={1}>
-              {fmtVal(motorCurrent, telemetry.motorCurrent.formatWithUnit)}
-            </Text>
+            <TickText
+              value={tick.motorCurrent}
+              decimals={telemetry.motorCurrent.decimals}
+              unit={telemetry.motorCurrent.unit}
+              style={styles.value}
+            />
             <Sparkline
               points={motorCurrentSeries}
               color={telemetry.motorCurrent.color}
@@ -118,9 +146,12 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
             testID="telemetry-battery-current-cell"
           >
             <Text style={styles.subLabel}>Batt</Text>
-            <Text style={styles.value} numberOfLines={1}>
-              {fmtVal(batteryCurrent, telemetry.battCurrent.formatWithUnit)}
-            </Text>
+            <TickText
+              value={tick.batteryCurrent}
+              decimals={telemetry.battCurrent.decimals}
+              unit={telemetry.battCurrent.unit}
+              style={styles.value}
+            />
             <Sparkline
               points={batteryCurrentSeries}
               color={telemetry.battCurrent.color}
@@ -145,13 +176,11 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
                 { borderColor: imuConnected ? theme.target.color : theme.neutral.textMuted },
               ]}
             />
-            <View
+            <Animated.View
               style={[
                 styles.imuLine,
-                {
-                  transform: [{ rotate: `${imuConnected ? pitchDeg : 0}deg` }],
-                  backgroundColor: imuConnected ? theme.target.color : theme.neutral.textMuted,
-                },
+                { backgroundColor: imuConnected ? theme.target.color : theme.neutral.textMuted },
+                imuLineStyle,
               ]}
             />
           </Pressable>
@@ -162,28 +191,14 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
             onPress={() => router.push(routes.controlFootpad)}
           >
             <View style={styles.footpadRow}>
-              <View
-                style={[
-                  styles.footpadDot,
-                  adc1 != null && adc1 > FOOTPAD_ACTIVE_V && styles.footpadActive,
-                ]}
-              />
-              <View
-                style={[
-                  styles.footpadDot,
-                  adc2 != null && adc2 > FOOTPAD_ACTIVE_V && styles.footpadActive,
-                ]}
-              />
+              <Animated.View style={[styles.footpadDot, footpad1Style]} />
+              <Animated.View style={[styles.footpadDot, footpad2Style]} />
             </View>
           </Pressable>
         </View>
       </Animated.View>
     </Animated.View>
   )
-}
-
-function fmtVal(value: number | null, format: (value: number) => string): string {
-  return value == null || !Number.isFinite(value) ? '-' : format(value)
 }
 
 const styles = StyleSheet.create({
@@ -245,10 +260,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.neutral.textDim,
     backgroundColor: 'transparent',
-  },
-  footpadActive: {
-    borderColor: theme.gps.text,
-    backgroundColor: theme.gps.text,
   },
   cellPressed: {
     opacity: interaction.pressedOpacity,

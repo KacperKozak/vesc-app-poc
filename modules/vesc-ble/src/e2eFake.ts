@@ -8,6 +8,7 @@ import type {
   DeviceFoundEvent,
   LiveStateEvent,
   TelemetryEvent,
+  TelemetryHistoryEvent,
 } from './index'
 
 const E2E_BOARD_SCAN_RESULT: DeviceFoundEvent = {
@@ -29,7 +30,8 @@ let telemetryTimer: ReturnType<typeof setInterval> | null = null
 
 const deviceListeners = new Set<(event: DeviceFoundEvent) => void>()
 const liveStateListeners = new Set<(event: LiveStateEvent) => void>()
-const telemetryListeners = new Set<(event: TelemetryEvent) => void>()
+const liveTickListeners = new Set<(event: TelemetryEvent) => void>()
+const telemetryHistoryListeners = new Set<(event: TelemetryHistoryEvent) => void>()
 const boardProbeProgressListeners = new Set<(event: BoardProbeProgressEvent) => void>()
 
 const e2eBoards: Board[] = []
@@ -152,8 +154,12 @@ function clearTelemetryTimer(): void {
 function emitTelemetry(): void {
   if (!connectedBoardId) return
   lastTelemetry = makeTelemetry()
-  for (const listener of telemetryListeners) {
+  for (const listener of liveTickListeners) {
     listener(lastTelemetry)
+  }
+  const batch: TelemetryHistoryEvent = { samples: [lastTelemetry] }
+  for (const listener of telemetryHistoryListeners) {
+    listener(batch)
   }
   emitLiveState()
 }
@@ -251,9 +257,14 @@ export const e2eFake = {
     return { remove: () => liveStateListeners.delete(cb) }
   },
 
-  addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {
-    telemetryListeners.add(cb)
-    return { remove: () => telemetryListeners.delete(cb) }
+  addLiveTickListener(cb: (event: TelemetryEvent) => void): EventSubscription {
+    liveTickListeners.add(cb)
+    return { remove: () => liveTickListeners.delete(cb) }
+  },
+
+  addTelemetryHistoryListener(cb: (event: TelemetryHistoryEvent) => void): EventSubscription {
+    telemetryHistoryListeners.add(cb)
+    return { remove: () => telemetryHistoryListeners.delete(cb) }
   },
 
   getBoards(): Board[] {
