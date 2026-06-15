@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
   navControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignSelf: 'center',
     width: '100%',
     gap: 8,
