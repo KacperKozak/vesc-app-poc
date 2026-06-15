@@ -11,3 +11,7 @@ export function formatBoardTransport(transport: BoardTransport | null): string {
 export function pickDefaultTransport(candidates: BoardTransport[]): BoardTransport | null {
   return candidates[0] ?? null
 }
+
+export function requiresTransportDetection(transport: BoardTransport | null): boolean {
+  return transport == null
+}

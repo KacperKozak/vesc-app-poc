@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
 import { routes } from '@/navigation/routes'
+import { requiresTransportDetection } from '@/lib/boardTransport'
 
 function isBoardBusy(status: string): boolean {
   return (
@@ -74,9 +75,14 @@ export function useBoardConnection() {
   }, [stopScan, disconnect])
 
   const handleRetryConnect = useCallback(() => {
-    if (!activeBoardId) return
+    if (!activeBoard) return
+    if (requiresTransportDetection(activeBoard.transport)) {
+      router.push({ pathname: routes.editBoardTransport, params: { boardId: activeBoard.id } })
+      return
+    }
+    const activeBoardId = activeBoard.id
     void connect(activeBoardId)
-  }, [activeBoardId, connect])
+  }, [activeBoard, connect])
 
   return {
     boards,
