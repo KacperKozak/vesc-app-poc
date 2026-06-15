@@ -34,7 +34,7 @@ internal class BoardTransportDetector(
   private val nowMs: () -> Long = { System.currentTimeMillis() },
 ) : VescGattListener {
 
-  private enum class Phase { Connecting, Pinging, Probing, Done }
+  private enum class Phase { Connecting, Pinging, Probing }
 
   private val reassembler = VescPacketReassembler()
   private val gatt = VescGattClient(context, handler, { null }, this)

@@ -65,6 +65,9 @@ export function useTransportDetection(boardId: string): TransportDetection {
   useEffect(() => {
     // A fresh screen mounts per detection; the run guard handles overlapping retries.
     runDetection()
+    return () => {
+      runRef.current += 1
+    }
   }, [runDetection])
 
   const confirm = useCallback(async () => {

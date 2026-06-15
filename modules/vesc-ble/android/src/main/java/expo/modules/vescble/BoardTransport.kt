@@ -30,7 +30,7 @@ sealed interface BoardTransport {
     fun decode(stored: String?): BoardTransport? = when {
       stored == null -> null
       stored == DIRECT -> Direct
-      else -> stored.toIntOrNull()?.let(::Can)
+      else -> stored.toIntOrNull()?.let(::canIdOrNull)
     }
 
     /** Encode to the persisted TEXT column. */
@@ -44,7 +44,7 @@ sealed interface BoardTransport {
     fun fromBridge(value: Any?): BoardTransport? = when (value) {
       null -> null
       DIRECT -> Direct
-      is Number -> Can(value.toInt())
+      is Number -> canIdOrNull(value.toInt())
       else -> null
     }
 
@@ -54,6 +54,9 @@ sealed interface BoardTransport {
       Direct -> DIRECT
       is Can -> transport.canId
     }
+
+    private fun canIdOrNull(canId: Int): BoardTransport? =
+      if (canId in 0..255) Can(canId) else null
   }
 }
 

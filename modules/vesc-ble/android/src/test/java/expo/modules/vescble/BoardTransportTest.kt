@@ -49,6 +49,12 @@ class BoardTransportTest {
   }
 
   @Test
+  fun `decode treats out-of-range CAN ids as undetected`() {
+    assertNull(BoardTransport.decode("-1"))
+    assertNull(BoardTransport.decode("256"))
+  }
+
+  @Test
   fun `encode round-trips through the persisted form`() {
     listOf(null, BoardTransport.Direct, BoardTransport.Can(0), BoardTransport.Can(63))
       .forEach { assertEquals(it, BoardTransport.decode(BoardTransport.encode(it))) }
@@ -60,6 +66,8 @@ class BoardTransportTest {
     assertEquals(BoardTransport.Direct, BoardTransport.fromBridge("direct"))
     assertEquals(BoardTransport.Can(7), BoardTransport.fromBridge(7))
     assertEquals(BoardTransport.Can(7), BoardTransport.fromBridge(7.0))
+    assertNull(BoardTransport.fromBridge(-1))
+    assertNull(BoardTransport.fromBridge(256))
     assertNull(BoardTransport.fromBridge("unexpected"))
   }
 
