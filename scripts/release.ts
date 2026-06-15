@@ -191,6 +191,10 @@ try {
     await run('Switch to main', 'git checkout main')
     await run('Merge dev → main', `git merge dev --no-ff -m "release: ${apkLabel.slice(1)}"`)
     await run('Switch back to dev', 'git checkout dev')
+    // Advance dev to the release merge commit so dev and main never drift.
+    // Without this the merge commit lives only on main, their common base goes
+    // stale, and the next version bump conflicts on package.json's version line.
+    await run('Fast-forward dev to main', 'git merge --ff-only main')
     await run('Push dev and main', 'git push --atomic origin dev main')
     state.published = true
     console.log(`\n✓ Release ${apkLabel.slice(1)} complete`)
