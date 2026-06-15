@@ -60,6 +60,17 @@ export interface FiredAlert {
  */
 export type BoardTransport = 'direct' | number
 
+export type TransportDetectionOutcome = 'resolved' | 'needs-pick' | 'none'
+
+/** Result of a native Board Transport detection session. */
+export interface TransportDetectionResult {
+  outcome: TransportDetectionOutcome
+  /** Every transport that produced a valid Telemetry Sample, in probe order. */
+  candidates: BoardTransport[]
+  /** Set only for `resolved` (single confirmed transport); otherwise null. */
+  transport: BoardTransport | null
+}
+
 export interface Board {
   id: string
   name: string
@@ -511,6 +522,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   stopGeigerSimulation(): void
   selectBoard(boardId: string): Promise<void>
   stopBoard(): Promise<void>
+  detectBoardTransport(boardId: string): Promise<TransportDetectionResult>
   setDebugRecordingEnabled(enabled: boolean): void
   reportUiError(message: string, source?: string | null, stack?: string | null): void
   reportDiagnosticTest(): DiagnosticStatus
@@ -690,6 +702,15 @@ export async function stopBoard(): Promise<void> {
   }
 
   return native.stopBoard()
+}
+
+/**
+ * Run a native Board Transport detection session for a paired Board: connect,
+ * probe direct and CAN, and return every transport confirmed by a valid
+ * Telemetry Sample. Tears down any live Board Session first.
+ */
+export async function detectBoardTransport(boardId: string): Promise<TransportDetectionResult> {
+  return native.detectBoardTransport(boardId)
 }
 
 /** Enable raw debug session recording for future native board sessions. */
