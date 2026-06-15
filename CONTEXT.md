@@ -12,6 +12,10 @@ _Avoid_: Device, controller, scooter
 The lifecycle of a single live BLE-bound connection to a Board, from connect attempt through disconnect. Owns the in-flight identity used to discard stale callbacks across reconnects. Distinct from Ride Recording, which is the persisted ride capture.
 _Avoid_: Session, connection, BLE session
 
+**Board Transport**:
+The resolved path used to reach a Board's telemetry: Direct (the BLE-connected controller is the data source) or CAN-forwarded to a specific CAN id. A durable per-Board fact, not per-session. Absence means the transport has not been detected yet.
+_Avoid_: Connection path, routing, channel
+
 **Live State**:
 The current app-visible snapshot of board connection, GPS, scan, recording, and recent telemetry state.
 _Avoid_: UI state, cached status
@@ -90,6 +94,7 @@ _Avoid_: Error log, debug session, crash report
 
 ## Relationships
 
+- A **Board** has at most one **Board Transport**, resolved once by detection; a **Board Session** uses the stored **Board Transport** and is not established for a Board whose transport is undetected.
 - A **Board Session** owns one live BLE connection to a **Board**; only Telemetry Samples received during the active session count toward live state and Ride Recording.
 - A **Board** produces **Telemetry Samples** while connected.
 - A **Metric Sanitizer** may create **Metric Exclusions** for values derived from **Telemetry Samples** while preserving the original samples and current live board readout.
