@@ -3,6 +3,7 @@ import {
   CaretLeftIcon,
   CaretRightIcon,
   ImagesSquareIcon,
+  ShareNetworkIcon,
 } from 'phosphor-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -21,6 +22,7 @@ import {
   type TelemetryChartPoint,
 } from '@/components/ui/charts/chartMath'
 import { TelemetryLineChart } from '@/components/ui/charts/TelemetryLineChart'
+import { InfoModal } from '@/components/ui/modals/InfoModal'
 import { telemetry } from '@/constants/telemetry'
 import { interaction, theme } from '@/constants/theme'
 import { dutyPercent, fmtDutyPercent } from '@/helpers/format'
@@ -118,6 +120,7 @@ export function HistoryTelemetryPanel({
   const insets = useSafeAreaInsets()
   const [headTimeMs, setHeadTimeMs] = useState<number | null>(null)
   const [activeCharts, setActiveCharts] = useState<Set<OptionalChartMetric>>(new Set())
+  const [shareInfoVisible, setShareInfoVisible] = useState(false)
   const pendingSelectionRef = useRef<TelemetryChartPoint | null>(null)
   const selectionFrameRef = useRef<number | null>(null)
 
@@ -459,7 +462,7 @@ export function HistoryTelemetryPanel({
       onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
     >
       <View style={styles.navControls}>
-        <View>
+        <View style={styles.navSide}>
           <IconButton
             icon={ImagesSquareIcon}
             onPress={onToggleMedia}
@@ -515,6 +518,9 @@ export function HistoryTelemetryPanel({
           >
             <CaretRightIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
           </Pressable>
+        </View>
+        <View style={styles.navSide}>
+          <IconButton icon={ShareNetworkIcon} onPress={() => setShareInfoVisible(true)} size="lg" />
         </View>
       </View>
       {hasChartData && headPoint && optionalChartConfig && (
@@ -632,6 +638,12 @@ export function HistoryTelemetryPanel({
           </View>
         </>
       )}
+      <InfoModal
+        visible={shareInfoVisible}
+        title="Share Ride"
+        message="Ride sharing is coming in the future."
+        onDismiss={() => setShareInfoVisible(false)}
+      />
     </View>
   )
 }
@@ -647,12 +659,18 @@ const styles = StyleSheet.create({
   navControls: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     alignSelf: 'center',
     width: '100%',
     gap: 8,
   },
+  navSide: {
+    width: 54,
+    height: 54,
+  },
   navRow: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     maxWidth: 320,
