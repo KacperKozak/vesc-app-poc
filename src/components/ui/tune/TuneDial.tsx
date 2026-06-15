@@ -1,14 +1,7 @@
 /* eslint-disable react-hooks/immutability */
 import * as Haptics from 'expo-haptics'
 import { useCallback, useEffect, useMemo } from 'react'
-import {
-  type LayoutChangeEvent,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
   cancelAnimation,
@@ -24,24 +17,13 @@ import { scheduleOnRN } from 'react-native-worklets'
 import { formatTuneValue } from '@/lib/tune/fields'
 import { theme } from '@/constants/theme'
 import {
-  DETENT_CAPTURE_VELOCITY,
-  DETENT_DECAY_PER_FRAME,
-  DETENT_PULL,
   DRAG_RANGE_GAIN,
-  LOCK_VELOCITY,
-  MAX_THROW_VELOCITY,
-  MOMENTUM_CARRY,
-  THROW_DISTANCE_GAIN,
-  THROW_EASE_POWER,
-  computeDetentStrength,
+  THROW_STOP_VELOCITY,
+  advanceTuneDialThrow,
   computeHapticStepSpacing,
-  computeMomentumEmitStepIndex,
-  computeRangeScale,
-  computeRenderedWidthScale,
-  computeThrowDurationMs,
   computeTuneDialLayout,
-  resolveThrowGestureVelocity,
-  smoothThrowGestureVelocity,
+  resolveTuneDialThrowVelocity,
+  shouldApplyExternalTuneDialValue,
   shouldPlayTuneDialHaptic,
 } from '@/components/ui/tune/tuneDialPhysics'
 
@@ -68,7 +50,6 @@ interface TuneDialProps {
 
 export function TuneDial({ value, previousValue, min, max, step, onValueChange }: TuneDialProps) {
   'use no memo'
-  const { width: screenWidth } = useWindowDimensions()
   const range = max - min
   const {
     totalSteps,
@@ -80,8 +61,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
     labelEveryStep,
     renderMidpointTicks,
   } = useMemo(() => computeTuneDialLayout(min, max, step), [min, max, step])
-  const hapticStepSpacing = computeHapticStepSpacing({ labelEveryStep, majorEvery })
-  const rangeScale = computeRangeScale(totalWidth)
+  const hapticStepSpacing = computeHapticStepSpacing()
   const initialStepIndex = Math.round((value - min) / step)
 
   const valueToOffset = useCallback(
@@ -91,18 +71,11 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
 
   const translateX = useSharedValue(-valueToOffset(value))
   const dragStartX = useSharedValue(0)
-  const isDragging = useSharedValue(false)
+  const interactionActive = useSharedValue(false)
   const momentumVelocity = useSharedValue(0)
-  const throwDurationMs = useSharedValue(0)
-  const throwElapsedMs = useSharedValue(0)
-  const smoothedThrowGestureVelocityX = useSharedValue(0)
-  const latestGestureTranslationX = useSharedValue(0)
-  const previousFrameGestureTranslationX = useSharedValue(0)
-  const stationaryGestureMs = useSharedValue(0)
   const lastEmittedValue = useSharedValue(value)
   const lastStepIndex = useSharedValue(initialStepIndex)
   const lastEdgeHapticStepIndex = useSharedValue(-1)
-  const renderedWidthScale = useSharedValue(1)
   const valueBadgeScale = useSharedValue(1)
 
   const tick = useCallback(() => {
@@ -175,103 +148,54 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
     ],
   )
 
-  const snapOffsetToNearest = useCallback(
+  const settleOffsetToNearest = useCallback(
     (rawOffset: number) => {
       'worklet'
       const stepIndex = Math.max(0, Math.min(totalSteps, Math.round(-rawOffset / stepPx)))
       emitStepIndex(stepIndex)
-      translateX.value = withSpring(-stepIndex * stepPx, SNAP_SPRING)
+      translateX.value = withSpring(-stepIndex * stepPx, SNAP_SPRING, (finished) => {
+        if (finished) interactionActive.value = false
+      })
     },
-    [emitStepIndex, stepPx, totalSteps, translateX],
+    [emitStepIndex, interactionActive, stepPx, totalSteps, translateX],
   )
 
   const pauseThrow = useCallback(() => {
     'worklet'
     cancelAnimation(translateX)
     momentumVelocity.value = 0
-    throwDurationMs.value = 0
-    throwElapsedMs.value = 0
-  }, [momentumVelocity, throwDurationMs, throwElapsedMs, translateX])
-
-  const handleLayout = useCallback(
-    (event: LayoutChangeEvent) => {
-      renderedWidthScale.value = computeRenderedWidthScale(
-        event.nativeEvent.layout.width,
-        screenWidth,
-      )
-    },
-    [renderedWidthScale, screenWidth],
-  )
+  }, [momentumVelocity, translateX])
 
   useFrameCallback((frame) => {
     const rawDt = frame.timeSincePreviousFrame ?? 16
-
-    if (isDragging.value) {
-      const translationDelta = Math.abs(
-        latestGestureTranslationX.value - previousFrameGestureTranslationX.value,
-      )
-      stationaryGestureMs.value = translationDelta < 0.35 ? stationaryGestureMs.value + rawDt : 0
-      previousFrameGestureTranslationX.value = latestGestureTranslationX.value
-      return
-    }
-
-    const dt = Math.min(rawDt, 34) / 1000
-    const durationMs = throwDurationMs.value
-    const previousProgress = durationMs > 0 ? Math.min(1, throwElapsedMs.value / durationMs) : 1
-    throwElapsedMs.value = durationMs > 0 ? Math.min(durationMs, throwElapsedMs.value + rawDt) : 0
-    const progress = durationMs > 0 ? Math.min(1, throwElapsedMs.value / durationMs) : 1
-    const remainingRatio =
-      previousProgress >= 1 ? 0 : (1 - progress) / Math.max(0.001, 1 - previousProgress)
-    momentumVelocity.value *= Math.pow(Math.max(0, remainingRatio), THROW_EASE_POWER)
-
     const speed = Math.abs(momentumVelocity.value)
 
-    if (speed <= LOCK_VELOCITY) {
+    if (speed <= THROW_STOP_VELOCITY) {
       if (speed > 0) {
         momentumVelocity.value = 0
-        throwDurationMs.value = 0
-        throwElapsedMs.value = 0
-        const stepIndex = Math.max(0, Math.min(totalSteps, Math.round(-translateX.value / stepPx)))
-        translateX.value = withSpring(-stepIndex * stepPx, SNAP_SPRING)
-        emitStepIndex(stepIndex)
+        settleOffsetToNearest(translateX.value)
       }
       return
     }
 
-    let nextOffset = translateX.value + momentumVelocity.value * dt
+    const nextThrow = advanceTuneDialThrow(momentumVelocity.value, rawDt)
+    let nextOffset = translateX.value + nextThrow.distance
     if (nextOffset > 0 || nextOffset < -totalWidth) {
       nextOffset = Math.max(-totalWidth, Math.min(0, nextOffset))
       momentumVelocity.value = 0
-      throwDurationMs.value = 0
-      throwElapsedMs.value = 0
       const edgeStepIndex = Math.max(0, Math.min(totalSteps, Math.round(-nextOffset / stepPx)))
-      translateX.value = withSpring(-edgeStepIndex * stepPx, SNAP_SPRING)
+      translateX.value = withSpring(-edgeStepIndex * stepPx, SNAP_SPRING, (finished) => {
+        if (finished) interactionActive.value = false
+      })
       emitStepIndex(edgeStepIndex)
       emitEdgeHaptic(edgeStepIndex)
       return
     }
 
+    momentumVelocity.value = nextThrow.velocity
     const nearestStepIndex = Math.max(0, Math.min(totalSteps, Math.round(-nextOffset / stepPx)))
-    const nearestStepOffset = -nearestStepIndex * stepPx
-    const detentRadius = Math.max(1.5, Math.min(stepPx * 0.34, 18))
-    const detentStrength = computeDetentStrength(totalSteps)
-    const detentPull = DETENT_PULL * detentStrength
-    const detentDecayPerFrame = 1 - (1 - DETENT_DECAY_PER_FRAME) * detentStrength
-    const detentCaptureVelocity = DETENT_CAPTURE_VELOCITY * detentStrength
-    const detentDistance = nextOffset - nearestStepOffset
-
-    if (
-      Math.abs(detentDistance) <= detentRadius &&
-      Math.abs(momentumVelocity.value) <= detentCaptureVelocity
-    ) {
-      momentumVelocity.value =
-        (momentumVelocity.value - detentDistance * detentPull * dt) *
-        Math.pow(detentDecayPerFrame, dt * 60)
-    }
-
     translateX.value = nextOffset
-    const emittedStepIndex = computeMomentumEmitStepIndex(nearestStepIndex, totalSteps)
-    emitStepIndex(emittedStepIndex, true)
+    emitStepIndex(nearestStepIndex, true)
   })
 
   const panGesture = useMemo(
@@ -284,24 +208,14 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
         })
         .onStart(() => {
           pauseThrow()
-          isDragging.value = true
-          smoothedThrowGestureVelocityX.value = 0
-          latestGestureTranslationX.value = 0
-          previousFrameGestureTranslationX.value = 0
-          stationaryGestureMs.value = 0
+          interactionActive.value = true
           dragStartX.value = translateX.value
           lastStepIndex.value = Math.round((value - min) / step)
         })
         .onUpdate((e) => {
-          const dragScale = rangeScale * renderedWidthScale.value
-          const raw = dragStartX.value + e.translationX * dragScale * DRAG_RANGE_GAIN
+          const raw = dragStartX.value + e.translationX * DRAG_RANGE_GAIN
           const clamped = Math.max(-totalWidth, Math.min(0, raw))
           translateX.value = clamped
-          latestGestureTranslationX.value = e.translationX
-          smoothedThrowGestureVelocityX.value = smoothThrowGestureVelocity(
-            smoothedThrowGestureVelocityX.value,
-            e.velocityX,
-          )
           const stepIndex = Math.max(0, Math.min(totalSteps, Math.round(-clamped / stepPx)))
           emitStepIndex(stepIndex)
           if (raw > 0 || raw < -totalWidth) {
@@ -309,29 +223,9 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
           }
         })
         .onEnd((e) => {
-          isDragging.value = false
-          const gestureVelocityX = resolveThrowGestureVelocity(
-            e.velocityX,
-            smoothedThrowGestureVelocityX.value,
-            e.translationX,
-            stationaryGestureMs.value,
-          )
-          const dragScale = rangeScale * renderedWidthScale.value
-          const normalizedVelocity = gestureVelocityX * THROW_DISTANCE_GAIN * dragScale
-          const maxVelocity = MAX_THROW_VELOCITY * Math.max(0.2, dragScale)
-          const v = Math.max(-maxVelocity, Math.min(maxVelocity, normalizedVelocity))
-          momentumVelocity.value = Math.max(
-            -maxVelocity,
-            Math.min(maxVelocity, momentumVelocity.value * MOMENTUM_CARRY + v),
-          )
-          throwDurationMs.value = computeThrowDurationMs(
-            gestureVelocityX,
-            momentumVelocity.value,
-            totalWidth,
-          )
-          throwElapsedMs.value = 0
-          if (Math.abs(momentumVelocity.value) <= LOCK_VELOCITY) {
-            snapOffsetToNearest(translateX.value)
+          momentumVelocity.value = resolveTuneDialThrowVelocity(e.velocityX, e.translationX)
+          if (momentumVelocity.value === 0) {
+            settleOffsetToNearest(translateX.value)
           } else {
             const stepIndex = Math.max(
               0,
@@ -339,24 +233,21 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
             )
             emitStepIndex(stepIndex)
           }
+        })
+        .onFinalize((_e, success) => {
+          if (!success && interactionActive.value) {
+            settleOffsetToNearest(translateX.value)
+          }
         }),
     [
       dragStartX,
       emitStepIndex,
       emitEdgeHaptic,
-      isDragging,
-      latestGestureTranslationX,
+      interactionActive,
       momentumVelocity,
       pauseThrow,
-      previousFrameGestureTranslationX,
-      rangeScale,
-      renderedWidthScale,
-      snapOffsetToNearest,
-      smoothedThrowGestureVelocityX,
-      stationaryGestureMs,
+      settleOffsetToNearest,
       stepPx,
-      throwDurationMs,
-      throwElapsedMs,
       totalSteps,
       totalWidth,
       translateX,
@@ -368,7 +259,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
   )
 
   useEffect(() => {
-    if (value === lastEmittedValue.value) {
+    if (!shouldApplyExternalTuneDialValue(value, lastEmittedValue.value, interactionActive.value)) {
       return
     }
 
@@ -377,16 +268,13 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
       lastEmittedValue.value = value
       lastStepIndex.value = Math.round((value - min) / step)
       momentumVelocity.value = 0
-      throwDurationMs.value = 0
-      throwElapsedMs.value = 0
       translateX.value = withSpring(expectedOffset, SNAP_SPRING)
     }
   }, [
     min,
+    interactionActive,
     momentumVelocity,
     step,
-    throwDurationMs,
-    throwElapsedMs,
     value,
     valueToOffset,
     translateX,
@@ -456,7 +344,7 @@ export function TuneDial({ value, previousValue, min, max, step, onValueChange }
 
   return (
     <GestureHandlerRootView style={styles.rootView}>
-      <View style={styles.container} onLayout={handleLayout}>
+      <View style={styles.container}>
         <GestureDetector gesture={panGesture}>
           <Animated.View style={styles.gestureArea}>
             <Animated.View style={[styles.strip, { width: totalWidth + 1 }, stripStyle]}>

@@ -79,6 +79,26 @@ function CompactTuneDialShowcase() {
   )
 }
 
+function AlertPercentageTuneDialShowcase() {
+  const [threshold, setThreshold] = useState(80)
+
+  return (
+    <ShowcaseCard
+      name="TuneDial Alert Percentage"
+      controls={<ValueRow label="threshold" value={`${threshold}%`} />}
+    >
+      <TuneDial
+        value={threshold}
+        previousValue={65}
+        min={0}
+        max={100}
+        step={1}
+        onValueChange={setThreshold}
+      />
+    </ShowcaseCard>
+  )
+}
+
 function BasicSliderCellShowcase() {
   const mockItem: BasicSliderItem = useMemo(
     () => ({
@@ -114,6 +134,7 @@ export default function TunePage() {
         />
         <TuneDialShowcase />
         <CompactTuneDialShowcase />
+        <AlertPercentageTuneDialShowcase />
         <BasicSliderCellShowcase />
       </ScrollView>
     </SafeAreaView>
