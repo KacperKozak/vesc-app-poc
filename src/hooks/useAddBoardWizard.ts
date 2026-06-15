@@ -11,6 +11,7 @@ import {
   getBatterySummary,
   parseVoltage,
 } from '@/lib/boardSetup'
+import { routes } from '@/navigation/routes'
 import { useBoardStore } from '@/store/boardStore'
 
 export const WIZARD_STEPS = ['scan', 'name', 'battery', 'confirm'] as const
@@ -32,6 +33,7 @@ interface AddBoardWizardState {
   batteryWarning: string | null
   batterySummary: BatterySummary
   canSave: boolean
+  savedBoardId: string | null
 }
 
 interface AddBoardWizardActions {
@@ -49,6 +51,8 @@ interface AddBoardWizardActions {
   setManualMinVoltage: (v: string) => void
   setManualMaxVoltage: (v: string) => void
   save: () => void
+  detectNow: () => void
+  finish: () => void
 }
 
 export type UseAddBoardWizard = AddBoardWizardState & AddBoardWizardActions
@@ -69,6 +73,7 @@ export function useAddBoardWizard(): UseAddBoardWizard {
   const [parallelCount, setParallelCount] = useState(DEFAULT_BATTERY_CONFIG.parallelCount)
   const [manualMinVoltage, setManualMinVoltage] = useState('60')
   const [manualMaxVoltage, setManualMaxVoltage] = useState('84')
+  const [savedBoardId, setSavedBoardId] = useState<string | null>(null)
 
   const previewConfig: BatteryConfig =
     batteryMode === 'preset'
@@ -122,7 +127,18 @@ export function useAddBoardWizard(): UseAddBoardWizard {
       batteryConfig,
     })
     setActiveBoard(board.id)
+    // Offer detection for the new Board; transport stays null until detected.
+    setSavedBoardId(board.id)
+  }
+
+  // Skip detection: Board keeps its null transport (offline-friendly).
+  const finish = () => router.dismissAll()
+
+  // Accept detection: dismiss the wizard, open the shared Detection screen.
+  const detectNow = () => {
+    if (!savedBoardId) return
     router.dismissAll()
+    router.push({ pathname: routes.editBoardTransport, params: { boardId: savedBoardId } })
   }
 
   return {
@@ -141,6 +157,7 @@ export function useAddBoardWizard(): UseAddBoardWizard {
     batteryWarning,
     batterySummary,
     canSave,
+    savedBoardId,
     setStep,
     next,
     back,
@@ -155,5 +172,7 @@ export function useAddBoardWizard(): UseAddBoardWizard {
     setManualMinVoltage,
     setManualMaxVoltage,
     save,
+    detectNow,
+    finish,
   }
 }

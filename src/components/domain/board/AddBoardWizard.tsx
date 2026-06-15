@@ -34,6 +34,7 @@ interface Props {
 }
 
 export function AddBoardWizard({ wizard }: Props) {
+  if (wizard.savedBoardId) return <DetectStep wizard={wizard} />
   return (
     <>
       <ProgressBar step={wizard.step} />
@@ -317,6 +318,32 @@ function ConfirmStep({ wizard }: Props) {
   )
 }
 
+function DetectStep({ wizard }: Props) {
+  return (
+    <StepContainer title="Detect transport?" icon={WifiHigh} color={theme.wheel.color}>
+      <Text style={styles.detectText}>
+        Board saved. Detect its transport now to make it ready to ride, or skip and detect later.
+      </Text>
+      <View style={styles.actionRow}>
+        <Button
+          style={styles.actionButton}
+          label="Skip for now"
+          variant="secondary"
+          onPress={wizard.finish}
+          testID="add-board-detect-skip"
+        />
+        <Button
+          style={styles.actionButton}
+          label="Detect now"
+          icon={WifiHigh}
+          onPress={wizard.detectNow}
+          testID="add-board-detect-now"
+        />
+      </View>
+    </StepContainer>
+  )
+}
+
 // ── Shared sub-components ──
 
 interface StepContainerProps {
@@ -520,5 +547,10 @@ const styles = StyleSheet.create({
     color: theme.neutral.textPrimary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  detectText: {
+    color: theme.neutral.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
   },
 })
