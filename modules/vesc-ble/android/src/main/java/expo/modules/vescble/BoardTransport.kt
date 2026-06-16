@@ -60,10 +60,6 @@ sealed interface BoardTransport {
   }
 }
 
-internal val DirectTransport: BoardTransport = BoardTransport.Direct
-
-internal fun CanForwardTransport(canId: Int): BoardTransport = BoardTransport.Can(canId)
-
 internal fun boardTransport(canId: Int?, directConnection: Boolean): BoardTransport? =
   when {
     canId != null -> BoardTransport.Can(canId)

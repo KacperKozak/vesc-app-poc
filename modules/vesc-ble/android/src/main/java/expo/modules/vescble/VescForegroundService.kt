@@ -70,7 +70,6 @@ data class SessionConfig(
     val deviceId: String?,
     val deviceName: String,
     val transport: BoardTransport?,
-    val canId: Int?,
     val pollIntervalMs: Long,
     val recordingEnabled: Boolean,
     val telemetryRecordingEnabled: Boolean,
@@ -760,6 +759,8 @@ class VescForegroundService : Service() {
         telemetry = null
         loadBatteryConfig(start.boardConfig.appBoardId)
         telemetryPipeline.beginSession(session, start.boardConfig)
+        // Tag telemetry frames with the CAN id resolved from the stored transport.
+        telemetryPipeline.updateCanId(canId)
         packetReassembler.reset()
         gattClient.resetDiagnostics()
         diagnosticsRecorder.resetTelemetryParseFailedCounters()

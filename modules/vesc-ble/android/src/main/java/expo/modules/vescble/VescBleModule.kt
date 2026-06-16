@@ -512,7 +512,6 @@ class VescBleModule : Module() {
         deviceId = bleId,
         deviceName = boardName,
         transport = BoardTransport.fromBridge(link["transport"]),
-        canId = null,
         pollIntervalMs = 500L,
         recordingEnabled = requestedDebugRecordingEnabled,
         telemetryRecordingEnabled = false,
