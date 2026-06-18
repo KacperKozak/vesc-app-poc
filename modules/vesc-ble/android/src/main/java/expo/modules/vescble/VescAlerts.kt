@@ -185,7 +185,7 @@ internal class VescAlertEngine {
     }
 
     companion object {
-        internal const val BATTERY_HYSTERESIS_PERCENT = 3.0
+        internal const val BATTERY_HYSTERESIS_PERCENT = 10.0
     }
 
     private fun extractAlertValue(controlId: String, t: RefloatTelemetry): Double? = when (controlId) {

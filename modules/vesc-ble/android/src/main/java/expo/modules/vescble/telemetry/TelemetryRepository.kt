@@ -311,9 +311,30 @@ class TelemetryRepository private constructor(context: Context) {
 
   suspend fun getSamples(options: Map<String, Any?>): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
     val query = SampleQueryOptions.from(options)
-    val configs = batteryConfigByDevice()
-    getSampleStates(query.fromMs, query.toMs, query.deviceId, query.limit)
-      .map { it.state.toSampleMap(it.id, deriveBatteryPercent(it.state, configs)) }
+    smoothedSampleMaps(
+      getSampleStates(query.fromMs, query.toMs, query.deviceId, query.limit),
+      batteryConfigByDevice(),
+    )
+  }
+
+  /**
+   * Recomputes the Battery SoC Estimate per sample on read (ADR-0016): IR-compensated % run
+   * through a per-device median window. Mirrors how IR compensation is already applied on read;
+   * approximate because stored frames are delta-encoded.
+   */
+  private suspend fun smoothedSampleMaps(
+    samples: List<HistoryTelemetryState>,
+    configs: Map<String, Map<String, Any?>>,
+  ): List<Map<String, Any?>> {
+    val windowMs = AppDataRepository.get(appContext).getTypedSettings().socEstimateWindowSeconds * 1000L
+    val windows = HashMap<String?, SocMedianWindow>()
+    return samples.map { sample ->
+      val estimate = deriveBatteryPercent(sample.state, configs)?.let {
+        windows.getOrPut(sample.state.deviceId) { SocMedianWindow(windowMs) }
+          .median(it, sample.state.capturedAtMs)
+      }
+      sample.state.toSampleMap(sample.id, estimate)
+    }
   }
 
   /** bleId (telemetry deviceId) -> the board's normalized battery config. */
@@ -370,7 +391,7 @@ class TelemetryRepository private constructor(context: Context) {
     val samples = getSampleStates(query.fromMs, query.toMs, query.deviceId, query.limit)
     val configs = batteryConfigByDevice()
     mapOf(
-      "boardSamples" to samples.map { it.state.toSampleMap(it.id, deriveBatteryPercent(it.state, configs)) },
+      "boardSamples" to smoothedSampleMaps(samples, configs),
       "gpsSamples" to samples.toGpsSampleMaps(),
       "markers" to dao.getMarkers(query.fromMs, query.toMs, query.deviceId).map { it.toMap() },
       "exclusions" to dao.getExclusions(query.fromMs, query.toMs, query.deviceId).map { it.toMap() },

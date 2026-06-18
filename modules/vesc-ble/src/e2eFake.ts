@@ -48,6 +48,7 @@ const e2eSettings: AppSettings = {
   mapNavigationMode: 'gpsHeading',
   historyMetricGradientsEnabled: true,
   historyMetricHotRanges: {},
+  socEstimateWindowSeconds: 20,
 }
 
 function emitDevice(event: DeviceFoundEvent): void {

@@ -16,6 +16,7 @@ const DEFAULTS: AppSettings = {
   mapNavigationMode: 'northUp',
   historyMetricGradientsEnabled: true,
   historyMetricHotRanges: DEFAULT_HISTORY_METRIC_HOT_RANGES,
+  socEstimateWindowSeconds: 20,
 }
 
 interface SettingsState extends AppSettings {

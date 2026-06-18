@@ -309,7 +309,7 @@ class VescAlertEngineTest {
         assertEquals("duty", fired[0].ruleId)
     }
 
-    // --- Battery hysteresis (percent-based, margin = 3%) ---
+    // --- Battery hysteresis (percent-based, margin = 10%) ---
 
     @Test
     fun batteryHysteresisFiresOnce() {
@@ -329,11 +329,11 @@ class VescAlertEngineTest {
 
     @Test
     fun batteryHysteresisRearmsAfterPercentRecovery() {
-        // margin = 3%, re-arm needs > 53%
+        // margin = 10%, re-arm needs > 60%
         val rules = listOf(rule(id = "bat", controlId = "battery", threshold = 50.0))
         engine.evaluate(rules, telemetry(), batteryPercent = 45.0)
 
-        engine.evaluate(rules, telemetry(), batteryPercent = 54.0)
+        engine.evaluate(rules, telemetry(), batteryPercent = 61.0)
 
         val refired = engine.evaluate(rules, telemetry(), batteryPercent = 45.0)
         assertEquals(1, refired.size)
@@ -341,12 +341,12 @@ class VescAlertEngineTest {
 
     @Test
     fun batteryHysteresisNoRearmsBeforeMargin() {
-        // margin = 3%, threshold = 50%, re-arm needs > 53%
+        // margin = 10%, threshold = 50%, re-arm needs > 60%
         val rules = listOf(rule(id = "bat", controlId = "battery", threshold = 50.0))
         engine.evaluate(rules, telemetry(), batteryPercent = 45.0)
 
-        // recovers to 52% — below margin (53%), stays disarmed
-        engine.evaluate(rules, telemetry(), batteryPercent = 52.0)
+        // recovers to 58% — below margin (60%), stays disarmed
+        engine.evaluate(rules, telemetry(), batteryPercent = 58.0)
 
         val second = engine.evaluate(rules, telemetry(), batteryPercent = 45.0)
         assertTrue(second.isEmpty())
