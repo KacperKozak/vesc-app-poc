@@ -70,6 +70,8 @@ data class SessionConfig(
     val deviceId: String?,
     val deviceName: String,
     val transport: BoardTransport?,
+    /** Probe-confirmed smart-BMS presence. `null` = unknown (legacy link) → still polled. */
+    val hasBms: Boolean? = null,
     val pollIntervalMs: Long,
     val recordingEnabled: Boolean,
     val telemetryRecordingEnabled: Boolean,

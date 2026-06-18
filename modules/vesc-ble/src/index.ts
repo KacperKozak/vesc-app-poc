@@ -62,13 +62,18 @@ export type BoardTransport = 'direct' | number
 
 export type BoardProbeOutcome = 'resolved' | 'needs-pick' | 'none'
 
+/** A probe-confirmed transport plus the capabilities discovered while probing it. */
+export interface BoardCandidate {
+  transport: BoardTransport
+  /** Whether a smart-BMS answered on this transport during the probe. */
+  hasBms: boolean
+}
+
 /** Result of a native Board Probe of a BLE peripheral. */
 export interface BoardProbeResult {
   outcome: BoardProbeOutcome
   /** Every transport that produced a valid Telemetry Sample, in probe order. */
-  candidates: BoardTransport[]
-  /** Set only for `resolved` (single confirmed transport); otherwise null. */
-  transport: BoardTransport | null
+  candidates: BoardCandidate[]
 }
 
 /** Probe progress milestones, surfaced live so UI can show connect/probe steps. */
@@ -98,6 +103,11 @@ export interface BoardProbeProgressEvent {
 export interface BoardLink {
   bleId: string
   transport: BoardTransport
+  /**
+   * Probe-confirmed smart-BMS presence on {@link transport}. `undefined` on links
+   * saved before BMS detection existed — treated as unknown (still polled).
+   */
+  hasBms?: boolean
 }
 
 export interface Board {

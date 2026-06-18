@@ -160,8 +160,7 @@ public class VescBleModule: Module {
       DispatchQueue.main.async { [weak self] in self?.stopMockSession() }
       promise.resolve([
         "outcome": "resolved",
-        "candidates": ["direct"],
-        "transport": "direct",
+        "candidates": [["transport": "direct", "hasBms": true]],
       ])
     }
 

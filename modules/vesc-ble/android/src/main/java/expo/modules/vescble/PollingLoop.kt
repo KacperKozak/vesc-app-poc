@@ -28,6 +28,9 @@ internal class PollingLoop(
     ) {
         val pollPayload = pollPayload(transport)
         val bmsPayload = bmsPayload(transport)
+        // The probe records smart-BMS presence on the Board Link; skip BMS polling entirely
+        // when it confirmed none. `null` (legacy link) is treated as unknown → keep polling.
+        val pollBms = sessionConfig.hasBms != false
         stop()
         tick = 0L
 
@@ -36,7 +39,7 @@ internal class PollingLoop(
             sendPayloadWithRetry(pollPayload, session)
             // BMS values change slowly; poll them at 1/BMS_POLL_STRIDE of the telemetry rate
             // to avoid crowding the BLE link with large cell-voltage replies.
-            if (tick % BMS_POLL_STRIDE == 0L) {
+            if (pollBms && tick % BMS_POLL_STRIDE == 0L) {
                 sendPayloadWithRetry(bmsPayload, session)
             }
             tick++

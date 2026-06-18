@@ -101,7 +101,9 @@ if (char.uuid == NUS_RX_UUID || char.uuid == NUS_TX_UUID) { emit() }
 - **CAN bridge boards** (VESC Express T, Tronic 250r with BLE UART bridge): the motor controller + Refloat app sit behind CAN. Direct polling gets no telemetry — the Express/bridge has no motor data itself. The probe confirms a CAN transport for these.
 - **Direct boards**: the motor controller is directly connected via BLE. The probe confirms the Direct transport.
 
-A stale stored transport (board rewired, CAN id reassigned, module replaced) is not self-healed at runtime — the dumb runtime keeps retrying and the rider re-probes manually. See `docs/adr/0015-board-transport-detected-at-setup.md`.
+Alongside the transport, the probe records **smart-BMS presence** per candidate (`hasBms`): it fires a `COMM_BMS_GET_VALUES` in the same window and flags the candidate if a valid reply lands. The flag is saved on the `BoardLink` so the runtime knows, before connecting, whether to poll the BMS at all (`link.hasBms === false` → BMS poll skipped). See `docs/vescProtocol.md#capability-detection-at-probe-not-runtime`.
+
+A stale stored transport (board rewired, CAN id reassigned, module replaced) is not self-healed at runtime — the dumb runtime keeps retrying and the rider re-probes manually. Same for a stale `hasBms` (BMS added/removed): the rider re-probes. See `docs/adr/0015-board-transport-detected-at-setup.md`.
 
 ---
 

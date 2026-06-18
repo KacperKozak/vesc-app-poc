@@ -79,6 +79,17 @@ A smart BMS (e.g. Smart BMS / ANT / JBD over CAN) reports per-cell-group voltage
 them with `COMM_BMS_GET_VALUES` (0x60) — the standard VESC BMS command, **not** anything from
 the Refloat `GET_ALLDATA` stream (that only carries pack-level voltage).
 
+### Capability detection (at probe, not runtime)
+
+Smart-BMS presence is discovered once, during the **Board Probe**, not re-sniffed every
+session. While probing each transport for telemetry, `BoardTransportDetector` also fires a
+`COMM_BMS_GET_VALUES` request; a valid reply within the probe window marks that candidate
+`hasBms = true`. The flag rides on the chosen `BoardCandidate` into the saved `BoardLink`
+(`link.hasBms`), so reachability and capability are proven together and stored together.
+
+`null`/absent `hasBms` (links saved before this existed) means _unknown_ and is treated as
+"poll anyway" — only an explicit `false` suppresses polling.
+
 ### Polling
 
 `PollingLoop` interleaves a BMS poll into the normal telemetry loop at **1/8** of the
@@ -87,6 +98,10 @@ slower cadence avoids crowding the BLE link. The poll reuses the session transpo
 CAN-forwarded (`[0x22, canId, 0x60]`) or sent direct exactly like the Refloat poll. The reply
 arrives unwrapped at the top level as `[0x60, ...]` (the ESP32 strips the CAN-forward wrapper
 on responses), with a nested `[0x22, ?, 0x60, ...]` form also handled defensively.
+
+When `link.hasBms` is `false`, the probe proved this board has no smart-BMS, so the loop
+**skips the BMS poll entirely** — no wasted frames, and `BmsCellVoltages` shows a definitive
+"This board has no smart-BMS" instead of an open-ended "waiting".
 
 ### Payload layout (`parseBmsValues` in `VescProtocol.kt`)
 

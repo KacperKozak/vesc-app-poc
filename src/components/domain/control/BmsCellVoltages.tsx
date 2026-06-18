@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { summarizeBms, type BmsCellGroup } from '@/lib/battery'
 import { useBleStore } from '@/store/bleStore'
+import { useBoardStore } from '@/store/boardStore'
 import { theme } from '@/constants/theme'
 
 // Per-group fill is mapped over a typical li-ion working window so a near-empty
@@ -15,12 +16,21 @@ const formatCell = (v: number) => `${v.toFixed(2)}V`
 export function BmsCellVoltages() {
   const bms = useBleStore((s) => s.latestBms)
   const summary = useMemo(() => summarizeBms(bms), [bms])
+  // The probe records smart-BMS presence on the active Board Link, so the empty
+  // state can say "this board has none" instead of an indefinite "waiting".
+  const noBmsLinked = useBoardStore(
+    (s) => s.boards.find((b) => b.id === s.activeBoardId)?.link?.hasBms === false,
+  )
 
   if (!summary) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>CELL GROUPS</Text>
-        <Text style={styles.empty}>No smart-BMS data. Connect a board with a BMS over CAN.</Text>
+        <Text style={styles.empty}>
+          {noBmsLinked
+            ? 'This board has no smart-BMS.'
+            : 'No smart-BMS data. Connect a board with a BMS over CAN.'}
+        </Text>
       </View>
     )
   }

@@ -45,6 +45,8 @@ internal class BoardTransportDetector(
   private val probeQueue = ArrayDeque<BoardTransport>()
   private val observations = mutableListOf<TransportDetection.Probe>()
   private var current: BoardTransport? = null
+  private var currentConfirmed = false
+  private var currentHasBms = false
   private var phase = Phase.Connecting
   private var stepTimeout: Runnable? = null
   private var finished = false
@@ -147,7 +149,19 @@ internal class BoardTransportDetector(
       }
       COMM_CUSTOM_APP_DATA -> if (phase == Phase.Probing && current != null) {
         val sample = parseRefloatGetAllData(payload, avgLatency = null, packetAt = nowMs(), location = null)
-        if (sample != null) confirmCurrent()
+        if (sample != null) markConfirmed()
+      }
+      // Direct smart-BMS reply.
+      COMM_BMS_GET_VALUES -> if (phase == Phase.Probing && current != null) {
+        if (parseBmsValues(payload, nowMs()) != null) markBms()
+      }
+      // CAN-forwarded smart-BMS reply (telemetry stays bare, but BMS comes wrapped).
+      COMM_FORWARD_CAN -> if (phase == Phase.Probing && current != null && payload.size >= 3) {
+        if ((payload[2].toInt() and 0xff) == COMM_BMS_GET_VALUES &&
+          parseBmsValues(payload.copyOfRange(2, payload.size), nowMs()) != null
+        ) {
+          markBms()
+        }
       }
     }
   }
@@ -164,6 +178,8 @@ internal class BoardTransportDetector(
 
   private fun probeNext() {
     cancelStep()
+    currentConfirmed = false
+    currentHasBms = false
     current = probeQueue.removeFirstOrNull()
     val transport = current ?: return finishResolved()
     recordDiagnostic(
@@ -178,30 +194,63 @@ internal class BoardTransportDetector(
       if (transport is BoardTransport.Can) "probing_can" else "probing_direct",
       transport,
     )
-    val payload = probePayload(transport)
-    gatt.sendPayload(payload)
+    // Ask for telemetry (confirms the transport) and BMS values (capability) in one
+    // window. The BMS reply is best-effort: absence within the window means no BMS.
+    val telemetry = probePayload(transport)
+    val bms = bmsProbePayload(transport)
+    gatt.sendPayload(telemetry)
+    gatt.sendPayload(bms)
     // Re-send once mid-window in case the first request dropped.
-    handler.postDelayed({ if (!finished && current === transport) gatt.sendPayload(payload) }, DETECT_PROBE_TIMEOUT_MS / 2)
-    armStep(DETECT_PROBE_TIMEOUT_MS) {
-      observations.add(TransportDetection.Probe(transport, confirmed = false))
-      current = null
-      probeNext()
-    }
+    handler.postDelayed({
+      if (!finished && current === transport) {
+        gatt.sendPayload(telemetry)
+        gatt.sendPayload(bms)
+      }
+    }, DETECT_PROBE_TIMEOUT_MS / 2)
+    armStep(DETECT_PROBE_TIMEOUT_MS) { finalizeProbe() }
   }
 
-  private fun confirmCurrent() {
+  /** Telemetry sample proves the transport works; mark and finish if BMS already seen. */
+  private fun markConfirmed() {
+    if (currentConfirmed) return
+    currentConfirmed = true
+    val transport = current ?: return
+    emitProgress("telemetry_confirmed", transport)
+    maybeFinishProbe()
+  }
+
+  /** A smart-BMS answered on the current transport. */
+  private fun markBms() {
+    currentHasBms = true
+    maybeFinishProbe()
+  }
+
+  /**
+   * Finish early only once both signals are in — telemetry confirms the transport and
+   * a BMS reply proves the capability. To assert "no BMS" we must wait the full window,
+   * so a confirmed-but-BMS-less transport rides the [armStep] timeout to [finalizeProbe].
+   */
+  private fun maybeFinishProbe() {
+    if (currentConfirmed && currentHasBms) finalizeProbe()
+  }
+
+  private fun finalizeProbe() {
     val transport = current ?: return
     cancelStep()
-    observations.add(TransportDetection.Probe(transport, confirmed = true))
-    recordDiagnostic(
-      "board_probe_transport_confirmed",
-      mapOf(
-        "message" to "Transport confirmed by telemetry sample",
-        "transport" to BoardTransport.toBridge(transport),
-        "elapsed_ms" to elapsed(),
-      ),
+    observations.add(
+      TransportDetection.Probe(transport, confirmed = currentConfirmed, hasBms = currentHasBms),
     )
-    emitProgress("telemetry_confirmed", transport)
+    if (currentConfirmed) {
+      recordDiagnostic(
+        "board_probe_transport_confirmed",
+        mapOf(
+          "message" to "Transport confirmed by telemetry sample",
+          "transport" to BoardTransport.toBridge(transport),
+          "has_bms" to currentHasBms,
+          "elapsed_ms" to elapsed(),
+        ),
+      )
+    }
     current = null
     probeNext()
   }
@@ -280,6 +329,15 @@ internal class BoardTransportDetector(
       REFLOAT_MAGIC.toByte(),
       REFLOAT_GET_ALLDATA.toByte(),
       2,
+    )
+  }
+
+  private fun bmsProbePayload(transport: BoardTransport): ByteArray = when (transport) {
+    BoardTransport.Direct -> byteArrayOf(COMM_BMS_GET_VALUES.toByte())
+    is BoardTransport.Can -> byteArrayOf(
+      COMM_FORWARD_CAN.toByte(),
+      transport.canId.toByte(),
+      COMM_BMS_GET_VALUES.toByte(),
     )
   }
 }

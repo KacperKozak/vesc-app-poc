@@ -6,8 +6,8 @@ import org.junit.Test
 
 class TransportDetectionTest {
 
-  private fun probe(transport: BoardTransport, confirmed: Boolean) =
-    TransportDetection.Probe(transport, confirmed)
+  private fun probe(transport: BoardTransport, confirmed: Boolean, hasBms: Boolean = false) =
+    TransportDetection.Probe(transport, confirmed, hasBms)
 
   // --- candidatesToProbe: always probe Direct + every responder ---
 
@@ -44,7 +44,7 @@ class TransportDetectionTest {
         probe(BoardTransport.Direct, confirmed = true),
       ),
     )
-    assertEquals(listOf(BoardTransport.Direct), result.candidates)
+    assertEquals(listOf(BoardTransport.Direct), result.candidates.map { it.transport })
     assertEquals(TransportDetection.Outcome.Resolved(BoardTransport.Direct), result.outcome)
   }
 
@@ -58,7 +58,7 @@ class TransportDetectionTest {
         probe(BoardTransport.Can(43), confirmed = true),
       ),
     )
-    assertEquals(listOf(BoardTransport.Can(43)), result.candidates)
+    assertEquals(listOf(BoardTransport.Can(43)), result.candidates.map { it.transport })
     assertEquals(TransportDetection.Outcome.Resolved(BoardTransport.Can(43)), result.outcome)
   }
 
@@ -75,7 +75,7 @@ class TransportDetectionTest {
     )
     assertEquals(
       listOf(BoardTransport.Can(12), BoardTransport.Can(43)),
-      result.candidates,
+      result.candidates.map { it.transport },
     )
     assertEquals(
       TransportDetection.Outcome.NeedsPick(
@@ -97,7 +97,7 @@ class TransportDetectionTest {
     )
     assertEquals(
       listOf(BoardTransport.Direct, BoardTransport.Can(43)),
-      result.candidates,
+      result.candidates.map { it.transport },
     )
     val outcome = result.outcome
     assertTrue(outcome is TransportDetection.Outcome.NeedsPick)
@@ -126,5 +126,51 @@ class TransportDetectionTest {
     val result = TransportDetection.resolve(emptyList())
     assertTrue(result.candidates.isEmpty())
     assertEquals(TransportDetection.Outcome.None, result.outcome)
+  }
+
+  // --- resolve: smart-BMS capability carried onto the candidate ---
+
+  @Test
+  fun `bms presence is carried onto the confirmed candidate`() {
+    val result = TransportDetection.resolve(
+      listOf(
+        probe(BoardTransport.Direct, confirmed = true, hasBms = true),
+      ),
+    )
+    assertEquals(
+      listOf(TransportDetection.Candidate(BoardTransport.Direct, hasBms = true)),
+      result.candidates,
+    )
+  }
+
+  @Test
+  fun `bms capability is tracked per candidate on multi-node bus`() {
+    val result = TransportDetection.resolve(
+      listOf(
+        probe(BoardTransport.Direct, confirmed = true, hasBms = false),
+        probe(BoardTransport.Can(43), confirmed = true, hasBms = true),
+      ),
+    )
+    assertEquals(
+      listOf(
+        TransportDetection.Candidate(BoardTransport.Direct, hasBms = false),
+        TransportDetection.Candidate(BoardTransport.Can(43), hasBms = true),
+      ),
+      result.candidates,
+    )
+  }
+
+  @Test
+  fun `bms on an unconfirmed transport is dropped with it`() {
+    val result = TransportDetection.resolve(
+      listOf(
+        probe(BoardTransport.Direct, confirmed = false, hasBms = true),
+        probe(BoardTransport.Can(7), confirmed = true, hasBms = false),
+      ),
+    )
+    assertEquals(
+      listOf(TransportDetection.Candidate(BoardTransport.Can(7), hasBms = false)),
+      result.candidates,
+    )
   }
 }
