@@ -1,5 +1,7 @@
 # IR-compensated SoC estimation
 
+> **Note:** The "no smoothing / responsive display" stance below is superseded by [ADR-0016](0016-median-windowed-soc-estimate.md), which adds a median window to the SoC Estimate. IR compensation itself stands.
+
 Under load (hill climbs, hard acceleration), battery voltage drops due to internal resistance (voltage sag). Raw voltage-based SoC estimation reports artificially low % during high-current draw, causing unreliable battery display and premature alert triggers.
 
 We apply IR compensation before the SoC curve lookup: `V_corrected = V_measured + I_battery × R_pack`, where `R_pack = R_cell × seriesCount / parallelCount`. Each cell preset carries its own `internalResistanceMilliOhm` value from datasheet AC impedance specs. Manual battery config uses a default of 18mΩ with series count estimated from max voltage.

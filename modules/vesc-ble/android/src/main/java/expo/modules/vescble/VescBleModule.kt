@@ -364,7 +364,8 @@ class VescBleModule : Module() {
         key == "avgSpeedCutoffKmh" ||
         key == "movingAvgSpeedThresholdKmh" ||
         key == "freeSpinMaxSpeedDeltaKmh" ||
-        key == "freeSpinStationaryBoardCapKmh"
+        key == "freeSpinStationaryBoardCapKmh" ||
+        key == "socEstimateWindowSeconds"
       ) {
         VescForegroundService.reloadTelemetrySettings(context.applicationContext)
       }

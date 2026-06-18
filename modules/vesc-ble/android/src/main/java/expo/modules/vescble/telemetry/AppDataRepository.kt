@@ -21,6 +21,12 @@ internal fun validLiveHistoryLimitMinutes(value: Any?): Int? =
     ?.toInt()
     ?.coerceIn(MIN_LIVE_HISTORY_LIMIT_MINUTES, MAX_LIVE_HISTORY_LIMIT_MINUTES)
 
+/** SoC Estimate median window in seconds; 0 disables smoothing, capped at 120s (ADR-0016). */
+internal fun validSocEstimateWindowSeconds(value: Any?): Int? =
+  (value as? Number)
+    ?.toInt()
+    ?.coerceIn(0, 120)
+
 val DEFAULT_HISTORY_METRIC_HOT_RANGES: Map<String, Map<String, Double>> = mapOf(
   "speed" to mapOf("start" to 30.0, "end" to 40.0),
   "duty" to mapOf("start" to 60.0, "end" to 80.0),
@@ -154,6 +160,7 @@ class AppDataRepository private constructor(private val context: Context) {
       mapNavigationMode = req("mapNavigationMode", "northUp", ::validMapNavigationMode),
       historyMetricGradientsEnabled = req("historyMetricGradientsEnabled", true) { it as? Boolean },
       historyMetricHotRanges = req("historyMetricHotRanges", DEFAULT_HISTORY_METRIC_HOT_RANGES, ::validHistoryMetricHotRanges),
+      socEstimateWindowSeconds = req("socEstimateWindowSeconds", 20, ::validSocEstimateWindowSeconds),
     )
 
     if (badKeys.isNotEmpty()) {
@@ -186,6 +193,8 @@ class AppDataRepository private constructor(private val context: Context) {
       "historyMetricGradientsEnabled" -> value as? Boolean ?: return@withContext
       "historyMetricHotRanges" ->
         validHistoryMetricHotRanges(value) ?: return@withContext
+      "socEstimateWindowSeconds" ->
+        validSocEstimateWindowSeconds(value) ?: return@withContext
       else -> return@withContext
     }
     val normalizedKey = when (key) {
@@ -207,6 +216,7 @@ class AppDataRepository private constructor(private val context: Context) {
         "mapNavigationMode" -> d.mapNavigationMode
         "historyMetricGradientsEnabled" -> d.historyMetricGradientsEnabled
         "historyMetricHotRanges" -> d.historyMetricHotRanges
+        "socEstimateWindowSeconds" -> d.socEstimateWindowSeconds
         else -> null
       }
     }
@@ -432,6 +442,7 @@ fun AppSettings.toMap(): Map<String, Any?> = mapOf(
   "mapNavigationMode" to mapNavigationMode,
   "historyMetricGradientsEnabled" to historyMetricGradientsEnabled,
   "historyMetricHotRanges" to historyMetricHotRanges,
+  "socEstimateWindowSeconds" to socEstimateWindowSeconds,
 )
 
 internal fun encodeSettingJson(value: Any?): String {

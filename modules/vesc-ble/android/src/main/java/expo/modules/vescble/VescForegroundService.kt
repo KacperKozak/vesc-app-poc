@@ -40,6 +40,7 @@ import expo.modules.vescble.telemetry.AlertRuleEntity
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
 import expo.modules.vescble.telemetry.BatterySocEstimator
+import expo.modules.vescble.telemetry.SocMedianWindow
 import expo.modules.vescble.telemetry.DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
 import expo.modules.vescble.telemetry.MAX_LIVE_HISTORY_LIMIT_MINUTES
 import expo.modules.vescble.telemetry.MIN_LIVE_HISTORY_LIMIT_MINUTES
@@ -571,6 +572,8 @@ class VescForegroundService : Service() {
     private var boardConfig: SessionConfig? = null
     @Volatile
     private var batteryConfigCache: Map<String, Any?>? = null
+    /** Median window producing the Battery SoC Estimate for display + alerts (ADR-0016). */
+    private val socWindow = SocMedianWindow()
     private var boardStatus: BoardPhase = BoardPhase.Idle
     private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
@@ -760,6 +763,7 @@ class VescForegroundService : Service() {
         boardError = null
         telemetry = null
         loadBatteryConfig(start.boardConfig.appBoardId)
+        socWindow.reset()
         telemetryPipeline.beginSession(session, start.boardConfig)
         // Tag telemetry frames with the CAN id resolved from the stored transport.
         telemetryPipeline.updateCanId(canId)
@@ -977,15 +981,17 @@ class VescForegroundService : Service() {
                     batteryConfigCache,
                     parsed.batteryCurrent,
                 )
-                val firedAlerts = evaluateAlerts(parsed, batteryPct)
+                // Smooth the IR-compensated % into the Battery SoC Estimate; display + alerts share it.
+                val batteryEstimate = batteryPct?.let { socWindow.median(it, now) }
+                val firedAlerts = evaluateAlerts(parsed, batteryEstimate)
                 val eventMap = processed.eventMap
                 if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
                 eventMap["generation"] = currentSessionId
-                eventMap["batteryPercent"] = batteryPct
+                eventMap["batteryPercent"] = batteryEstimate
                 val emitMap = if (processed.metricExclusionUpdates.isNotEmpty()) {
                     eventMap + mapOf("metricExclusionUpdates" to processed.metricExclusionUpdates)
                 } else eventMap
-                presenter.show(boardStatus, telemetry = parsed, batteryPercent = batteryPct)
+                presenter.show(boardStatus, telemetry = parsed, batteryPercent = batteryEstimate)
                 emitEvent("onTelemetry", emitMap)
                 recordingCoordinator.recordTelemetry(processed.capture)
             }
@@ -1686,6 +1692,7 @@ class VescForegroundService : Service() {
     private fun applyTelemetrySettings(settings: AppSettings) {
         applyTelemetryPipelineSettings(settings)
         recordingCoordinator.applySettings(settings)
+        socWindow.windowMs = settings.socEstimateWindowSeconds * 1000L
     }
 
     private fun applyTelemetryPipelineSettings(settings: AppSettings) {
