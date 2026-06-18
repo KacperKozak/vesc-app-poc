@@ -92,6 +92,7 @@ describe('live telemetry runtime', () => {
 
     expect(runtime.values.speedKmh.value).toBe(8)
     expect(runtime.values.dutyPercent.value).toBe(50)
+    expect(runtime.values.pitch.value).toBe(1)
     const telemetryBuf = runtime.getTelemetry()
     expect(telemetryBuf.map((t) => ({ ts: t.lastPacketAt, speed: Math.abs(t.speed!) }))).toEqual([
       { ts: 9_000, speed: 3 },
@@ -113,10 +114,11 @@ describe('live telemetry runtime', () => {
     const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
     runtime.seedFromLiveState(liveState([]))
 
-    runtime.ingestTelemetry(telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 }))
+    runtime.ingestTelemetry(telemetry({ speed: -22, dutyCycle: 0.25, pitch: 37.5, avgLatency: 11 }))
 
     expect(runtime.values.speedKmh.value).toBe(22)
     expect(runtime.values.dutyPercent.value).toBe(25)
+    expect(runtime.values.pitch.value).toBe(37.5)
     expect(runtime.values.avgLatencyMs.value).toBe(11)
     expect(runtime.consumePendingSnapshot()?.liveStatus.boardAvgLatencyMs).toBe(11)
   })
@@ -229,6 +231,7 @@ describe('live telemetry runtime', () => {
 
     expect(runtime.values.speedKmh.value).toBe(null)
     expect(runtime.values.dutyPercent.value).toBe(null)
+    expect(runtime.values.pitch.value).toBe(null)
     expect(runtime.values.avgLatencyMs.value).toBe(null)
     expect(snapshot.liveLocationHistory).toEqual([])
     expect(snapshot.latestApproximateLocation).toBe(null)
