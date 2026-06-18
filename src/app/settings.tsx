@@ -16,6 +16,7 @@ import {
   FadersIcon,
   ChartLineUpIcon,
   GearSixIcon,
+  WaveformIcon,
 } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -33,14 +34,16 @@ import { useSettingsDatabaseOps } from '@/hooks/useSettingsDatabaseOps'
 const appVersion = Constants.expoConfig?.version ?? '–'
 
 export default function SettingsScreen() {
-  const { liveHistoryLimit, autoConnect, autoRecording, set } = useSettingsStore(
-    useShallow((s) => ({
-      liveHistoryLimit: s.liveHistoryLimit,
-      autoConnect: s.autoConnect,
-      autoRecording: s.autoRecording,
-      set: s.set,
-    })),
-  )
+  const { liveHistoryLimit, socEstimateWindowSeconds, autoConnect, autoRecording, set } =
+    useSettingsStore(
+      useShallow((s) => ({
+        liveHistoryLimit: s.liveHistoryLimit,
+        socEstimateWindowSeconds: s.socEstimateWindowSeconds,
+        autoConnect: s.autoConnect,
+        autoRecording: s.autoRecording,
+        set: s.set,
+      })),
+    )
 
   const db = useSettingsDatabaseOps()
 
@@ -92,6 +95,27 @@ export default function SettingsScreen() {
                   const clampedValue = Math.min(50, Math.max(1, nextValue))
                   if (clampedValue !== liveHistoryLimit) {
                     void set('liveHistoryLimit', clampedValue)
+                  }
+                }}
+              />
+            }
+          />
+          <SettingsRow
+            icon={WaveformIcon}
+            iconColor={theme.target.color}
+            label="Battery smoothing"
+            hint="Median window steadies battery % for display and alerts. 0 = off"
+            right={
+              <Stepper
+                value={socEstimateWindowSeconds}
+                unit="s"
+                min={0}
+                max={120}
+                step={5}
+                onChange={(nextValue) => {
+                  const clampedValue = Math.min(120, Math.max(0, nextValue))
+                  if (clampedValue !== socEstimateWindowSeconds) {
+                    void set('socEstimateWindowSeconds', clampedValue)
                   }
                 }}
               />

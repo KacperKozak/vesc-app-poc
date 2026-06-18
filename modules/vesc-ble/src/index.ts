@@ -500,6 +500,8 @@ export interface AppSettings {
       { start: number; end: number }
     >
   >
+  /** Battery SoC Estimate median window, seconds. 0 = off. See ADR-0016. */
+  socEstimateWindowSeconds: number
 }
 
 export interface DiagnosticStatus {

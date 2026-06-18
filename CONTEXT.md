@@ -40,6 +40,10 @@ _Avoid_: Filter, smoother, cleaner
 A durable annotation that explains why a metric value from a Telemetry Sample was left out of one or more ride metrics.
 _Avoid_: Deleted value, hidden sample, rejected packet
 
+**Battery SoC Estimate**:
+The processed battery charge percentage — IR-compensated then median-windowed over a configurable interval — that the app displays and evaluates battery **Alert Rules** against, while raw pack voltage stays the **Telemetry Sample**.
+_Avoid_: Battery level, voltage percent, smoothed battery (in raw-telemetry contexts)
+
 **GPS Fix**:
 A single phone location sample used for live map position or ride recording.
 _Avoid_: Location event, GPS point
@@ -148,3 +152,4 @@ _Avoid_: Error log, debug session, crash report
 - "point" may mean a GPS coordinate, route coordinate, history annotation, or user-authored map location; resolved term: use **Map Point** for user-authored map locations.
 - "filter" may mean dropping samples, smoothing charts, or excluding implausible values from metrics; resolved term: use **Metric Sanitizer** for metric exclusion that preserves original samples.
 - "save area" or "safe area" may mean a privacy boundary around home or work; resolved term: use **Privacy Zone**.
+- "smoother" is avoided in the raw-telemetry layer (see **Metric Sanitizer**) but is legitimate for the **Battery SoC Estimate**, a processed derived value that smooths the percentage only — never the raw voltage **Telemetry Sample**.

@@ -8,6 +8,7 @@ interface StepperProps {
   unit?: string
   min?: number
   max?: number
+  step?: number
   onChange: (nextValue: number) => void
   fullWidth?: boolean
   testIDPrefix?: string
@@ -18,12 +19,13 @@ export function Stepper({
   unit,
   min,
   max,
+  step = 1,
   onChange,
   fullWidth = false,
   testIDPrefix,
 }: StepperProps) {
-  const decrementValue = min == null ? value - 1 : Math.max(min, value - 1)
-  const incrementValue = max == null ? value + 1 : Math.min(max, value + 1)
+  const decrementValue = min == null ? value - step : Math.max(min, value - step)
+  const incrementValue = max == null ? value + step : Math.min(max, value + step)
   const canDecrement = min == null || value > min
   const canIncrement = max == null || value < max
 
