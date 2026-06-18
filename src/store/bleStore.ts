@@ -94,6 +94,14 @@ let pendingDevices: Map<string, ScannedDevice> = new Map()
 let scanFlushTimer: ReturnType<typeof setTimeout> | null = null
 const SCAN_FLUSH_MS = 500
 
+// Cold-path publish throttle. The 31Hz tick → SharedValues path stays unthrottled (no render);
+// this only caps how often the store snapshot bumps, which re-renders the SVG sparklines, live
+// charts and map trail. History flushes at ~3Hz and GPS adds more, so an unthrottled publish
+// saturates the JS thread. First few samples publish immediately so the UI populates on connect.
+let liveHistoryPublishTimer: ReturnType<typeof setTimeout> | null = null
+const LIVE_HISTORY_PUBLISH_MS = 1000
+const LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT = 3
+
 const MAC_ADDRESS_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
 
 function scannedDeviceName(id: string, name?: string): string {
@@ -123,6 +131,13 @@ function removeLiveSubscriptions(): void {
   historySub = null
   bmsSub = null
   locationSub = null
+  clearLiveHistoryPublishTimer()
+}
+
+function clearLiveHistoryPublishTimer(): void {
+  if (!liveHistoryPublishTimer) return
+  clearTimeout(liveHistoryPublishTimer)
+  liveHistoryPublishTimer = null
 }
 
 function clearScanFlushTimer(): void {
@@ -207,6 +222,7 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
 }
 
 function resetLivePresentation(set: BleSet): void {
+  clearLiveHistoryPublishTimer()
   const live = liveTelemetryRuntime.reset()
   set({
     lastTelemetryAt: null,
@@ -218,8 +234,16 @@ function resetLivePresentation(set: BleSet): void {
   })
 }
 
-// Native already batches history (~3Hz), so we publish each batch straight to the store —
-// no JS-side throttle. The 31Hz tick path never touches the store.
+// Coalesces store snapshot bumps onto a fixed cadence. The 31Hz tick path never calls this —
+// it only touches SharedValues. This drives the cold render path (sparklines/charts/map trail).
+function scheduleLiveSnapshot(set: BleSet): void {
+  if (liveHistoryPublishTimer) return
+  liveHistoryPublishTimer = setTimeout(() => {
+    liveHistoryPublishTimer = null
+    publishLiveSnapshot(set)
+  }, LIVE_HISTORY_PUBLISH_MS)
+}
+
 function publishLiveSnapshot(set: BleSet): void {
   const live = liveTelemetryRuntime.consumePendingSnapshot()
   if (!live) return
@@ -242,12 +266,20 @@ function installLiveSubscriptions(set: BleSet): void {
     })
   }
   if (!historySub) {
-    // Cold path: batched full samples → history buffer → store publish (~3Hz) for charts.
+    // Cold path: batched full samples → history buffer → throttled store publish for charts.
     historySub = addTelemetryHistoryListener((batch) => {
+      const publishImmediately =
+        liveTelemetryRuntime.getSnapshot().liveStatus.boardSampleCount <
+        LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT
       const lastAccepted = liveTelemetryRuntime.ingestHistoryBatch(batch.samples)
       if (lastAccepted == null) return
       set({ lastTelemetryAt: lastAccepted })
-      publishLiveSnapshot(set)
+      if (publishImmediately) {
+        clearLiveHistoryPublishTimer()
+        publishLiveSnapshot(set)
+      } else {
+        scheduleLiveSnapshot(set)
+      }
     })
   }
   if (!bmsSub) {
@@ -258,7 +290,7 @@ function installLiveSubscriptions(set: BleSet): void {
   if (!locationSub) {
     locationSub = addLocationListener((location) => {
       liveTelemetryRuntime.ingestLocation(location)
-      publishLiveSnapshot(set)
+      scheduleLiveSnapshot(set)
     })
   }
 }
