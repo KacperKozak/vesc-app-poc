@@ -214,7 +214,7 @@ export const e2eFake = {
     for (const listener of boardProbeProgressListeners) {
       listener({ step: 'completed', elapsedMs: 0, transport: 'direct' })
     }
-    return { outcome: 'resolved', candidates: ['direct'], transport: 'direct' }
+    return { outcome: 'resolved', candidates: [{ transport: 'direct', hasBms: false }] }
   },
 
   addBoardProbeProgressListener(cb: (event: BoardProbeProgressEvent) => void): EventSubscription {

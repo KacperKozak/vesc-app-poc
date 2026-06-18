@@ -62,13 +62,18 @@ export type BoardTransport = 'direct' | number
 
 export type BoardProbeOutcome = 'resolved' | 'needs-pick' | 'none'
 
+/** A probe-confirmed transport plus the capabilities discovered while probing it. */
+export interface BoardCandidate {
+  transport: BoardTransport
+  /** Whether a smart-BMS answered on this transport during the probe. */
+  hasBms: boolean
+}
+
 /** Result of a native Board Probe of a BLE peripheral. */
 export interface BoardProbeResult {
   outcome: BoardProbeOutcome
   /** Every transport that produced a valid Telemetry Sample, in probe order. */
-  candidates: BoardTransport[]
-  /** Set only for `resolved` (single confirmed transport); otherwise null. */
-  transport: BoardTransport | null
+  candidates: BoardCandidate[]
 }
 
 /** Probe progress milestones, surfaced live so UI can show connect/probe steps. */
@@ -78,6 +83,7 @@ export type BoardProbeStep =
   | 'service_ready'
   | 'probing_direct'
   | 'probing_can'
+  | 'bms_detected'
   | 'telemetry_confirmed'
   | 'completed'
   | 'failed'
@@ -98,6 +104,11 @@ export interface BoardProbeProgressEvent {
 export interface BoardLink {
   bleId: string
   transport: BoardTransport
+  /**
+   * Probe-confirmed smart-BMS presence on {@link transport}. `undefined` on links
+   * saved before BMS detection existed — treated as unknown (still polled).
+   */
+  hasBms?: boolean
 }
 
 export interface Board {
@@ -207,6 +218,22 @@ export interface TelemetryEvent {
   avgLatency: number | null
   lastPacketAt: number
   firedAlerts?: FiredAlert[]
+}
+
+/** Smart-BMS snapshot decoded from a VESC `COMM_BMS_GET_VALUES` reply. */
+export interface BmsEvent {
+  capturedAt: number
+  /** Pack voltage as reported by the BMS (sum of cell groups). */
+  voltageTotal: number
+  current: number
+  ampHours: number
+  wattHours: number
+  /** State of charge 0–1, or null when the firmware variant omits it. */
+  soc: number | null
+  /** Per cell-group voltage, index 0 = first group. */
+  cellVoltages: number[]
+  /** Per cell-group balancing flag, aligned with cellVoltages. */
+  balancing: boolean[]
 }
 
 export interface LiveMetricExclusionUpdate {
@@ -521,6 +548,7 @@ type VescBleEvents = {
   onError: (event: ErrorEvent) => void
   onLiveState: (event: LiveStateEvent) => void
   onTelemetry: (event: TelemetryEvent) => void
+  onBms: (event: BmsEvent) => void
   onLocation: (event: LocationEvent) => void
   onTelemetryRebuildProgress: (event: TelemetryRebuildProgressEvent) => void
   onBoardProbeProgress: (event: BoardProbeProgressEvent) => void
@@ -1044,6 +1072,10 @@ export function addTelemetryListener(cb: (event: TelemetryEvent) => void): Event
   }
 
   return emitter.addListener('onTelemetry', cb)
+}
+
+export function addBmsListener(cb: (event: BmsEvent) => void): EventSubscription {
+  return emitter.addListener('onBms', cb)
 }
 
 export function addLocationListener(cb: (event: LocationEvent) => void): EventSubscription {

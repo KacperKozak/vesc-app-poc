@@ -70,6 +70,8 @@ data class SessionConfig(
     val deviceId: String?,
     val deviceName: String,
     val transport: BoardTransport?,
+    /** Probe-confirmed smart-BMS presence. `null` = unknown (legacy link) → still polled. */
+    val hasBms: Boolean? = null,
     val pollIntervalMs: Long,
     val recordingEnabled: Boolean,
     val telemetryRecordingEnabled: Boolean,
@@ -936,6 +938,7 @@ class VescForegroundService : Service() {
         lastReceivedCommandByte = payload[0].toInt() and 0xff
         when (payload[0].toInt() and 0xff) {
             COMM_FW_VERSION -> handleFwVersionPayload(payload)
+            COMM_BMS_GET_VALUES -> handleBmsPayload(payload)
             COMM_GET_CUSTOM_CONFIG_XML -> dispatchConfigEvent(ConfigRWEvent.XmlPayloadReceived(payload))
             COMM_GET_CUSTOM_CONFIG -> dispatchConfigEvent(
                 ConfigRWEvent.ConfigBytesPayloadReceived(payload, System.currentTimeMillis()),
@@ -944,6 +947,7 @@ class VescForegroundService : Service() {
             COMM_FORWARD_CAN -> {
                 if (payload.size >= 3) {
                     when (payload[2].toInt() and 0xff) {
+                        COMM_BMS_GET_VALUES -> handleBmsPayload(payload.copyOfRange(2, payload.size))
                         COMM_FW_VERSION -> handleFwVersionPayload(payload.copyOfRange(2, payload.size))
                         COMM_GET_CUSTOM_CONFIG_XML -> dispatchConfigEvent(ConfigRWEvent.XmlPayloadReceived(payload))
                         COMM_GET_CUSTOM_CONFIG -> dispatchConfigEvent(
@@ -986,6 +990,11 @@ class VescForegroundService : Service() {
                 recordingCoordinator.recordTelemetry(processed.capture)
             }
         }
+    }
+
+    private fun handleBmsPayload(payload: ByteArray) {
+        val bms = parseBmsValues(payload, System.currentTimeMillis()) ?: return
+        emitEvent("onBms", bms.toMap())
     }
 
     private fun handleFwVersionPayload(payload: ByteArray) {

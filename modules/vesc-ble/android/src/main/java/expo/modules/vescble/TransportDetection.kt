@@ -10,8 +10,18 @@ package expo.modules.vescble
  * discovery predicates that used to live in [ConnectionLogic].
  */
 internal object TransportDetection {
-  /** One probed transport and whether it yielded ≥1 valid Telemetry Sample. */
-  data class Probe(val transport: BoardTransport, val confirmed: Boolean)
+  /**
+   * One probed transport: whether it yielded ≥1 valid Telemetry Sample
+   * ([confirmed]) and whether a smart-BMS answered on it ([hasBms]).
+   */
+  data class Probe(
+    val transport: BoardTransport,
+    val confirmed: Boolean,
+    val hasBms: Boolean = false,
+  )
+
+  /** A confirmed transport plus the capabilities discovered while probing it. */
+  data class Candidate(val transport: BoardTransport, val hasBms: Boolean)
 
   sealed interface Outcome {
     /** Exactly one transport confirmed — the Board can connect with it directly. */
@@ -24,7 +34,7 @@ internal object TransportDetection {
     object None : Outcome
   }
 
-  data class Result(val candidates: List<BoardTransport>, val outcome: Outcome)
+  data class Result(val candidates: List<Candidate>, val outcome: Outcome)
 
   /**
    * Transports to probe given the CAN ids that answered the CAN ping.
@@ -47,11 +57,12 @@ internal object TransportDetection {
    * natural pre-selection for the needs-pick case.
    */
   fun resolve(probes: List<Probe>): Result {
-    val candidates = probes.filter { it.confirmed }.map { it.transport }
-    val outcome = when (candidates.size) {
+    val candidates = probes.filter { it.confirmed }.map { Candidate(it.transport, it.hasBms) }
+    val transports = candidates.map { it.transport }
+    val outcome = when (transports.size) {
       0 -> Outcome.None
-      1 -> Outcome.Resolved(candidates.single())
-      else -> Outcome.NeedsPick(candidates)
+      1 -> Outcome.Resolved(transports.single())
+      else -> Outcome.NeedsPick(transports)
     }
     return Result(candidates, outcome)
   }

@@ -2,24 +2,26 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   addBoardProbeProgressListener,
   probeBoardLink,
+  type BoardCandidate,
   type BoardLink,
   type BoardProbeProgressEvent,
-  type BoardTransport,
 } from 'vesc-ble'
 
-import { pickDefaultTransport } from '@/lib/boardTransport'
+import { pickDefaultCandidate } from '@/lib/boardTransport'
 import { useBleStore } from '@/store/bleStore'
 
 type BoardProbePhase = 'probing' | 'picking' | 'failed'
 
 export interface UseBoardProbe {
   phase: BoardProbePhase
-  candidates: BoardTransport[]
-  selected: BoardTransport | null
+  candidates: BoardCandidate[]
+  selected: BoardCandidate | null
   progress: BoardProbeProgressEvent | null
+  /** Latched: a smart-BMS answered during the current probe run. */
+  bmsDetected: boolean
   /** Draft Board Link for the current selection, or null while probing/failed. */
   selectedLink: BoardLink | null
-  select: (transport: BoardTransport) => void
+  select: (candidate: BoardCandidate) => void
   retry: () => void
 }
 
@@ -31,9 +33,10 @@ export interface UseBoardProbe {
  */
 export function useBoardProbe(bleId: string | null): UseBoardProbe {
   const [phase, setPhase] = useState<BoardProbePhase>('probing')
-  const [candidates, setCandidates] = useState<BoardTransport[]>([])
-  const [selected, setSelected] = useState<BoardTransport | null>(null)
+  const [candidates, setCandidates] = useState<BoardCandidate[]>([])
+  const [selected, setSelected] = useState<BoardCandidate | null>(null)
   const [progress, setProgress] = useState<BoardProbeProgressEvent | null>(null)
+  const [bmsDetected, setBmsDetected] = useState(false)
   const runRef = useRef(0)
 
   const runProbe = useCallback(() => {
@@ -53,7 +56,7 @@ export function useBoardProbe(bleId: string | null): UseBoardProbe {
           return
         }
         setCandidates(result.candidates)
-        setSelected(pickDefaultTransport(result.candidates))
+        setSelected(pickDefaultCandidate(result.candidates))
         setPhase('picking')
       })
       .catch(() => {
@@ -65,7 +68,10 @@ export function useBoardProbe(bleId: string | null): UseBoardProbe {
   }, [bleId])
 
   useEffect(() => {
-    const subscription = addBoardProbeProgressListener((event) => setProgress(event))
+    const subscription = addBoardProbeProgressListener((event) => {
+      setProgress(event)
+      if (event.step === 'bms_detected') setBmsDetected(true)
+    })
     return () => subscription.remove()
   }, [])
 
@@ -76,18 +82,21 @@ export function useBoardProbe(bleId: string | null): UseBoardProbe {
     }
   }, [runProbe])
 
-  const select = useCallback((transport: BoardTransport) => setSelected(transport), [])
+  const select = useCallback((candidate: BoardCandidate) => setSelected(candidate), [])
 
   const retry = useCallback(() => {
     setPhase('probing')
     setCandidates([])
     setSelected(null)
     setProgress(null)
+    setBmsDetected(false)
     runProbe()
   }, [runProbe])
 
   const selectedLink: BoardLink | null =
-    bleId != null && selected != null ? { bleId, transport: selected } : null
+    bleId != null && selected != null
+      ? { bleId, transport: selected.transport, hasBms: selected.hasBms }
+      : null
 
-  return { phase, candidates, selected, progress, selectedLink, select, retry }
+  return { phase, candidates, selected, progress, bmsDetected, selectedLink, select, retry }
 }

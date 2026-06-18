@@ -58,7 +58,7 @@ public class VescBleModule: Module {
   public func definition() -> ModuleDefinition {
     Name("VescBle")
 
-    Events("onDevice", "onError", "onLiveState", "onTelemetry", "onLocation", "onTelemetryRebuildProgress", "onBoardProbeProgress")
+    Events("onDevice", "onError", "onLiveState", "onTelemetry", "onBms", "onLocation", "onTelemetryRebuildProgress", "onBoardProbeProgress")
 
     OnDestroy {
       self.scanTimer?.invalidate()
@@ -160,8 +160,7 @@ public class VescBleModule: Module {
       DispatchQueue.main.async { [weak self] in self?.stopMockSession() }
       promise.resolve([
         "outcome": "resolved",
-        "candidates": ["direct"],
-        "transport": "direct",
+        "candidates": [["transport": "direct", "hasBms": true]],
       ])
     }
 
@@ -451,6 +450,7 @@ public class VescBleModule: Module {
     telemetryTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
       guard let self = self else { return }
       self.emitMockTelemetry()
+      if self.tick % 8 == 0 { self.emitMockBms() }
     }
   }
 
@@ -567,6 +567,31 @@ public class VescBleModule: Module {
       "avgLatency": 12.0,
       "lastPacketAt": Date().timeIntervalSince1970 * 1000.0,
       "location": nil,
+    ] as [String: Any?])
+  }
+
+  private func emitMockBms() {
+    let t = Double(tick)
+    let cellCount = 20
+    let base = max(3.0, 4.05 - t * 0.00005)
+    var cells: [Double] = []
+    var balancing: [Bool] = []
+    for i in 0..<cellCount {
+      // Slight per-cell spread plus a small wandering imbalance so the UI shows variation.
+      let cell = base + 0.02 * sin(t * 0.05 + Double(i)) + Double(i % 3) * 0.004
+      cells.append(cell)
+      balancing.append(cell > base + 0.03)
+    }
+    let total = cells.reduce(0, +)
+    sendEvent("onBms", [
+      "capturedAt": Date().timeIntervalSince1970 * 1000.0,
+      "voltageTotal": total,
+      "current": 8.0 * cos(t * 0.1),
+      "ampHours": t * 0.01,
+      "wattHours": t * 0.4,
+      "soc": min(1.0, max(0.0, (base - 3.0) / 1.2)),
+      "cellVoltages": cells,
+      "balancing": balancing,
     ] as [String: Any?])
   }
 

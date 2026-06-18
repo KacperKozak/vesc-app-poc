@@ -69,6 +69,7 @@ class VescBleModule : Module() {
       "onError",
       "onLiveState",
       "onTelemetry",
+      "onBms",
       "onLocation",
       "onTelemetryRebuildProgress",
       "onBoardProbeProgress",
@@ -82,6 +83,8 @@ class VescBleModule : Module() {
     OnStopObserving("onLiveState") { stopObserving("onLiveState") }
     OnStartObserving("onTelemetry") { startObserving("onTelemetry") }
     OnStopObserving("onTelemetry") { stopObserving("onTelemetry") }
+    OnStartObserving("onBms") { startObserving("onBms") }
+    OnStopObserving("onBms") { stopObserving("onBms") }
     OnStartObserving("onLocation") { startObserving("onLocation") }
     OnStopObserving("onLocation") { stopObserving("onLocation") }
     OnStartObserving("onTelemetryRebuildProgress") { startObserving("onTelemetryRebuildProgress") }
@@ -512,6 +515,7 @@ class VescBleModule : Module() {
         deviceId = bleId,
         deviceName = boardName,
         transport = BoardTransport.fromBridge(link["transport"]),
+        hasBms = link["hasBms"] as? Boolean,
         pollIntervalMs = 500L,
         recordingEnabled = requestedDebugRecordingEnabled,
         telemetryRecordingEnabled = false,
@@ -555,24 +559,15 @@ class VescBleModule : Module() {
   }
 
   private fun probeResultToBridge(result: TransportDetection.Result): Map<String, Any?> {
-    val candidates = result.candidates.map { BoardTransport.toBridge(it) }
-    return when (val outcome = result.outcome) {
-      is TransportDetection.Outcome.Resolved -> mapOf(
-        "outcome" to "resolved",
-        "candidates" to candidates,
-        "transport" to BoardTransport.toBridge(outcome.transport),
-      )
-      is TransportDetection.Outcome.NeedsPick -> mapOf(
-        "outcome" to "needs-pick",
-        "candidates" to candidates,
-        "transport" to null,
-      )
-      TransportDetection.Outcome.None -> mapOf(
-        "outcome" to "none",
-        "candidates" to candidates,
-        "transport" to null,
-      )
+    val candidates = result.candidates.map {
+      mapOf("transport" to BoardTransport.toBridge(it.transport), "hasBms" to it.hasBms)
     }
+    val outcome = when (result.outcome) {
+      is TransportDetection.Outcome.Resolved -> "resolved"
+      is TransportDetection.Outcome.NeedsPick -> "needs-pick"
+      TransportDetection.Outcome.None -> "none"
+    }
+    return mapOf("outcome" to outcome, "candidates" to candidates)
   }
 
   private fun stopLocationUpdates() {

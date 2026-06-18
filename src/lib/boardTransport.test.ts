@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { boardNeedsLink, formatBoardTransport, pickDefaultTransport } from './boardTransport'
+import { boardNeedsLink, formatBoardTransport, pickDefaultCandidate } from './boardTransport'
 
 describe('formatBoardTransport', () => {
   it('labels an undetected transport', () => {
@@ -17,14 +17,16 @@ describe('formatBoardTransport', () => {
   })
 })
 
-describe('pickDefaultTransport', () => {
+describe('pickDefaultCandidate', () => {
   it('returns null when there are no candidates', () => {
-    expect(pickDefaultTransport([])).toBeNull()
+    expect(pickDefaultCandidate([])).toBeNull()
   })
 
   it('picks the first candidate in probe order', () => {
-    expect(pickDefaultTransport(['direct', 36])).toBe('direct')
-    expect(pickDefaultTransport([36, 'direct'])).toBe(36)
+    const direct = { transport: 'direct' as const, hasBms: true }
+    const can = { transport: 36, hasBms: false }
+    expect(pickDefaultCandidate([direct, can])).toBe(direct)
+    expect(pickDefaultCandidate([can, direct])).toBe(can)
   })
 })
 
