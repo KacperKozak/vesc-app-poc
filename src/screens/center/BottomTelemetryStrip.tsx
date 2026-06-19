@@ -16,7 +16,6 @@ import { useLiveWindowMs } from '@/store/settingsStore'
 import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
 
 const FOOTPAD_ACTIVE_V = 0.8
-const PITCH_CLAMP_DEG = 18
 export const STRIP_CONTENT_HEIGHT = 160
 
 interface MetricSparklineProps {
@@ -62,11 +61,9 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
   const revealStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: revealProgress ? 74 * revealProgress.value : 0 }],
   }))
-
   const imuLineStyle = useAnimatedStyle(() => {
     const p = tick.pitch.value ?? 0
-    const clamped = Math.max(-PITCH_CLAMP_DEG, Math.min(PITCH_CLAMP_DEG, p))
-    return { transform: [{ rotate: `${imuConnected ? clamped : 0}deg` }] }
+    return { transform: [{ rotate: `${imuConnected ? p : 0}deg` }] }
   })
 
   const footpad1Style = useAnimatedStyle(() => {

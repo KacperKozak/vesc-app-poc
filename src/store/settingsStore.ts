@@ -17,6 +17,7 @@ const DEFAULTS: AppSettings = {
   historyMetricGradientsEnabled: true,
   historyMetricHotRanges: DEFAULT_HISTORY_METRIC_HOT_RANGES,
   socEstimateWindowSeconds: 20,
+  connectionSoundsEnabled: true,
 }
 
 interface SettingsState extends AppSettings {

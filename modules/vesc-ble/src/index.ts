@@ -502,6 +502,8 @@ export interface AppSettings {
   >
   /** Battery SoC Estimate median window, seconds. 0 = off. See ADR-0016. */
   socEstimateWindowSeconds: number
+  /** Play on/off sounds on board connect and involuntary disconnect. */
+  connectionSoundsEnabled: boolean
 }
 
 export interface DiagnosticStatus {

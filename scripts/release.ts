@@ -2,6 +2,7 @@
 import { $ } from 'bun'
 import { join } from 'path'
 import { homedir } from 'os'
+import { androidVersionCode } from '../src/helpers/version'
 
 const isPatch = process.argv.includes('--patch')
 const root = import.meta.dir + '/..'
@@ -10,14 +11,6 @@ function bumpVersion(version: string, patch: boolean): string {
   const [major, minor, fix] = version.split('.').map(Number)
   if (patch) return `${major}.${minor}.${fix + 1}`
   return `${major}.${minor + 1}.0`
-}
-
-function versionCode(version: string): number {
-  const [major, minor, fix] = version.split('.').map(Number)
-  if (![major, minor, fix].every(Number.isInteger)) {
-    throw new Error(`Invalid version "${version}"`)
-  }
-  return major * 10000 + minor * 100 + fix
 }
 
 async function run(label: string, cmd: string) {
@@ -93,7 +86,7 @@ async function updateVersions(version: string) {
   }
 
   const updatedGradle = gradle
-    .replace(/versionCode \d+/, `versionCode ${versionCode(version)}`)
+    .replace(/versionCode \d+/, `versionCode ${androidVersionCode(version)}`)
     .replace(/versionName "[^"]+"/, `versionName "${version}"`)
 
   await Bun.write(gradlePath, updatedGradle)
@@ -167,7 +160,7 @@ try {
     const newVersion = bumpVersion(baseVersion, isPatch)
     await updateVersions(newVersion)
     console.log(
-      `\n→ Version bumped ${baseVersion} → ${newVersion} (Android versionCode ${versionCode(newVersion)})`,
+      `\n→ Version bumped ${baseVersion} → ${newVersion} (Android versionCode ${androidVersionCode(newVersion)})`,
     )
     apkLabel = `v${newVersion}`
   } else {

@@ -17,6 +17,7 @@ import {
   ChartLineUpIcon,
   GearSixIcon,
   WaveformIcon,
+  SpeakerHighIcon,
 } from 'phosphor-react-native'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -34,16 +35,23 @@ import { useSettingsDatabaseOps } from '@/hooks/useSettingsDatabaseOps'
 const appVersion = Constants.expoConfig?.version ?? '–'
 
 export default function SettingsScreen() {
-  const { liveHistoryLimit, socEstimateWindowSeconds, autoConnect, autoRecording, set } =
-    useSettingsStore(
-      useShallow((s) => ({
-        liveHistoryLimit: s.liveHistoryLimit,
-        socEstimateWindowSeconds: s.socEstimateWindowSeconds,
-        autoConnect: s.autoConnect,
-        autoRecording: s.autoRecording,
-        set: s.set,
-      })),
-    )
+  const {
+    liveHistoryLimit,
+    socEstimateWindowSeconds,
+    autoConnect,
+    autoRecording,
+    connectionSoundsEnabled,
+    set,
+  } = useSettingsStore(
+    useShallow((s) => ({
+      liveHistoryLimit: s.liveHistoryLimit,
+      socEstimateWindowSeconds: s.socEstimateWindowSeconds,
+      autoConnect: s.autoConnect,
+      autoRecording: s.autoRecording,
+      connectionSoundsEnabled: s.connectionSoundsEnabled,
+      set: s.set,
+    })),
+  )
 
   const db = useSettingsDatabaseOps()
 
@@ -147,6 +155,20 @@ export default function SettingsScreen() {
                 onValueChange={(v) => void set('autoRecording', v)}
                 trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
                 thumbColor={autoRecording ? theme.wheel.color : theme.neutral.textMuted}
+              />
+            }
+          />
+          <SettingsRow
+            icon={SpeakerHighIcon}
+            iconColor={theme.teal.color}
+            label="Connection sounds"
+            hint="Play on/off sounds on connect and dropout"
+            right={
+              <Switch
+                value={connectionSoundsEnabled}
+                onValueChange={(v) => void set('connectionSoundsEnabled', v)}
+                trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
+                thumbColor={connectionSoundsEnabled ? theme.wheel.color : theme.neutral.textMuted}
               />
             }
           />
