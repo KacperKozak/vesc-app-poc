@@ -10,7 +10,7 @@ import { BatteryIndicator } from '@/components/domain/cards/BatteryIndicator'
 import { interaction, theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
 import { routes } from '@/navigation/routes'
-import { liveSelectors, useLiveMetric, type TelemetrySelector } from '@/hooks/useLiveMetric'
+import { useLiveSeries } from '@/hooks/useLiveMetric'
 import { useBleStore } from '@/store/bleStore'
 import { useLiveWindowMs } from '@/store/settingsStore'
 import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
@@ -20,20 +20,20 @@ const PITCH_CLAMP_DEG = 18
 export const STRIP_CONTENT_HEIGHT = 160
 
 interface MetricSparklineProps {
-  selector: TelemetrySelector
+  metricKey: string
   color: string
   fmtMax: (value: number) => string
 }
 
-// Isolated so the cold-path store publish (~1-3Hz) re-renders only the sparkline, not the whole
+// Isolated so the cold-path series publish (~1Hz) re-renders only the sparkline, not the whole
 // strip. The strip itself no longer subscribes to metricVersion, so its TickText numbers, IMU
 // tilt and footpad dots keep updating purely off SharedValues with no React render.
 const MetricSparkline = memo(function MetricSparkline({
-  selector,
+  metricKey,
   color,
   fmtMax,
 }: MetricSparklineProps) {
-  const series = useLiveMetric(selector)
+  const series = useLiveSeries(metricKey)
   const windowMs = useLiveWindowMs()
   return (
     <Sparkline
@@ -108,7 +108,7 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
               style={styles.value}
             />
             <MetricSparkline
-              selector={liveSelectors.motorTemp}
+              metricKey="motorTemp"
               color={telemetry.motorTemp.color}
               fmtMax={telemetry.motorTemp.formatWithUnit}
             />
@@ -127,7 +127,7 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
               style={styles.value}
             />
             <MetricSparkline
-              selector={liveSelectors.controllerTemp}
+              metricKey="controllerTemp"
               color={telemetry.controllerTemp.color}
               fmtMax={telemetry.controllerTemp.formatWithUnit}
             />
@@ -146,7 +146,7 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
               style={styles.value}
             />
             <MetricSparkline
-              selector={liveSelectors.motorCurrent}
+              metricKey="motorCurrent"
               color={telemetry.motorCurrent.color}
               fmtMax={telemetry.motorCurrent.formatWithUnit}
             />
@@ -165,7 +165,7 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
               style={styles.value}
             />
             <MetricSparkline
-              selector={liveSelectors.batteryCurrent}
+              metricKey="batteryCurrent"
               color={telemetry.battCurrent.color}
               fmtMax={telemetry.battCurrent.formatWithUnit}
             />

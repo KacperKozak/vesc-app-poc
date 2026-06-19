@@ -9,14 +9,16 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { useBleAppLifecycle } from '@/hooks/useBleAppLifecycle'
 import { useBoardConnection } from '@/hooks/useBoardConnection'
 import { CenterScreen } from '@/screens/CenterScreen'
-import { PollRateBadge } from '@/components/debug/PollRateBadge'
 import { theme } from '@/constants/theme'
 
 export default function MainScreen() {
   const autoConnectAttemptedBoardRef = useRef<string | null>(null)
   const load = useBoardStore((s) => s.load)
   const { activeBoardId, boardsLoaded } = useBoardStore(
-    useShallow((s) => ({ activeBoardId: s.activeBoardId, boardsLoaded: s.hasLoaded })),
+    useShallow((s) => ({
+      activeBoardId: s.activeBoardId,
+      boardsLoaded: s.hasLoaded,
+    })),
   )
   const startGpsTracking = useBleStore((s) => s.startGpsTracking)
   const { status: permStatus, request } = usePermissions()
@@ -91,7 +93,6 @@ export default function MainScreen() {
         onAddBoard={connection.handleAddBoard}
         onToggleRecordDebug={() => connection.setRecordDebugSession(!connection.recordDebugSession)}
       />
-      <PollRateBadge />
     </View>
   )
 }

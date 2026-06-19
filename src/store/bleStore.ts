@@ -13,6 +13,7 @@ import {
   addErrorListener,
   addLiveStateListener,
   addLiveTickListener,
+  addLiveSeriesListener,
   addTelemetryHistoryListener,
   addBmsListener,
   addLocationListener,
@@ -25,6 +26,7 @@ import {
 } from 'vesc-ble'
 
 import { useSettingsStore } from '@/store/settingsStore'
+import { useLiveSeriesStore } from '@/store/liveSeriesStore'
 import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
 import { type LiveStatusSummary } from '@/lib/telemetry/liveMetricHistory'
 
@@ -83,9 +85,13 @@ type BleSet = {
 
 let liveSub: EventSubscription | null = null
 let liveTickSub: EventSubscription | null = null
+let liveSeriesSub: EventSubscription | null = null
 let historySub: EventSubscription | null = null
 let bmsSub: EventSubscription | null = null
 let locationSub: EventSubscription | null = null
+// The raw full-sample stream only runs while a detail chart is mounted. Ref-counted
+// so native stops emitting `onTelemetryHistory` whenever no chart needs it.
+let fullSampleStreamRefs = 0
 let scanSub: EventSubscription | null = null
 let scanErrorSub: EventSubscription | null = null
 let settingsUnsubscribe: (() => void) | null = null
@@ -123,14 +129,18 @@ const EMPTY_LIVE_STATUS: LiveStatusSummary = {
 function removeLiveSubscriptions(): void {
   liveSub?.remove()
   liveTickSub?.remove()
+  liveSeriesSub?.remove()
   historySub?.remove()
   bmsSub?.remove()
   locationSub?.remove()
   liveSub = null
   liveTickSub = null
+  liveSeriesSub = null
   historySub = null
   bmsSub = null
   locationSub = null
+  fullSampleStreamRefs = 0
+  useLiveSeriesStore.getState().clear()
   clearLiveHistoryPublishTimer()
 }
 
@@ -223,6 +233,7 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
 
 function resetLivePresentation(set: BleSet): void {
   clearLiveHistoryPublishTimer()
+  useLiveSeriesStore.getState().clear()
   const live = liveTelemetryRuntime.reset()
   set({
     lastTelemetryAt: null,
@@ -265,23 +276,15 @@ function installLiveSubscriptions(set: BleSet): void {
       liveTelemetryRuntime.ingestTick(tick)
     })
   }
-  if (!historySub) {
-    // Cold path: batched full samples → history buffer → throttled store publish for charts.
-    historySub = addTelemetryHistoryListener((batch) => {
-      const publishImmediately =
-        liveTelemetryRuntime.getSnapshot().liveStatus.boardSampleCount <
-        LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT
-      const lastAccepted = liveTelemetryRuntime.ingestHistoryBatch(batch.samples)
-      if (lastAccepted == null) return
-      set({ lastTelemetryAt: lastAccepted })
-      if (publishImmediately) {
-        clearLiveHistoryPublishTimer()
-        publishLiveSnapshot(set)
-      } else {
-        scheduleLiveSnapshot(set)
-      }
+  if (!liveSeriesSub) {
+    // Cold path: natively-decimated min/max sparkline series (~1Hz). Tiny payload, no raw
+    // samples. Drives every center-screen sparkline with zero JS-thread projection.
+    liveSeriesSub = addLiveSeriesListener((event) => {
+      useLiveSeriesStore.getState().setSeries(event.metrics, event.generation)
     })
   }
+  // The raw full-sample stream (`historySub`) is installed on demand by
+  // acquireFullSampleStream, only while a detail chart is mounted.
   if (!bmsSub) {
     bmsSub = addBmsListener((bms) => {
       set({ latestBms: bms })
@@ -293,6 +296,51 @@ function installLiveSubscriptions(set: BleSet): void {
       scheduleLiveSnapshot(set)
     })
   }
+}
+
+function installHistorySub(set: BleSet): void {
+  if (historySub) return
+  // Cold path: batched full samples → history buffer → throttled store publish for detail charts.
+  historySub = addTelemetryHistoryListener((batch) => {
+    const publishImmediately =
+      liveTelemetryRuntime.getSnapshot().liveStatus.boardSampleCount <
+      LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT
+    const lastAccepted = liveTelemetryRuntime.ingestHistoryBatch(batch.samples)
+    if (lastAccepted == null) return
+    set({ lastTelemetryAt: lastAccepted })
+    if (publishImmediately) {
+      clearLiveHistoryPublishTimer()
+      publishLiveSnapshot(set)
+    } else {
+      scheduleLiveSnapshot(set)
+    }
+  })
+}
+
+/**
+ * Opens the raw full-sample stream for a detail chart. Ref-counted: the first
+ * acquirer seeds the JS window from native's in-memory history (so the chart
+ * paints the full window immediately) and subscribes; later acquirers share it.
+ */
+export function acquireFullSampleStream(): void {
+  fullSampleStreamRefs += 1
+  if (fullSampleStreamRefs > 1) return
+  const set = useBleStore.setState as BleSet
+  try {
+    applyLiveState(nativeGetLiveState(), set)
+  } catch {
+    // No live state yet (not connected) — the stream still attaches for new samples.
+  }
+  installHistorySub(set)
+}
+
+/** Releases a detail chart's hold; the last release stops native's firehose. */
+export function releaseFullSampleStream(): void {
+  if (fullSampleStreamRefs === 0) return
+  fullSampleStreamRefs -= 1
+  if (fullSampleStreamRefs > 0) return
+  historySub?.remove()
+  historySub = null
 }
 
 export const useBleStore = create<BleState & BleActions>((set, get) => ({

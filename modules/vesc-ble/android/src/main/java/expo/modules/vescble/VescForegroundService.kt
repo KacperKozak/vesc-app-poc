@@ -44,6 +44,7 @@ import expo.modules.vescble.telemetry.SocMedianWindow
 import expo.modules.vescble.telemetry.DEFAULT_LIVE_HISTORY_LIMIT_MINUTES
 import expo.modules.vescble.telemetry.MAX_LIVE_HISTORY_LIMIT_MINUTES
 import expo.modules.vescble.telemetry.MIN_LIVE_HISTORY_LIMIT_MINUTES
+import expo.modules.vescble.telemetry.LIVE_SERIES_METRICS
 import expo.modules.vescble.telemetry.TelemetryPipeline
 import expo.modules.vescble.telemetry.TelemetryRepository
 import expo.modules.vescble.telemetry.toMetricSanitizerConfig
@@ -64,6 +65,8 @@ private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP
 private const val LAST_GPS_PERSIST_INTERVAL_MS = 30_000L
 private const val TELEMETRY_STALE_MS = 4_000L
 private const val HISTORY_FLUSH_INTERVAL_MS = 300L
+private const val LIVE_SERIES_INTERVAL_MS = 1_000L
+private const val LIVE_SERIES_BUCKETS = 64
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
 
@@ -600,6 +603,7 @@ class VescForegroundService : Service() {
     private val recentLocations = ArrayDeque<Map<String, Any?>>()
     private val historySamples = ArrayDeque<Map<String, Any?>>()
     private var historyFlushHandle: Cancellable? = null
+    private var liveSeriesHandle: Cancellable? = null
     private val bluetoothAdapter: BluetoothAdapter
         get() = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
 
@@ -1267,6 +1271,7 @@ class VescForegroundService : Service() {
         )
         pollingLoop.start(session, sessionToken, transport)
         startHistoryFlush()
+        startLiveSeries()
     }
 
     private fun currentBoardTransport(): BoardTransport? = boardTransport(canId, directConnection)
@@ -1275,6 +1280,7 @@ class VescForegroundService : Service() {
         pollingLoop.stop()
         telemetryPipeline.cancelStaleWatchdog()
         stopHistoryFlush()
+        stopLiveSeries()
     }
 
     private fun buildLiveTick(
@@ -1291,8 +1297,11 @@ class VescForegroundService : Service() {
         return tick
     }
 
+    // Samples are enqueued on the BLE callback thread and drained on the main thread.
+    private val historyLock = Any()
+
     private fun enqueueHistorySample(sample: Map<String, Any?>) {
-        historySamples.addLast(sample)
+        synchronized(historyLock) { historySamples.addLast(sample) }
     }
 
     private fun startHistoryFlush() {
@@ -1313,9 +1322,10 @@ class VescForegroundService : Service() {
     }
 
     private fun flushHistorySamples() {
-        if (historySamples.isEmpty()) return
-        val batch = historySamples.toList()
-        historySamples.clear()
+        val batch = synchronized(historyLock) {
+            if (historySamples.isEmpty()) return
+            historySamples.toList().also { historySamples.clear() }
+        }
         emitEvent("onTelemetryHistory", mapOf("samples" to batch))
     }
 
@@ -1323,7 +1333,35 @@ class VescForegroundService : Service() {
         historyFlushHandle?.cancel()
         historyFlushHandle = null
         flushHistorySamples()
-        historySamples.clear()
+        synchronized(historyLock) { historySamples.clear() }
+    }
+
+    private fun startLiveSeries() {
+        if (liveSeriesHandle != null) return
+        scheduleLiveSeries()
+    }
+
+    private fun scheduleLiveSeries() {
+        val session = boardSession ?: return
+        liveSeriesHandle = scheduler.postDelayedForSession(
+            session,
+            LIVE_SERIES_INTERVAL_MS,
+            ::isCurrentBoardSession,
+        ) {
+            emitLiveSeries()
+            scheduleLiveSeries()
+        }
+    }
+
+    private fun emitLiveSeries() {
+        val metrics = telemetryPipeline.liveSeries(LIVE_SERIES_METRICS, LIVE_SERIES_BUCKETS)
+        if (metrics.isEmpty()) return
+        emitEvent("onLiveSeries", mapOf("metrics" to metrics, "generation" to currentSessionId))
+    }
+
+    private fun stopLiveSeries() {
+        liveSeriesHandle?.cancel()
+        liveSeriesHandle = null
     }
 
     private fun boardReadyTimeoutMs(): Long =

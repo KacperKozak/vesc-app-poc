@@ -545,13 +545,26 @@ export interface TelemetryHistoryEvent {
   samples: TelemetryEvent[]
 }
 
+/**
+ * Decimated live sparkline series, computed natively from the in-memory window.
+ * Each metric is a flat `[ts0, v0, ts1, v1, ...]` array (min/max per time bucket),
+ * so the strip (and, while the perf flag is on, the `/control` detail charts) render
+ * without streaming raw samples across the bridge.
+ */
+export interface LiveSeriesEvent {
+  metrics: Record<string, number[]>
+  generation: number
+}
+
 type VescBleEvents = {
   onDevice: (event: DeviceFoundEvent) => void
   onError: (event: ErrorEvent) => void
   onLiveState: (event: LiveStateEvent) => void
   /** High-frequency (per-frame) scalar tick for live gauges. No history, no nested arrays. */
   onLiveTick: (event: TelemetryEvent) => void
-  /** Batched full samples (~3Hz) for history buffer, charts and sparklines. */
+  /** Decimated per-metric min/max sparkline series (~1Hz) for the live strip + detail charts. */
+  onLiveSeries: (event: LiveSeriesEvent) => void
+  /** Batched full samples (~3Hz) for history buffer and detail charts. */
   onTelemetryHistory: (event: TelemetryHistoryEvent) => void
   onBms: (event: BmsEvent) => void
   onLocation: (event: LocationEvent) => void
@@ -1077,6 +1090,14 @@ export function addLiveTickListener(cb: (event: TelemetryEvent) => void): EventS
   }
 
   return emitter.addListener('onLiveTick', cb)
+}
+
+export function addLiveSeriesListener(cb: (event: LiveSeriesEvent) => void): EventSubscription {
+  if (E2E_ENABLED) {
+    return e2eFake.addLiveSeriesListener(cb)
+  }
+
+  return emitter.addListener('onLiveSeries', cb)
 }
 
 export function addTelemetryHistoryListener(
