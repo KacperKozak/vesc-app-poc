@@ -23,6 +23,7 @@ interface LiveTelemetryValues {
   batteryPercent: SharedValue<number | null>
   motorTemp: SharedValue<number | null>
   controllerTemp: SharedValue<number | null>
+  pitch: SharedValue<number | null>
   lastPacketAt: SharedValue<number | null>
   avgLatencyMs: SharedValue<number | null>
 }
@@ -66,6 +67,7 @@ function createValues(): LiveTelemetryValues {
     batteryPercent: makeMutable<number | null>(null),
     motorTemp: makeMutable<number | null>(null),
     controllerTemp: makeMutable<number | null>(null),
+    pitch: makeMutable<number | null>(null),
     lastPacketAt: makeMutable<number | null>(null),
     avgLatencyMs: makeMutable<number | null>(null),
   }
@@ -80,6 +82,7 @@ function clearValues(values: LiveTelemetryValues): void {
   values.batteryPercent.value = null
   values.motorTemp.value = null
   values.controllerTemp.value = null
+  values.pitch.value = null
   values.lastPacketAt.value = null
   values.avgLatencyMs.value = null
 }
@@ -94,6 +97,7 @@ function updateValuesFromTelemetry(values: LiveTelemetryValues, telemetry: Telem
   values.motorTemp.value =
     telemetry.tempMotor != null && telemetry.tempMotor > 0 ? telemetry.tempMotor : null
   values.controllerTemp.value = finite(telemetry.tempMosfet)
+  values.pitch.value = finite(telemetry.pitch)
   values.lastPacketAt.value = finite(telemetry.lastPacketAt)
   values.avgLatencyMs.value = finite(telemetry.avgLatency)
 }

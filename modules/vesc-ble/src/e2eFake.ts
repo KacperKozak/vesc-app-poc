@@ -49,6 +49,7 @@ const e2eSettings: AppSettings = {
   historyMetricGradientsEnabled: true,
   historyMetricHotRanges: {},
   socEstimateWindowSeconds: 20,
+  connectionSoundsEnabled: true,
 }
 
 function emitDevice(event: DeviceFoundEvent): void {

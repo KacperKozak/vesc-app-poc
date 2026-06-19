@@ -9,6 +9,7 @@ import { interaction, theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
 import { routes } from '@/navigation/routes'
 import { liveSelectors, useLiveMetric } from '@/hooks/useLiveMetric'
+import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
 import { useBleStore } from '@/store/bleStore'
 import { useLiveWindowMs } from '@/store/settingsStore'
 
@@ -22,13 +23,13 @@ interface BottomTelemetryStripProps {
 export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripProps) {
   const insets = useSafeAreaInsets()
   const windowMs = useLiveWindowMs()
+  const pitch = liveTelemetryRuntime.values.pitch
   const motorTempSeries = useLiveMetric(liveSelectors.motorTemp)
   const controllerTempSeries = useLiveMetric(liveSelectors.controllerTemp)
   const motorCurrentSeries = useLiveMetric(liveSelectors.motorCurrent)
   const batteryCurrentSeries = useLiveMetric(liveSelectors.batteryCurrent)
   const adc1Series = useLiveMetric(liveSelectors.footpadAdc1)
   const adc2Series = useLiveMetric(liveSelectors.footpadAdc2)
-  const pitchSeries = useLiveMetric(liveSelectors.pitch)
   const bleStatus = useBleStore((s) => s.status)
 
   const motorTemp = motorTempSeries.at(-1)?.value ?? null
@@ -37,11 +38,12 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
   const batteryCurrent = batteryCurrentSeries.at(-1)?.value ?? null
   const adc1 = adc1Series.at(-1)?.value ?? null
   const adc2 = adc2Series.at(-1)?.value ?? null
-  const pitch = pitchSeries.at(-1)?.value ?? 0
-  const pitchDeg = Math.max(-18, Math.min(18, pitch))
   const imuConnected = bleStatus === 'connected'
   const revealStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: revealProgress ? 74 * revealProgress.value : 0 }],
+  }))
+  const imuRotationStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${imuConnected ? (pitch.value ?? 0) : 0}deg` }],
   }))
 
   return (
@@ -145,11 +147,11 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
                 { borderColor: imuConnected ? theme.target.color : theme.neutral.textMuted },
               ]}
             />
-            <View
+            <Animated.View
               style={[
                 styles.imuLine,
+                imuRotationStyle,
                 {
-                  transform: [{ rotate: `${imuConnected ? pitchDeg : 0}deg` }],
                   backgroundColor: imuConnected ? theme.target.color : theme.neutral.textMuted,
                 },
               ]}

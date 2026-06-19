@@ -586,6 +586,7 @@ class VescForegroundService : Service() {
     private var latestPreciseLocation: LocationSnapshot? = null
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
+    private var connectionSoundsEnabled = true
     private var configFsmState: ConfigRWState = ConfigRWState.Idle
     private var configReadCallbacks: PendingConfigRead? = null
     private var configWriteCallbacks: PendingConfigWrite? = null
@@ -1318,7 +1319,7 @@ class VescForegroundService : Service() {
         )
         boardError = null
         boardConfig?.let { recordingCoordinator.markBoardReady(it) }
-        alertFeedback.playConnect()
+        if (connectionSoundsEnabled) alertFeedback.playConnect()
         emitState()
     }
 
@@ -1429,7 +1430,7 @@ class VescForegroundService : Service() {
         val reconnectSession = boardSession ?: return
         // Lost a live link (telemetry was flowing) — signal the rider we're now without telemetry.
         // Fires once at loss: subsequent reconnect attempts enter here as Reconnecting/Rescanning.
-        if (boardStatus == BoardPhase.Connected || boardStatus == BoardPhase.Stale) {
+        if (connectionSoundsEnabled && (boardStatus == BoardPhase.Connected || boardStatus == BoardPhase.Stale)) {
             alertFeedback.playDisconnect()
         }
         reconnectScheduler.schedule(
@@ -1699,6 +1700,7 @@ class VescForegroundService : Service() {
         applyTelemetryPipelineSettings(settings)
         recordingCoordinator.applySettings(settings)
         socWindow.windowMs = settings.socEstimateWindowSeconds * 1000L
+        connectionSoundsEnabled = settings.connectionSoundsEnabled
     }
 
     private fun applyTelemetryPipelineSettings(settings: AppSettings) {

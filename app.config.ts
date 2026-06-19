@@ -1,5 +1,6 @@
 import type { ExpoConfig } from 'expo/config'
 import pkg from './package.json'
+import { androidVersionCode } from './src/helpers/version.ts'
 
 const config: ExpoConfig = {
   name: 'vibe-wheel',
@@ -17,6 +18,7 @@ const config: ExpoConfig = {
     },
   },
   android: {
+    versionCode: androidVersionCode(pkg.version),
     adaptiveIcon: {
       backgroundColor: '#111827',
       foregroundImage: './assets/images/androidIconForeground.png',
