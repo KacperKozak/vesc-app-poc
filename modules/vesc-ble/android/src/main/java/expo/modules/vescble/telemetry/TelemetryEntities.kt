@@ -362,6 +362,7 @@ data class AppSettings(
   val historyMetricGradientsEnabled: Boolean = true,
   val historyMetricHotRanges: Map<String, Map<String, Double>> = DEFAULT_HISTORY_METRIC_HOT_RANGES,
   val socEstimateWindowSeconds: Int = 20,
+  val connectionSoundsEnabled: Boolean = true,
 )
 
 @Entity(

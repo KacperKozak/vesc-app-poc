@@ -161,6 +161,7 @@ class AppDataRepository private constructor(private val context: Context) {
       historyMetricGradientsEnabled = req("historyMetricGradientsEnabled", true) { it as? Boolean },
       historyMetricHotRanges = req("historyMetricHotRanges", DEFAULT_HISTORY_METRIC_HOT_RANGES, ::validHistoryMetricHotRanges),
       socEstimateWindowSeconds = req("socEstimateWindowSeconds", 20, ::validSocEstimateWindowSeconds),
+      connectionSoundsEnabled = req("connectionSoundsEnabled", true) { it as? Boolean },
     )
 
     if (badKeys.isNotEmpty()) {
@@ -195,6 +196,7 @@ class AppDataRepository private constructor(private val context: Context) {
         validHistoryMetricHotRanges(value) ?: return@withContext
       "socEstimateWindowSeconds" ->
         validSocEstimateWindowSeconds(value) ?: return@withContext
+      "connectionSoundsEnabled" -> value as? Boolean ?: return@withContext
       else -> return@withContext
     }
     val normalizedKey = when (key) {
@@ -217,6 +219,7 @@ class AppDataRepository private constructor(private val context: Context) {
         "historyMetricGradientsEnabled" -> d.historyMetricGradientsEnabled
         "historyMetricHotRanges" -> d.historyMetricHotRanges
         "socEstimateWindowSeconds" -> d.socEstimateWindowSeconds
+        "connectionSoundsEnabled" -> d.connectionSoundsEnabled
         else -> null
       }
     }
@@ -447,6 +450,7 @@ fun AppSettings.toMap(): Map<String, Any?> = mapOf(
   "historyMetricGradientsEnabled" to historyMetricGradientsEnabled,
   "historyMetricHotRanges" to historyMetricHotRanges,
   "socEstimateWindowSeconds" to socEstimateWindowSeconds,
+  "connectionSoundsEnabled" to connectionSoundsEnabled,
 )
 
 internal fun encodeSettingJson(value: Any?): String {
