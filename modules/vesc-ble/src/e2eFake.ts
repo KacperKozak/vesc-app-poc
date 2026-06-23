@@ -54,6 +54,7 @@ const e2eSettings: AppSettings = {
   historyMetricHotRanges: {},
   socEstimateWindowSeconds: 20,
   connectionSoundsEnabled: true,
+  telemetryPollRateHz: 20,
 }
 
 function emitDevice(event: DeviceFoundEvent): void {

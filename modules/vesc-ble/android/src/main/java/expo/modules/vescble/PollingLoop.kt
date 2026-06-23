@@ -19,11 +19,18 @@ internal class PollingLoop(
     private var active = false
     private var current: Active? = null
 
+    /**
+     * Minimum spacing between requests, in ms. 0 = unlimited (pure response-paced). Held as a
+     * standalone field rather than inside [Active] so the rate cap can be changed live mid-session
+     * (see [setPollIntervalMs]). Volatile because live updates arrive off the loop's thread.
+     */
+    @Volatile
+    private var floorMs = 0L
+
     private data class Active(
         val session: BoardSession,
         val payload: ByteArray,
         val bmsPayload: ByteArray?,
-        val floorMs: Long,
     )
 
     val isActive: Boolean
@@ -40,9 +47,19 @@ internal class PollingLoop(
         val bmsPayload = if (sessionConfig.hasBms == true) bmsPayload(transport) else null
         stop()
         tick = 0L
-        current = Active(session, pollPayload, bmsPayload, max(0L, sessionConfig.pollIntervalMs))
+        floorMs = max(0L, sessionConfig.pollIntervalMs)
+        current = Active(session, pollPayload, bmsPayload)
         active = true
         sendNow()
+    }
+
+    /**
+     * Live-update the rate cap for the active session, e.g. when the rider changes the telemetry
+     * rate limit mid-ride. The new floor lands on the next scheduled poll; pacing stays
+     * response-paced, so this never outruns the controller.
+     */
+    fun setPollIntervalMs(intervalMs: Long) {
+        floorMs = max(0L, intervalMs)
     }
 
     fun stop() {
@@ -64,7 +81,7 @@ internal class PollingLoop(
         if (!active) return
         cancelSafety()
         val elapsed = nowMs() - lastPollAt
-        val delay = max(0L, ctx.floorMs - elapsed)
+        val delay = max(0L, floorMs - elapsed)
         pollHandle?.cancel()
         pollHandle = scheduler.postDelayedForSession(ctx.session, delay, isCurrentSession) { sendNow() }
     }
@@ -89,7 +106,7 @@ internal class PollingLoop(
 
     private fun armSafety(ctx: Active) {
         cancelSafety()
-        val timeout = max(ctx.floorMs * 4, SAFETY_MIN_MS)
+        val timeout = max(floorMs * 4, SAFETY_MIN_MS)
         safetyHandle = scheduler.postDelayedForSession(ctx.session, timeout, isCurrentSession) {
             safetyHandle = null
             // No response within the safety window: assume the request or reply was dropped and re-poll
@@ -121,3 +138,6 @@ internal class PollingLoop(
         const val BMS_POLL_STRIDE = 8L
     }
 }
+
+/** Max poll rate in Hz → minimum request-spacing floor in ms. 0 (or less) = unlimited. */
+internal fun pollIntervalMsForHz(hz: Int): Long = if (hz <= 0) 0L else 1_000L / hz

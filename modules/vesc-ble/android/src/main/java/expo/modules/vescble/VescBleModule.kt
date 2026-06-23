@@ -371,7 +371,8 @@ class VescBleModule : Module() {
         key == "movingAvgSpeedThresholdKmh" ||
         key == "freeSpinMaxSpeedDeltaKmh" ||
         key == "freeSpinStationaryBoardCapKmh" ||
-        key == "socEstimateWindowSeconds"
+        key == "socEstimateWindowSeconds" ||
+        key == "telemetryPollRateHz"
       ) {
         VescForegroundService.reloadTelemetrySettings(context.applicationContext)
       }
@@ -505,8 +506,9 @@ class VescBleModule : Module() {
   }
 
   private suspend fun selectBoard(boardId: String) {
-    AppDataRepository.get(context.applicationContext).setSelectedBoardId(boardId)
-    val board = AppDataRepository.get(context.applicationContext).getBoard(boardId)
+    val repo = AppDataRepository.get(context.applicationContext)
+    repo.setSelectedBoardId(boardId)
+    val board = repo.getBoard(boardId)
       ?: throw IllegalArgumentException("Board not found: $boardId")
     @Suppress("UNCHECKED_CAST")
     val link = board["link"] as? Map<String, Any?>
@@ -515,6 +517,11 @@ class VescBleModule : Module() {
       throw IllegalArgumentException("Board has no Board Link: $boardId")
     }
     val boardName = board["name"] as? String ?: DEFAULT_BOARD_NAME
+    // Poll rate cap (Hz) → minimum spacing floor between requests. 0 Hz = unlimited
+    // (pure response-paced: send the next poll as soon as the reply lands). Polling stays
+    // response-paced either way, so the floor caps the rate without outrunning the controller.
+    // Changing the cap mid-session is applied live via reloadTelemetrySettings (see updateSetting).
+    val pollIntervalMs = pollIntervalMsForHz(repo.getTypedSettings().telemetryPollRateHz)
     VescForegroundService.startBoardSession(
       context.applicationContext,
       SessionConfig(
@@ -523,8 +530,7 @@ class VescBleModule : Module() {
         deviceName = boardName,
         transport = BoardTransport.fromBridge(link["transport"]),
         hasBms = link["hasBms"] as? Boolean,
-        // Test: 0 floor = pure response-paced (send next poll as soon as the reply lands).
-        pollIntervalMs = 0L,
+        pollIntervalMs = pollIntervalMs,
         recordingEnabled = requestedDebugRecordingEnabled,
         telemetryRecordingEnabled = false,
         autoReconnect = true,

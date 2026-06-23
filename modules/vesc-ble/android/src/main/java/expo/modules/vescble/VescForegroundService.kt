@@ -1797,6 +1797,7 @@ class VescForegroundService : Service() {
         recordingCoordinator.applySettings(settings)
         socWindow.windowMs = settings.socEstimateWindowSeconds * 1000L
         connectionSoundsEnabled = settings.connectionSoundsEnabled
+        pollingLoop.setPollIntervalMs(pollIntervalMsForHz(settings.telemetryPollRateHz))
     }
 
     private fun applyTelemetryPipelineSettings(settings: AppSettings) {

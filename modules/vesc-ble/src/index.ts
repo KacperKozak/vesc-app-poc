@@ -504,6 +504,13 @@ export interface AppSettings {
   socEstimateWindowSeconds: number
   /** Play on/off sounds on board connect and involuntary disconnect. */
   connectionSoundsEnabled: boolean
+  /**
+   * Max telemetry poll rate in Hz, applied as a minimum spacing floor between
+   * requests. Polling stays response-paced (the next request is only sent once
+   * the previous reply lands), so this caps the rate without ever outrunning the
+   * controller. 0 = unlimited (pure response-paced, the original behaviour).
+   */
+  telemetryPollRateHz: number
 }
 
 export interface DiagnosticStatus {
