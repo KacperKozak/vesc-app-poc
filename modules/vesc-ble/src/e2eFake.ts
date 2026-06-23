@@ -6,8 +6,10 @@ import type {
   BoardProbeProgressEvent,
   BoardProbeResult,
   DeviceFoundEvent,
+  LiveSeriesEvent,
   LiveStateEvent,
   TelemetryEvent,
+  TelemetryHistoryEvent,
 } from './index'
 
 const E2E_BOARD_SCAN_RESULT: DeviceFoundEvent = {
@@ -29,13 +31,15 @@ let telemetryTimer: ReturnType<typeof setInterval> | null = null
 
 const deviceListeners = new Set<(event: DeviceFoundEvent) => void>()
 const liveStateListeners = new Set<(event: LiveStateEvent) => void>()
-const telemetryListeners = new Set<(event: TelemetryEvent) => void>()
+const liveTickListeners = new Set<(event: TelemetryEvent) => void>()
+const liveSeriesListeners = new Set<(event: LiveSeriesEvent) => void>()
+const telemetryHistoryListeners = new Set<(event: TelemetryHistoryEvent) => void>()
 const boardProbeProgressListeners = new Set<(event: BoardProbeProgressEvent) => void>()
 
 const e2eBoards: Board[] = []
 
 const e2eSettings: AppSettings = {
-  liveHistoryLimit: 5,
+  liveHistoryLimit: 1000,
   autoConnect: true,
   autoRecording: false,
   selectedBoardId: null,
@@ -50,6 +54,7 @@ const e2eSettings: AppSettings = {
   historyMetricHotRanges: {},
   socEstimateWindowSeconds: 20,
   connectionSoundsEnabled: true,
+  telemetryPollRateHz: 20,
 }
 
 function emitDevice(event: DeviceFoundEvent): void {
@@ -70,92 +75,31 @@ function clearConnectTimer(): void {
   connectTimer = null
 }
 
-// Chaotic-but-deterministic fake telemetry. A seeded random walk keeps the
-// stream reproducible (so SVG vs Skia perf runs see an identical workload)
-// while looking like a real noisy ride — sparklines fill with jagged lines
-// and the gauges/IMU move constantly. Reset on each connect via resetSim().
-interface SimState {
-  speed: number
-  duty: number
-  motorCurrent: number
-  batteryCurrent: number
-  batteryVoltage: number
-  batteryPercent: number
-  tempMosfet: number
-  tempMotor: number
-  pitch: number
-  roll: number
-}
-
-let rngState = 0
-let sim: SimState | null = null
-
-function rng(): number {
-  rngState = (rngState * 1664525 + 1013904223) >>> 0
-  return rngState / 0xffffffff
-}
-
-function resetSim(): void {
-  rngState = 0x9e3779b9
-  sim = {
-    speed: 18,
-    duty: 0.4,
-    motorCurrent: 12,
-    batteryCurrent: -10,
-    batteryVoltage: 75.6,
-    batteryPercent: 78,
-    tempMosfet: 38,
-    tempMotor: 34,
-    pitch: 0,
-    roll: 0,
-  }
-}
-
-/** Random-walk a value, with occasional larger spikes, clamped to [min, max]. */
-function walk(value: number, step: number, min: number, max: number, spike = 0): number {
-  let next = value + (rng() - 0.5) * step
-  if (spike > 0 && rng() < 0.08) next += (rng() - 0.5) * spike
-  return Math.max(min, Math.min(max, next))
-}
-
 function makeTelemetry(): TelemetryEvent {
   const now = Date.now()
-  if (!sim) resetSim()
-  const s = sim!
-
-  s.speed = walk(s.speed, 6, 0, 45, 14)
-  s.duty = walk(s.duty, 0.12, 0, 0.95, 0.4)
-  s.motorCurrent = walk(s.motorCurrent, 14, -25, 70, 40)
-  s.batteryCurrent = walk(s.batteryCurrent, 10, -45, 12, 25)
-  s.batteryVoltage = walk(s.batteryVoltage, 0.25, 60, 84)
-  s.batteryPercent = walk(s.batteryPercent, 0.15, 0, 100)
-  s.tempMosfet = walk(s.tempMosfet, 0.4, 30, 72)
-  s.tempMotor = walk(s.tempMotor, 0.35, 28, 66)
-  s.pitch = walk(s.pitch, 5, -16, 16, 18)
-  s.roll = walk(s.roll, 3, -12, 12, 10)
-
+  const wobble = Math.sin(now / 1000)
   return {
     hasFault: false,
     faultCode: 0,
-    pitch: s.pitch,
-    roll: s.roll,
-    balancePitch: s.pitch * 0.6,
-    balanceCurrent: s.motorCurrent * 0.1,
-    speed: s.speed,
-    batteryVoltage: s.batteryVoltage,
-    batteryPercent: s.batteryPercent,
-    motorCurrent: s.motorCurrent,
-    batteryCurrent: s.batteryCurrent,
-    erpm: s.speed * 190,
-    dutyCycle: s.duty,
+    pitch: wobble * 3,
+    roll: wobble,
+    balancePitch: wobble * 2,
+    balanceCurrent: 0.6,
+    speed: 12 + wobble,
+    batteryVoltage: 75.6,
+    batteryPercent: 75,
+    motorCurrent: 8 + wobble,
+    batteryCurrent: -3.4,
+    erpm: 2400,
+    dutyCycle: 0.18,
     state: 0,
     stateName: 'RUNNING',
     switchState: 0,
     adc1: 1.2,
     adc2: 1.1,
     odometer: 1234,
-    tempMosfet: s.tempMosfet,
-    tempMotor: s.tempMotor,
+    tempMosfet: 36,
+    tempMotor: 33,
     avgLatency: 18,
     lastPacketAt: now,
   }
@@ -214,28 +158,45 @@ function clearTelemetryTimer(): void {
 function emitTelemetry(): void {
   if (!connectedBoardId) return
   lastTelemetry = makeTelemetry()
-  for (const listener of telemetryListeners) {
+  for (const listener of liveTickListeners) {
     listener(lastTelemetry)
   }
-  // NOTE: do not emit liveState per packet — its recentTelemetry reseeds (and
-  // clears) the live history buffer, which would wipe accumulated samples on
-  // every tick. liveState is emitted only on connection-state transitions.
+  const batch: TelemetryHistoryEvent = { samples: [lastTelemetry] }
+  for (const listener of telemetryHistoryListeners) {
+    listener(batch)
+  }
+  emitLiveSeries(lastTelemetry)
+  emitLiveState()
 }
 
-// Seed a full window of past samples on connect so the sparklines render full
-// of chaotic history immediately (instead of a slow right-edge crawl), and the
-// charts get a representative point count to render.
-const BACKFILL_WINDOW_MS = 5 * 60_000
-const BACKFILL_STEP_MS = 100
-
-function backfillTelemetry(): void {
-  const now = Date.now()
-  for (let ago = BACKFILL_WINDOW_MS; ago > 0; ago -= BACKFILL_STEP_MS) {
-    const sample = makeTelemetry()
-    sample.lastPacketAt = now - ago
-    for (const listener of telemetryListeners) {
-      listener(sample)
-    }
+function emitLiveSeries(sample: TelemetryEvent): void {
+  if (liveSeriesListeners.size === 0) return
+  const ts = sample.lastPacketAt
+  const point = (v: number | null | undefined): number[] =>
+    v == null || !Number.isFinite(v) ? [] : [ts, v]
+  const abs = (v: number | null | undefined): number | null =>
+    v == null || !Number.isFinite(v) ? null : Math.abs(v)
+  const event: LiveSeriesEvent = {
+    metrics: {
+      motorTemp: sample.tempMotor != null && sample.tempMotor > 0 ? [ts, sample.tempMotor] : [],
+      controllerTemp: point(sample.tempMosfet),
+      motorCurrent: point(sample.motorCurrent),
+      batteryCurrent: point(sample.batteryCurrent),
+      batteryVoltage: point(sample.batteryVoltage),
+      batteryPercent: point(sample.batteryPercent),
+      speed: point(abs(sample.speed)),
+      duty: point(abs(sample.dutyCycle) == null ? null : (abs(sample.dutyCycle) as number) * 100),
+      // Detail-chart-only metrics (mirrors LIVE_SERIES_METRICS on native).
+      pitch: point(sample.pitch),
+      roll: point(sample.roll),
+      balancePitch: point(sample.balancePitch),
+      footpadAdc1: point(sample.adc1),
+      footpadAdc2: point(sample.adc2),
+    },
+    generation: connectionSeq,
+  }
+  for (const listener of liveSeriesListeners) {
+    listener(event)
   }
 }
 
@@ -254,13 +215,8 @@ function startBoardSession(boardId: string): void {
     connectedBoardId = boardId
     connectingBoardId = null
     connectionSeq += 1
-    resetSim()
-    // Announce "connected" once. lastTelemetry is still null here, so liveState
-    // carries no recentTelemetry and won't clear the buffer we backfill next.
-    emitLiveState()
-    backfillTelemetry()
     emitTelemetry()
-    telemetryTimer = setInterval(emitTelemetry, 50)
+    telemetryTimer = setInterval(emitTelemetry, 1000)
   }, 3000)
 }
 
@@ -337,9 +293,19 @@ export const e2eFake = {
     return { remove: () => liveStateListeners.delete(cb) }
   },
 
-  addTelemetryListener(cb: (event: TelemetryEvent) => void): EventSubscription {
-    telemetryListeners.add(cb)
-    return { remove: () => telemetryListeners.delete(cb) }
+  addLiveTickListener(cb: (event: TelemetryEvent) => void): EventSubscription {
+    liveTickListeners.add(cb)
+    return { remove: () => liveTickListeners.delete(cb) }
+  },
+
+  addLiveSeriesListener(cb: (event: LiveSeriesEvent) => void): EventSubscription {
+    liveSeriesListeners.add(cb)
+    return { remove: () => liveSeriesListeners.delete(cb) }
+  },
+
+  addTelemetryHistoryListener(cb: (event: TelemetryHistoryEvent) => void): EventSubscription {
+    telemetryHistoryListeners.add(cb)
+    return { remove: () => telemetryHistoryListeners.delete(cb) }
   },
 
   getBoards(): Board[] {

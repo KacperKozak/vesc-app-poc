@@ -108,6 +108,8 @@ internal class VescGattClient(
                 return
             }
             txChar = tx
+            val highPriority = gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+            Log.d(VESC_SESSION_TAG, "gatt requestConnectionPriority high=$highPriority")
             val rxNotify = gatt.setCharacteristicNotification(rx, true)
             val txNotify = gatt.setCharacteristicNotification(tx, true)
             Log.d(VESC_SESSION_TAG, "gatt set notifications rx=$rxNotify tx=$txNotify")

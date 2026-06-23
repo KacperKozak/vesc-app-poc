@@ -15,7 +15,10 @@ export default function MainScreen() {
   const autoConnectAttemptedBoardRef = useRef<string | null>(null)
   const load = useBoardStore((s) => s.load)
   const { activeBoardId, boardsLoaded } = useBoardStore(
-    useShallow((s) => ({ activeBoardId: s.activeBoardId, boardsLoaded: s.hasLoaded })),
+    useShallow((s) => ({
+      activeBoardId: s.activeBoardId,
+      boardsLoaded: s.hasLoaded,
+    })),
   )
   const startGpsTracking = useBleStore((s) => s.startGpsTracking)
   const { status: permStatus, request } = usePermissions()
