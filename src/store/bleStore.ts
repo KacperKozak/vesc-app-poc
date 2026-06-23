@@ -50,7 +50,6 @@ interface BleState {
   gpsStatus: GpsPhase
   scanStatus: ScanStatus
   connectionSeq: number
-  lastTelemetryAt: number | null
   nativeStateReady: boolean
   devices: ScannedDevice[]
   selectedBoardId: string | null
@@ -214,7 +213,6 @@ function applyLiveState(state: LiveStateEvent, set: BleSet): void {
     gpsStatus: state.gps.phase,
     scanStatus: state.scan.phase,
     connectionSeq: state.board.connectionSeq,
-    lastTelemetryAt: state.board.lastTelemetryAt,
     nativeStateReady: true,
     selectedBoardId: state.board.selectedBoardId,
     connectedId: state.board.connectedBoardId ?? state.board.bleId,
@@ -236,7 +234,6 @@ function resetLivePresentation(set: BleSet): void {
   useLiveSeriesStore.getState().clear()
   const live = liveTelemetryRuntime.reset()
   set({
-    lastTelemetryAt: null,
     liveLocationHistory: live.liveLocationHistory,
     latestApproximateLocation: live.latestApproximateLocation,
     liveStatus: live.liveStatus,
@@ -307,7 +304,6 @@ function installHistorySub(set: BleSet): void {
       LIVE_HISTORY_IMMEDIATE_SAMPLE_COUNT
     const lastAccepted = liveTelemetryRuntime.ingestHistoryBatch(batch.samples)
     if (lastAccepted == null) return
-    set({ lastTelemetryAt: lastAccepted })
     if (publishImmediately) {
       clearLiveHistoryPublishTimer()
       publishLiveSnapshot(set)
@@ -348,7 +344,6 @@ export const useBleStore = create<BleState & BleActions>((set, get) => ({
   gpsStatus: 'idle',
   scanStatus: 'idle',
   connectionSeq: 0,
-  lastTelemetryAt: null,
   nativeStateReady: false,
   devices: [],
   selectedBoardId: null,

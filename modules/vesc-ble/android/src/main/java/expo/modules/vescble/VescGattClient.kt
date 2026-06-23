@@ -33,6 +33,7 @@ internal class VescGattClient(
     private val handler: Handler,
     private val recorder: () -> VescSessionRecorder?,
     private val listener: VescGattListener,
+    private val dispatchListener: ((() -> Unit) -> Unit) = { it() },
 ) {
     private var gatt: BluetoothGatt? = null
     private var txChar: BluetoothGattCharacteristic? = null
@@ -84,7 +85,7 @@ internal class VescGattClient(
             recorder()?.recordState("gatt:$newState", mapOf("status" to status))
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    listener.onGattConnected()
+                    dispatchListener { listener.onGattConnected() }
                     val requested = gatt.requestMtu(517)
                     Log.d(VESC_SESSION_TAG, "gatt requestMtu requested=$requested")
                 }
@@ -92,7 +93,7 @@ internal class VescGattClient(
                     val wasIntentional = intentionalDisconnect
                     clear(markIntentional = false)
                     if (wasIntentional) intentionalDisconnect = false
-                    listener.onGattDisconnected(status, wasIntentional)
+                    dispatchListener { listener.onGattDisconnected(status, wasIntentional) }
                 }
             }
         }
@@ -103,23 +104,23 @@ internal class VescGattClient(
             val discoveryStarted = gatt.discoverServices()
             Log.d(VESC_SESSION_TAG, "gatt discoverServices started=$discoveryStarted")
             if (!discoveryStarted) {
-                listener.onGattFailure("DISCOVERY_FAILED", "Could not start service discovery")
+                dispatchListener { listener.onGattFailure("DISCOVERY_FAILED", "Could not start service discovery") }
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (gatt !== this@VescGattClient.gatt) return
             Log.d(VESC_SESSION_TAG, "onServicesDiscovered status=$status")
-            listener.onGattSubscribing()
+            dispatchListener { listener.onGattSubscribing() }
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                listener.onGattFailure("DISCOVERY_FAILED", "Service discovery failed status=$status")
+                dispatchListener { listener.onGattFailure("DISCOVERY_FAILED", "Service discovery failed status=$status") }
                 return
             }
             val service = gatt.getService(NUS_SERVICE_UUID)
             val tx = service?.getCharacteristic(NUS_TX_UUID)
             val rx = service?.getCharacteristic(NUS_RX_UUID)
             if (service == null || tx == null || rx == null) {
-                listener.onGattFailure("NO_CHAR", "NUS service/characteristics not found")
+                dispatchListener { listener.onGattFailure("NO_CHAR", "NUS service/characteristics not found") }
                 return
             }
             txChar = tx
@@ -131,7 +132,7 @@ internal class VescGattClient(
 
             val rxCccd = rx.getDescriptor(CCCD_UUID)
             if (rxCccd == null) {
-                listener.onGattReady()
+                dispatchListener { listener.onGattReady() }
                 return
             }
             pendingCccdWrites = 1
@@ -141,7 +142,7 @@ internal class VescGattClient(
 
             cccdTimeout = Runnable {
                 Log.w(VESC_SESSION_TAG, "CCCD ack timeout, resolving connect pending=$pendingCccdWrites")
-                listener.onGattReady()
+                dispatchListener { listener.onGattReady() }
             }
             handler.postDelayed(cccdTimeout!!, 4000)
         }
@@ -161,7 +162,7 @@ internal class VescGattClient(
                 }
             }
             cancelCccdTimeout()
-            listener.onGattReady()
+            dispatchListener { listener.onGattReady() }
         }
 
         override fun onCharacteristicChanged(
@@ -171,7 +172,8 @@ internal class VescGattClient(
         ) {
             if (gatt !== this@VescGattClient.gatt) return
             if (characteristic.uuid == NUS_RX_UUID || characteristic.uuid == NUS_TX_UUID) {
-                listener.onGattFrameChunk(value)
+                val chunk = value.copyOf()
+                dispatchListener { listener.onGattFrameChunk(chunk) }
             }
         }
     }

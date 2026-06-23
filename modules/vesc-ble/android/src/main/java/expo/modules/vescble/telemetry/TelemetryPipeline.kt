@@ -151,8 +151,6 @@ internal class TelemetryPipeline(
     }
 
     fun armStaleWatchdog() {
-        val cfg = sessionConfig ?: return
-        if (!cfg.autoReconnect) return
         val armedAt = lastTelemetryAt
         staleHandle?.cancel()
         staleHandle = scheduler.postDelayed(staleTimeoutMs) {
