@@ -5,7 +5,7 @@ import { useBleStore } from '@/store/bleStore'
 import type { ExcludedRange } from '@/components/ui/charts/chartMath'
 import { finite, absolute } from '@/helpers/finite'
 import { liveTelemetryRuntime, type ChartedMetricKey } from '@/lib/telemetry/liveTelemetryRuntime'
-import type { SparklineBuckets } from '@/lib/telemetry/sparklineBuckets'
+import { bucketMean, type SparklineBuckets } from '@/lib/telemetry/sparklineBuckets'
 
 export interface LiveMetricPoint {
   ts: number
@@ -71,11 +71,15 @@ export function useLiveMetric(pick: TelemetrySelector): LiveMetricPoint[] {
 
 function bucketsToPoints(buckets: SparklineBuckets): LiveMetricPoint[] {
   const points: LiveMetricPoint[] = []
-  for (let i = 0; i < buckets.last.length; i += 1) {
-    const value = buckets.last[i]
+  for (let i = 0; i < buckets.count; i += 1) {
+    const value = bucketMean(buckets, i)
     if (!Number.isFinite(value)) continue
     points.push({ ts: buckets.startMs + i * buckets.bucketMs, value })
   }
+  // Pin the newest point to the real latest sample time so the trace scrolls
+  // continuously rather than stepping once per bucket width.
+  const newest = points.at(-1)
+  if (newest && buckets.headTs > newest.ts) newest.ts = buckets.headTs
   return points
 }
 
