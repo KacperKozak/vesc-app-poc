@@ -89,7 +89,6 @@ import {
 } from './useCameraControls'
 import { getLiveFollowCameraProfile, getPitchForZoom } from './cameraFollowProfile'
 import { shouldPreserveLiveFollowGesture } from './cameraGestureState'
-import { MapVignette } from './MapVignette'
 import { phoneHeadingAnimationDuration } from './phoneHeading'
 import { usePhoneHeading } from './usePhoneHeading'
 
@@ -1791,7 +1790,6 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
           Weather data by RainViewer
         </Text>
       ) : null}
-      {mode === 'telemetry' ? <MapVignette mode={mode} idPrefix="telemetry-map-vignette" /> : null}
       {mode !== 'telemetry'
         ? offscreenMapIndicators.map((indicator) => (
             <OffscreenMapIndicator

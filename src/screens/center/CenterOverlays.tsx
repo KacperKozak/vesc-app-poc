@@ -642,6 +642,12 @@ export function CenterOverlays({
 
   return (
     <>
+      <MapVignette
+        mode={mode}
+        panelHeight={mode === 'history' ? panelHeight : 0}
+        visible={mode !== 'map'}
+        fadeOutProgress={dragOpacity}
+      />
       {(mode === 'telemetry' || revealGestureActive) && (
         <MapRevealGesture
           progress={revealProgress}
@@ -733,7 +739,6 @@ export function CenterOverlays({
         pointerEvents={mode === 'weather' ? 'box-none' : 'none'}
         style={[styles.weatherInterface, mode === 'weather' ? styles.visible : styles.hidden]}
       >
-        <MapVignette mode={mode} idPrefix="weather-map-vignette" />
         <IconButton
           icon={ArrowLeftIcon}
           onPress={map.exitWeather}
@@ -760,7 +765,6 @@ export function CenterOverlays({
 
       {mode === 'history' && history.selectedSession && (
         <>
-          <MapVignette mode={mode} panelHeight={panelHeight} idPrefix="history-map-vignette" />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
               <ActivityIndicator size="small" color={theme.wheel.color} />
@@ -800,11 +804,6 @@ export function CenterOverlays({
 
       {mode === 'history' && !history.selectedSession && (
         <>
-          <MapVignette
-            mode={mode}
-            panelHeight={panelHeight || 150}
-            idPrefix="history-map-vignette-loading"
-          />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
               <ActivityIndicator size="small" color={theme.wheel.color} />

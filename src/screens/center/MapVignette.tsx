@@ -1,138 +1,231 @@
+import { useEffect, type ReactNode } from 'react'
 import { StyleSheet, useWindowDimensions, View } from 'react-native'
-import Svg, { Defs, Rect, RadialGradient, LinearGradient, Stop } from 'react-native-svg'
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated'
+import {
+  Canvas,
+  Group,
+  LinearGradient,
+  RadialGradient,
+  Rect,
+  vec,
+} from '@shopify/react-native-skia'
+import {
+  Easing,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated'
 
 import type { CenterViewState } from '@/screens/center/centerViewState'
 
 interface MapVignetteProps {
   mode: CenterViewState
   panelHeight?: number
+  /** Kept for call-site compatibility; Skia gradients have no global IDs. */
   idPrefix?: string
   topOnly?: boolean
+  visible?: boolean
+  fadeOutProgress?: SharedValue<number>
+}
+
+interface VignetteLayerProps {
+  width: number
+  height: number
+  opacity: { value: number }
+  radial?: number[]
+  top: number[]
+  topPositions: number[]
+  topEnd: number
+  bottom?: number[]
+  bottomPositions?: number[]
+  bottomStart?: number
+  children?: ReactNode
+}
+
+const DARK = '#0f172a'
+const RADIAL_POSITIONS = [0, 0.4, 0.68, 1]
+const TOP_POSITIONS = [0, 0.7, 1]
+const HISTORY_TOP_POSITIONS = [0, 0.52, 1]
+const HISTORY_BOTTOM_POSITIONS = [0, 0.5, 0.6, 1]
+const WEATHER_TOP_POSITIONS = [0, 0.55, 1]
+const WEATHER_BOTTOM_POSITIONS = [0, 0.55, 1]
+
+function alpha(opacity: number) {
+  return `${DARK}${Math.round(opacity * 255)
+    .toString(16)
+    .padStart(2, '0')}`
+}
+
+function VignetteLayer({
+  width,
+  height,
+  opacity,
+  radial,
+  top,
+  topPositions,
+  topEnd,
+  bottom,
+  bottomPositions,
+  bottomStart,
+  children,
+}: VignetteLayerProps) {
+  const radialRadius = width * 0.68
+  const radialScaleY = (height * 0.62) / radialRadius
+  const radialBaseHeight = height / radialScaleY
+  const radialBaseTop = (height - radialBaseHeight) / 2
+
+  return (
+    <Group opacity={opacity}>
+      {radial != null ? (
+        <Group origin={vec(width / 2, height / 2)} transform={[{ scaleY: radialScaleY }]}>
+          <Rect x={0} y={radialBaseTop} width={width} height={radialBaseHeight}>
+            <RadialGradient
+              c={vec(width / 2, height / 2)}
+              r={radialRadius}
+              colors={radial.map(alpha)}
+              positions={RADIAL_POSITIONS}
+            />
+          </Rect>
+        </Group>
+      ) : null}
+      <Rect x={0} y={0} width={width} height={height * topEnd}>
+        <LinearGradient
+          start={vec(0, 0)}
+          end={vec(0, height * topEnd)}
+          colors={top.map(alpha)}
+          positions={topPositions}
+        />
+      </Rect>
+      {bottom != null && bottomStart != null ? (
+        <Rect x={0} y={height * bottomStart} width={width} height={height * (1 - bottomStart)}>
+          <LinearGradient
+            start={vec(0, height)}
+            end={vec(0, height * bottomStart)}
+            colors={bottom.map(alpha)}
+            positions={bottomPositions}
+          />
+        </Rect>
+      ) : null}
+      {children}
+    </Group>
+  )
+}
+
+function AnimatedHistoryBottomGradient({
+  width,
+  height,
+  bottomStart,
+}: {
+  width: number
+  height: number
+  bottomStart: SharedValue<number>
+}) {
+  const y = useDerivedValue(() => height * bottomStart.value)
+  const gradientEnd = useDerivedValue(() => vec(0, height * bottomStart.value))
+  const gradientHeight = useDerivedValue(() => height * (1 - bottomStart.value))
+
+  return (
+    <Rect x={0} y={y} width={width} height={gradientHeight}>
+      <LinearGradient
+        start={vec(0, height)}
+        end={gradientEnd}
+        colors={[0.8, 0.7, 0.2, 0].map(alpha)}
+        positions={HISTORY_BOTTOM_POSITIONS}
+      />
+    </Rect>
+  )
 }
 
 export function MapVignette({
   mode,
   panelHeight = 0,
-  idPrefix = 'map-vignette',
   topOnly = false,
+  visible = true,
+  fadeOutProgress,
 }: MapVignetteProps) {
-  const { height: screenHeight } = useWindowDimensions()
-  const radialId = `${idPrefix}-radial`
-  const topId = `${idPrefix}-top`
-  const bottomId = `${idPrefix}-bottom`
-  const historyRadialId = `${idPrefix}-history-radial`
-  const historyTopId = `${idPrefix}-history-top`
-  const historyBottomId = `${idPrefix}-history-bottom`
-  const panelTopPct =
-    panelHeight > 0 ? Math.max(20, Math.round((1 - panelHeight / screenHeight) * 100)) : 55
-  const rectTopPct = Math.max(5, panelTopPct - 28)
-  const bottomY = `${rectTopPct}%`
-  const bottomH = `${100 - rectTopPct}%`
-  const weatherId = `${idPrefix}-weather-radial`
-  const weatherTopId = `${idPrefix}-weather-top`
-  const weatherBottomId = `${idPrefix}-weather-bottom`
-  const standardStyle = useAnimatedStyle(
-    () => ({
-      opacity: withTiming(mode === 'history' || mode === 'weather' ? 0 : 1, { duration: 180 }),
-    }),
-    [mode],
+  const { width, height } = useWindowDimensions()
+  const standardOpacity = useSharedValue(
+    visible && mode !== 'history' && mode !== 'weather' ? 1 : 0,
   )
-  const historyStyle = useAnimatedStyle(
-    () => ({
-      opacity: withTiming(mode === 'history' ? 1 : 0, { duration: 180 }),
-    }),
-    [mode],
+  const historyOpacity = useSharedValue(visible && mode === 'history' ? 1 : 0)
+  const weatherOpacity = useSharedValue(visible && mode === 'weather' ? 1 : 0)
+  const panelTop = panelHeight > 0 ? Math.max(0.2, 1 - panelHeight / height) : 0.55
+  const historyBottomStart = Math.max(0.05, panelTop - 0.28)
+  const historyBottomStartValue = useSharedValue(historyBottomStart)
+  const standardLayerOpacity = useDerivedValue(
+    () => standardOpacity.value * (1 - (fadeOutProgress?.value ?? 0)),
   )
-  const weatherStyle = useAnimatedStyle(
-    () => ({
-      opacity: withTiming(mode === 'weather' ? 1 : 0, { duration: 180 }),
-    }),
-    [mode],
+  const historyLayerOpacity = useDerivedValue(
+    () => historyOpacity.value * (1 - (fadeOutProgress?.value ?? 0)),
   )
+  const weatherLayerOpacity = useDerivedValue(
+    () => weatherOpacity.value * (1 - (fadeOutProgress?.value ?? 0)),
+  )
+
+  useEffect(() => {
+    const transition = { duration: 280, easing: Easing.out(Easing.cubic) }
+    standardOpacity.value = withTiming(
+      visible && mode !== 'history' && mode !== 'weather' ? 1 : 0,
+      transition,
+    )
+    historyOpacity.value = withTiming(visible && mode === 'history' ? 1 : 0, transition)
+    weatherOpacity.value = withTiming(visible && mode === 'weather' ? 1 : 0, transition)
+  }, [historyOpacity, mode, standardOpacity, visible, weatherOpacity])
+
+  useEffect(() => {
+    historyBottomStartValue.value = withTiming(historyBottomStart, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+    })
+  }, [historyBottomStart, historyBottomStartValue])
 
   return (
     <View pointerEvents="none" style={styles.wrap}>
-      <Animated.View style={[styles.layer, standardStyle]}>
-        <Svg width="100%" height="100%" preserveAspectRatio="none">
-          <Defs>
-            <RadialGradient id={radialId} cx="50%" cy="50%" rx="68%" ry="62%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
-              <Stop offset="40%" stopColor="#0f172a" stopOpacity="0.1" />
-              <Stop offset="68%" stopColor="#0f172a" stopOpacity="0.32" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0.58" />
-            </RadialGradient>
-            <LinearGradient id={topId} x1="0%" y1="0%" x2="0%" y2="100%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.88" />
-              <Stop offset="70%" stopColor="#0f172a" stopOpacity="0.42" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-            </LinearGradient>
-            <LinearGradient id={bottomId} x1="0%" y1="100%" x2="0%" y2="0%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.9" />
-              <Stop offset="10%" stopColor="#0f172a" stopOpacity="0.8" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          {!topOnly ? (
-            <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${radialId})`} />
-          ) : null}
-          <Rect x="0" y="0" width="100%" height="34%" fill={`url(#${topId})`} />
-          {!topOnly ? (
-            <Rect x="0" y="60%" width="100%" height="40%" fill={`url(#${bottomId})`} />
-          ) : null}
-        </Svg>
-      </Animated.View>
-      <Animated.View style={[styles.layer, historyStyle]}>
-        <Svg width="100%" height="100%" preserveAspectRatio="none">
-          <Defs>
-            <RadialGradient id={historyRadialId} cx="50%" cy="50%" rx="68%" ry="62%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
-              <Stop offset="40%" stopColor="#0f172a" stopOpacity="0.14" />
-              <Stop offset="68%" stopColor="#0f172a" stopOpacity="0.4" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0.65" />
-            </RadialGradient>
-            <LinearGradient id={historyTopId} x1="0%" y1="0%" x2="0%" y2="100%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.9" />
-              <Stop offset="52%" stopColor="#0f172a" stopOpacity="0.5" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-            </LinearGradient>
-            <LinearGradient id={historyBottomId} x1="0%" y1="100%" x2="0%" y2="0%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.80" />
-              <Stop offset="50%" stopColor="#0f172a" stopOpacity="0.70" />
-              <Stop offset="60%" stopColor="#0f172a" stopOpacity="0.20" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${historyRadialId})`} />
-          <Rect x="0" y="0" width="100%" height="38%" fill={`url(#${historyTopId})`} />
-          <Rect x="0" y={bottomY} width="100%" height={bottomH} fill={`url(#${historyBottomId})`} />
-        </Svg>
-      </Animated.View>
-      <Animated.View style={[styles.layer, weatherStyle]}>
-        <Svg width="100%" height="100%" preserveAspectRatio="none">
-          <Defs>
-            <RadialGradient id={weatherId} cx="50%" cy="50%" rx="68%" ry="62%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
-              <Stop offset="40%" stopColor="#0f172a" stopOpacity="0.08" />
-              <Stop offset="68%" stopColor="#0f172a" stopOpacity="0.28" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0.55" />
-            </RadialGradient>
-            <LinearGradient id={weatherTopId} x1="0%" y1="0%" x2="0%" y2="100%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.92" />
-              <Stop offset="55%" stopColor="#0f172a" stopOpacity="0.45" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-            </LinearGradient>
-            <LinearGradient id={weatherBottomId} x1="0%" y1="100%" x2="0%" y2="0%">
-              <Stop offset="0%" stopColor="#0f172a" stopOpacity="0.88" />
-              <Stop offset="55%" stopColor="#0f172a" stopOpacity="0.50" />
-              <Stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${weatherId})`} />
-          <Rect x="0" y="0" width="100%" height="30%" fill={`url(#${weatherTopId})`} />
-          <Rect x="0" y="78%" width="100%" height="22%" fill={`url(#${weatherBottomId})`} />
-        </Svg>
-      </Animated.View>
+      <Canvas style={styles.canvas}>
+        <VignetteLayer
+          width={width}
+          height={height}
+          opacity={standardLayerOpacity}
+          radial={topOnly ? undefined : [0, 0.1, 0.32, 0.58]}
+          top={[0.88, 0.42, 0]}
+          topPositions={TOP_POSITIONS}
+          topEnd={0.34}
+          bottom={topOnly ? undefined : [0.9, 0.8, 0]}
+          bottomPositions={TOP_POSITIONS}
+          bottomStart={topOnly ? undefined : 0.6}
+        />
+        {!topOnly ? (
+          <>
+            <VignetteLayer
+              width={width}
+              height={height}
+              opacity={historyLayerOpacity}
+              radial={[0, 0.14, 0.4, 0.65]}
+              top={[0.9, 0.5, 0]}
+              topPositions={HISTORY_TOP_POSITIONS}
+              topEnd={0.38}
+            >
+              <AnimatedHistoryBottomGradient
+                width={width}
+                height={height}
+                bottomStart={historyBottomStartValue}
+              />
+            </VignetteLayer>
+            <VignetteLayer
+              width={width}
+              height={height}
+              opacity={weatherLayerOpacity}
+              radial={[0, 0.08, 0.28, 0.55]}
+              top={[0.92, 0.45, 0]}
+              topPositions={WEATHER_TOP_POSITIONS}
+              topEnd={0.3}
+              bottom={[0.88, 0.5, 0]}
+              bottomPositions={WEATHER_BOTTOM_POSITIONS}
+              bottomStart={0.78}
+            />
+          </>
+        ) : null}
+      </Canvas>
     </View>
   )
 }
@@ -142,7 +235,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 4,
   },
-  layer: {
-    ...StyleSheet.absoluteFill,
-  },
+  canvas: StyleSheet.absoluteFill,
 })
