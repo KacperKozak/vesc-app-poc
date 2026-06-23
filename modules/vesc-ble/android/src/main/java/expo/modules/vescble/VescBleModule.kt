@@ -119,6 +119,7 @@ class VescBleModule : Module() {
 
     Function("scan") { startScan(resetRetries = true) }
     Function("stopScan") { stopScanInternal() }
+    Function("exitApp") { VescForegroundService.exitApp(context.applicationContext) }
     Function("startLocationUpdates") { startLocationUpdates() }
     Function("stopLocationUpdates") { stopLocationUpdates() }
     Function("setTelemetryRecordingEnabled") { enabled: Boolean -> setTelemetryRecordingEnabled(enabled) }

@@ -3,6 +3,8 @@ import { BackHandler, ToastAndroid } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
 
+import { exitApp } from 'vesc-ble'
+
 import type { CenterMapHandle } from '@/screens/center/CenterMap'
 import { useCenterScreenStore } from '@/screens/center/centerScreenStore'
 import {
@@ -322,7 +324,7 @@ export function useCenterScreenController({ mapRef }: UseCenterScreenControllerA
           return true
         }
         if (backPressedOnce.current) {
-          BackHandler.exitApp()
+          exitApp()
           return true
         }
         backPressedOnce.current = true

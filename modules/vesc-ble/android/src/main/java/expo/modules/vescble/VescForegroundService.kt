@@ -126,6 +126,11 @@ class VescForegroundService : Service() {
             instance?.consumePendingStop()
         }
 
+        fun exitApp(context: Context) {
+            instance?.exitFromNotification()
+                ?: VescNotificationController.closeAppTask(context.applicationContext)
+        }
+
         fun getRefloatConfigSnapshot(
             onSuccess: (Map<String, Any?>) -> Unit,
             onError: (String, String) -> Unit,

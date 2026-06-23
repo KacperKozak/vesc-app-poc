@@ -603,6 +603,7 @@ interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) =
 type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   scan(): void
   stopScan(): void
+  exitApp(): void
   startLocationUpdates(): void
   stopLocationUpdates(): void
   setTelemetryRecordingEnabled(enabled: boolean): void
@@ -795,6 +796,12 @@ export async function stopBoard(): Promise<void> {
   }
 
   return native.stopBoard()
+}
+
+/** Stop all native work and remove app task. */
+export function exitApp(): void {
+  if (E2E_ENABLED) return
+  native.exitApp()
 }
 
 /**
