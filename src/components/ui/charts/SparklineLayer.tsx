@@ -25,47 +25,8 @@ export interface SparklinePaths {
   maxPos: { x: number; y: number } | null
 }
 
-const MIN_BUCKETS = 50
 const BASELINE_COLOR = '#334155'
 const MAX_DOT_STROKE = '#0f172a'
-
-function downsampleMinMax(points: SparklinePoint[], bucketCount: number): SparklinePoint[] {
-  if (points.length <= bucketCount * 2) return points
-
-  const tMin = points[0].ts
-  const tMax = points[points.length - 1].ts
-  const tSpan = tMax - tMin
-  if (tSpan <= 0) return points
-
-  const result: SparklinePoint[] = []
-  const bucketWidth = tSpan / bucketCount
-  let bi = 0
-  let minP: SparklinePoint | null = null
-  let maxP: SparklinePoint | null = null
-
-  for (const p of points) {
-    const bucket = Math.min(Math.floor((p.ts - tMin) / bucketWidth), bucketCount - 1)
-    if (bucket !== bi) {
-      if (minP && maxP) {
-        if (minP === maxP) result.push(minP)
-        else if (minP.ts <= maxP.ts) result.push(minP, maxP)
-        else result.push(maxP, minP)
-      }
-      minP = null
-      maxP = null
-      bi = bucket
-    }
-    if (!minP || p.value < minP.value) minP = p
-    if (!maxP || p.value > maxP.value) maxP = p
-  }
-
-  if (minP && maxP) {
-    if (minP === maxP) result.push(minP)
-    else if (minP.ts <= maxP.ts) result.push(minP, maxP)
-    else result.push(maxP, minP)
-  }
-  return result
-}
 
 export function buildSparklinePaths({
   points,
@@ -95,7 +56,10 @@ export function buildSparklinePaths({
   }
   if (points.length < 2) return { ...empty, baselinePath: makeBaseline(0, width, height / 2) }
 
-  const reduced = downsampleMinMax(points, Math.max(width, MIN_BUCKETS))
+  // Skia draws every point; the live series is already min/max-decimated natively
+  // on a stable absolute grid, so no JS re-bucketing (which re-quantised and made
+  // the line squiggle on each tick) is needed.
+  const reduced = points
   const xMax = reduced[reduced.length - 1].ts
   const xMin = windowMs ? xMax - windowMs : reduced[0].ts
   const xSpan = xMax - xMin

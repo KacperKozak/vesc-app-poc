@@ -7,6 +7,12 @@ package expo.modules.vescble.telemetry
  * the JS bridge. Each bucket keeps its min and max sample so peaks and troughs
  * survive, emitted in chronological order.
  *
+ * Buckets sit on a **fixed absolute grid** (`floor(ts / bucketWidth)`, width =
+ * `windowMs / bucketCount`), not a grid anchored to the first row. A sample's
+ * bucket therefore depends only on its own timestamp — as the live window slides
+ * and old rows are pruned, every surviving point keeps its bucket, so the line is
+ * stable instead of re-quantising (squiggling) on every emit.
+ *
  * Output is a flat `[ts0, v0, ts1, v1, ...]` array — the most compact shape for
  * the bridge (timestamps are ms and fit exactly in a Double below 2^53).
  */
@@ -14,38 +20,15 @@ object LiveSeriesDownsampler {
     fun <T> downsampleMinMax(
         rows: List<T>,
         bucketCount: Int,
+        windowMs: Long,
         timestamp: (T) -> Long,
         value: (T) -> Double?,
     ): DoubleArray {
-        if (rows.isEmpty() || bucketCount <= 0) return EMPTY
+        if (rows.isEmpty() || bucketCount <= 0 || windowMs <= 0L) return EMPTY
 
-        val firstTs = timestamp(rows.first())
-        val lastTs = timestamp(rows.last())
-        val span = lastTs - firstTs
-
+        val bucketWidth = windowMs.toDouble() / bucketCount
         val out = ArrayList<Double>(minOf(rows.size, bucketCount * 2) * 2)
-
-        // Degenerate window (single timestamp): collapse to one min + one max point.
-        if (span <= 0L) {
-            var minTs = 0L
-            var minV = Double.NaN
-            var maxTs = 0L
-            var maxV = Double.NaN
-            var has = false
-            for (row in rows) {
-                val v = value(row) ?: continue
-                if (!v.isFinite()) continue
-                val ts = timestamp(row)
-                if (!has || v < minV) { minV = v; minTs = ts }
-                if (!has || v > maxV) { maxV = v; maxTs = ts }
-                has = true
-            }
-            if (has) flush(out, minTs, minV, maxTs, maxV)
-            return out.toDoubleArray()
-        }
-
-        val bucketWidth = span.toDouble() / bucketCount
-        var bucketIndex = -1
+        var bucketIndex = Long.MIN_VALUE
         var minTs = 0L
         var minV = Double.NaN
         var maxTs = 0L
@@ -56,7 +39,7 @@ object LiveSeriesDownsampler {
             val v = value(row) ?: continue
             if (!v.isFinite()) continue
             val ts = timestamp(row)
-            val bucket = minOf(((ts - firstTs) / bucketWidth).toInt(), bucketCount - 1)
+            val bucket = (ts / bucketWidth).toLong()
 
             if (bucket != bucketIndex) {
                 if (bucketHasData) flush(out, minTs, minV, maxTs, maxV)

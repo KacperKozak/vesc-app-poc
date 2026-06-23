@@ -136,11 +136,13 @@ internal class TelemetryPipeline(
         // Copy the deque under lock, then decimate the snapshot without holding it.
         val rows = synchronized(recentLock) { if (recentTelemetry.isEmpty()) null else recentTelemetry.toList() }
             ?: return emptyMap()
+        val windowMs = recentWindowMs()
         val result = HashMap<String, DoubleArray>(metrics.size)
         for (metric in metrics) {
             result[metric.key] = LiveSeriesDownsampler.downsampleMinMax(
                 rows,
                 bucketCount,
+                windowMs,
                 { (it["lastPacketAt"] as Number).toLong() },
                 metric.select,
             )
