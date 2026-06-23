@@ -27,7 +27,7 @@ const sections = [
   },
   {
     label: 'Charts',
-    hint: 'Sparkline, BatteryBar, SingleGauge, TelemetryLineChart',
+    hint: 'Sparkline, LinearGauge, SingleGauge, TelemetryLineChart',
     route: '/settings/components/charts',
     icon: ChartLineUpIcon,
   },

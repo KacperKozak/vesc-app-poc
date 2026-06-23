@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Easing, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 
 import { ChartLineUpIcon } from 'phosphor-react-native'
-import { BatteryBar } from '@/components/ui/base/BatteryBar'
+import { LinearGauge } from '@/components/ui/charts/LinearGauge'
 import { IconHero } from '@/components/ui/settings/IconHero'
 import { TelemetryLineChart } from '@/components/ui/charts/TelemetryLineChart'
 import { computeAutoRange, type TelemetryChartPoint } from '@/components/ui/charts/chartMath'
@@ -183,24 +183,29 @@ function AnimatedSingleGaugeShowcase() {
   )
 }
 
-function BatteryBarShowcase() {
+function LinearGaugeShowcase() {
   const [empty, setEmpty] = useState(false)
-  const points = useMemo(() => generateSparklineData(60, 82, 3, 42), [])
 
   return (
     <ShowcaseCard
-      name="BatteryBar"
+      name="LinearGauge"
       controls={
         <>
           <ToggleRow label="empty" value={empty} onToggle={setEmpty} />
         </>
       }
     >
-      <BatteryBar
-        percent={empty ? null : 82}
-        voltage={empty ? null : 74.5}
-        series={empty ? [] : points}
-        range={{ min: 42, max: 84 }}
+      <LinearGauge
+        value={empty ? null : 82}
+        max={100}
+        color={telemetry.battVoltage.color}
+        unit="%"
+        aux={empty ? undefined : telemetry.battVoltage.formatWithUnit(74.5)}
+        alerts={[
+          { id: 'low', threshold: 20, thresholdMax: null },
+          { id: 'band', threshold: 40, thresholdMax: 60 },
+        ]}
+        hint={empty ? 'Set battery config in board settings' : undefined}
       />
     </ShowcaseCard>
   )
@@ -273,10 +278,10 @@ export default function ChartsPage() {
       <ScrollView contentContainerStyle={styles.content}>
         <IconHero
           icon={ChartLineUpIcon}
-          description="Sparkline, BatteryBar, SingleGauge, TelemetryLineChart."
+          description="Sparkline, LinearGauge, SingleGauge, TelemetryLineChart."
         />
         <SparklineShowcase />
-        <BatteryBarShowcase />
+        <LinearGaugeShowcase />
         <AnimatedSingleGaugeShowcase />
         <RandomLineChartsShowcase />
       </ScrollView>

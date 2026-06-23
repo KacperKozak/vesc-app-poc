@@ -25,7 +25,9 @@ export function TickText({ value, decimals, unit, style }: TickTextProps) {
       text = '-'
     } else {
       const n = decimals === 0 ? Math.round(v).toString() : v.toFixed(decimals)
-      text = unit ? `${n} ${unit}` : n
+      // No separator: the monospace font renders any space at full cell width, so the unit is
+      // appended directly to the number.
+      text = unit ? `${n}${unit}` : n
     }
     return { text, defaultValue: text }
   })

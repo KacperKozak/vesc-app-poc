@@ -3,11 +3,14 @@ import type { StyleProp, ViewStyle } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
 
-import { BatteryBar } from '@/components/ui/base/BatteryBar'
+import { LinearGauge } from '@/components/ui/charts/LinearGauge'
+import { type DualGaugeAlert } from '@/components/ui/charts/DualGauge'
+import { telemetry } from '@/constants/telemetry'
+import { theme } from '@/constants/theme'
 import { deriveBatteryConfig } from '@/lib/battery'
 import { useLiveSeries } from '@/hooks/useLiveMetric'
+import { useAlertsStore } from '@/store/alertsStore'
 import { useBoardStore } from '@/store/boardStore'
-import { useLiveWindowMs } from '@/store/settingsStore'
 import { routes } from '@/navigation/routes'
 
 interface BatteryIndicatorProps {
@@ -16,22 +19,27 @@ interface BatteryIndicatorProps {
   containerStyle?: StyleProp<ViewStyle>
 }
 
+const BATTERY_LOW_PCT = 30
+
+/** Warning shade when low on charge, else the battery metric color. Mirrors the gauge fill. */
+function pickColor(percent: number | null): string {
+  if (percent != null && percent < BATTERY_LOW_PCT) return theme.warning.color
+  return telemetry.battVoltage.color
+}
+
 export function BatteryIndicator({ compact, transparent, containerStyle }: BatteryIndicatorProps) {
   const router = useRouter()
-  // Decimated sparkline series (native, ~1Hz). Plots the median-smoothed SoC Estimate
-  // (ADR-0016) over 0–100 so the line matches the % readout and the detail screen,
-  // instead of raw pack voltage which sags sharply under load. The series publish also
-  // paces this component's re-render, at which point the live numbers are sampled off
-  // the 31Hz tick.
+  // Decimated series (native, ~1Hz). Battery is a slow signal, so the series cadence both
+  // supplies the latest SoC/voltage sample and paces this component's re-render.
   const batterySeries = useLiveSeries('batteryPercent')
   const voltageSeries = useLiveSeries('batteryVoltage')
-  const windowMs = useLiveWindowMs()
   const batteryConfig = useBoardStore(
     useShallow((s) => {
       const board = s.boards.find((b) => b.id === s.activeBoardId)
       return board?.batteryConfig ?? null
     }),
   )
+  const alertRules = useAlertsStore((s) => s.rules)
 
   // Config gates whether a SoC reading exists at all (voltage limits set).
   const batteryConfigured = useMemo(
@@ -39,22 +47,39 @@ export function BatteryIndicator({ compact, transparent, containerStyle }: Batte
     [batteryConfig],
   )
 
-  // Latest decimated sample (~1Hz). Battery is a slow signal, so the series cadence is
-  // plenty — and reading it here avoids touching a Reanimated SharedValue during render.
-  const percent = batterySeries.at(-1)?.value ?? null
+  // Battery alert thresholds are percent-scaled, so they only map onto the 0–100 bar once a
+  // pack config exists. Hide them (and show the hint) until then.
+  const alerts = useMemo<DualGaugeAlert[]>(
+    () =>
+      batteryConfigured
+        ? alertRules
+            .filter((rule) => rule.enabled && rule.controlId === 'battery')
+            .map((rule) => ({
+              id: rule.id,
+              threshold: rule.threshold,
+              thresholdMax: rule.thresholdMax,
+            }))
+        : [],
+    [alertRules, batteryConfigured],
+  )
+
+  const percent = batteryConfigured ? (batterySeries.at(-1)?.value ?? null) : null
   const voltage = voltageSeries.at(-1)?.value ?? null
 
   return (
-    <BatteryBar
-      percent={batteryConfigured ? percent : null}
-      voltage={voltage}
-      series={batterySeries}
-      windowMs={windowMs}
+    <LinearGauge
+      value={percent}
+      max={100}
+      color={pickColor(percent)}
+      unit="%"
+      alerts={alerts}
+      aux={voltage != null ? telemetry.battVoltage.formatWithUnit(voltage) : undefined}
       hint={!batteryConfigured ? 'Set battery config in board settings' : undefined}
       compact={compact}
       transparent={transparent}
       containerStyle={containerStyle}
       onPress={() => router.push(routes.controlBattery)}
+      testID="battery-bar"
     />
   )
 }
