@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { router } from 'expo-router'
 import { useShallow } from 'zustand/react/shallow'
 
@@ -6,6 +6,7 @@ import { useBoardStore } from '@/store/boardStore'
 import { useBleStore } from '@/store/bleStore'
 import { routes } from '@/navigation/routes'
 import { boardNeedsLink } from '@/lib/boardTransport'
+import { switchBoard } from '@/lib/boardSwitch'
 
 function isBoardBusy(status: string): boolean {
   return (
@@ -22,6 +23,7 @@ function isBoardBusy(status: string): boolean {
 }
 
 export function useBoardConnection() {
+  const boardSwitchInFlight = useRef<Promise<void> | null>(null)
   const { boards, activeBoardId, setActiveBoard } = useBoardStore(
     useShallow((s) => ({
       boards: s.boards,
@@ -35,7 +37,7 @@ export function useBoardConnection() {
     stopScan,
     connect,
     disconnect,
-    setSelectedBoard,
+    stopTelemetryRecording,
   } = useBleStore(
     useShallow((s) => ({
       status: s.status,
@@ -43,18 +45,31 @@ export function useBoardConnection() {
       stopScan: s.stopScan,
       connect: s.connect,
       disconnect: s.disconnect,
-      setSelectedBoard: s.setSelectedBoard,
+      stopTelemetryRecording: s.stopTelemetryRecording,
     })),
   )
 
   const activeBoard = boards.find((b) => b.id === activeBoardId)
 
   const handleSelectBoard = useCallback(
-    (id: string) => {
-      setActiveBoard(id)
-      setSelectedBoard(id)
+    async (id: string) => {
+      if (boardSwitchInFlight.current) return
+
+      const switching = switchBoard(activeBoardId, id, {
+        stopTelemetryRecording,
+        disconnect,
+        setActiveBoard,
+      })
+      boardSwitchInFlight.current = switching
+      try {
+        await switching
+      } finally {
+        if (boardSwitchInFlight.current === switching) {
+          boardSwitchInFlight.current = null
+        }
+      }
     },
-    [setActiveBoard, setSelectedBoard],
+    [activeBoardId, disconnect, setActiveBoard, stopTelemetryRecording],
   )
 
   const handleAddBoard = useCallback(() => {
