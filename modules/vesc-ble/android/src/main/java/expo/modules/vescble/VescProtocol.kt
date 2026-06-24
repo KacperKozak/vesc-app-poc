@@ -13,30 +13,27 @@ internal const val COMM_GET_CUSTOM_CONFIG_XML = 92
 internal const val COMM_GET_CUSTOM_CONFIG = 93
 internal const val COMM_SET_CUSTOM_CONFIG = 95
 internal const val COMM_PING_CAN = 62
+internal const val COMM_SET_CHUCK_DATA = 35
 internal const val REFLOAT_MAGIC = 101
 internal const val REFLOAT_GET_ALLDATA = 10
-internal const val REFLOAT_MOVE = 40
 private const val REFLOAT_FAULT_MODE = 69
 
+/** Neutral position of the remote-tilt slider (0..255). */
+internal const val REMOTE_TILT_CENTER = 128
+
 /**
- * Builds Floaty's temporary Refloat remote-control command.
- *
- * `direction` is Back (0) or Forward (1); `value` is Floaty's 20..80 slider.
- * This command updates runtime state only; it never writes Refloat config.
+ * Builds Floaty's temporary remote-tilt input. It emulates a Nunchuk/remote
+ * throttle on the chuck Y axis, which Refloat reads as Remote Tilt input when
+ * `inputtilt_remote_type` is UART. `value` is the 0..255 slider (128 = neutral);
+ * the wire byte is inverted to `255 - value`. Runtime only; never writes config.
  */
-internal fun buildRefloatMoveCommand(transport: BoardTransport, direction: Int, value: Int): ByteArray {
-    require(direction in 0..1) { "Remote direction must be Back (0) or Forward (1)" }
-    require(value in 20..80) { "Remote value must be between 20 and 80" }
+internal fun buildRemoteTiltCommand(transport: BoardTransport, value: Int): ByteArray {
+    require(value in 0..255) { "Remote tilt value must be between 0 and 255" }
     return transport.frame(
         byteArrayOf(
-            COMM_CUSTOM_APP_DATA.toByte(),
-            REFLOAT_MAGIC.toByte(),
-            REFLOAT_MOVE.toByte(),
-            direction.toByte(),
-            value.toByte(),
-            1,
-            (value + 1).toByte(),
-            value.toByte(),
+            COMM_SET_CHUCK_DATA.toByte(),
+            0,
+            (255 - value).toByte(),
         ),
     )
 }

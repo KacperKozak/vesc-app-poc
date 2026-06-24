@@ -228,7 +228,7 @@ public class VescBleModule: Module {
       )
     }
 
-    AsyncFunction("setRemoteTilt") { (_: Int, _: Int) -> Bool in
+    AsyncFunction("setRemoteTilt") { (_: Int) -> Bool in
       false
     }
 

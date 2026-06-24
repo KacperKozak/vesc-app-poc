@@ -148,7 +148,7 @@ class VescForegroundService : Service() {
             service.consumePendingConfigRead()
         }
 
-        fun setRemoteTilt(direction: Int, value: Int): Boolean = instance?.setRemoteTilt(direction, value) ?: false
+        fun setRemoteTilt(value: Int): Boolean = instance?.setRemoteTilt(value) ?: false
 
         fun stopRemoteTilt(): Boolean = instance?.stopRemoteTilt() ?: false
 
@@ -599,9 +599,7 @@ class VescForegroundService : Service() {
     private var latestPreciseLocation: LocationSnapshot? = null
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
-    private data class RemoteTiltInput(val direction: Int, val value: Int)
-
-    private var remoteTiltInput: RemoteTiltInput? = null
+    private var remoteTiltValue: Int? = null
     private var remoteTiltRepeat: Cancellable? = null
     private var connectionSoundsEnabled = true
     private var configFsmState: ConfigRWState = ConfigRWState.Idle
@@ -1488,42 +1486,51 @@ class VescForegroundService : Service() {
     }
 
     /**
-     * Set Floaty's temporary Refloat remote-control input. Refloat expires it
-     * after 500ms, so native repeats while JS holds the control.
+     * Stream Floaty's temporary remote-tilt input (0..255 slider, 128 neutral).
+     * Refloat drops the remote input after ~1s of silence, so native repeats the
+     * current value while JS holds the slider. Requires `inputtilt_remote_type`
+     * to be set to UART in the board config.
      */
-    fun setRemoteTilt(direction: Int, value: Int): Boolean {
-        val transport = currentBoardTransport() ?: return false
-        if (boardStatus != BoardPhase.Connected || boardConfig == null) return false
+    fun setRemoteTilt(value: Int): Boolean {
+        val transport = currentBoardTransport()
+        if (transport == null || boardStatus != BoardPhase.Connected || boardConfig == null) return false
 
-        val command = RemoteTiltInput(direction.coerceIn(0, 1), value.coerceIn(20, 80))
-        remoteTiltInput = command
+        val clamped = value.coerceIn(0, 255)
+        remoteTiltValue = clamped
         remoteTiltRepeat?.cancel()
         remoteTiltRepeat = null
 
-        val sent = sendPayload(buildRefloatMoveCommand(transport, command.direction, command.value))
+        val sent = sendPayload(buildRemoteTiltCommand(transport, clamped))
         scheduleRemoteTiltRepeat()
         return sent
     }
 
     private fun scheduleRemoteTiltRepeat() {
         remoteTiltRepeat = scheduler.postDelayed(REMOTE_TILT_REPEAT_MS) {
-            val input = remoteTiltInput ?: return@postDelayed
+            val value = remoteTiltValue ?: return@postDelayed
             val transport = currentBoardTransport()
             if (boardStatus != BoardPhase.Connected || boardConfig == null || transport == null) {
-                remoteTiltInput = null
+                remoteTiltValue = null
                 remoteTiltRepeat = null
                 return@postDelayed
             }
-            sendPayload(buildRefloatMoveCommand(transport, input.direction, input.value))
+            sendPayload(buildRemoteTiltCommand(transport, value))
             scheduleRemoteTiltRepeat()
         }
     }
 
     fun stopRemoteTilt(): Boolean {
-        val wasActive = remoteTiltInput != null
-        remoteTiltInput = null
+        val wasActive = remoteTiltValue != null
+        remoteTiltValue = null
         remoteTiltRepeat?.cancel()
         remoteTiltRepeat = null
+
+        // Snap to neutral so the board releases tilt immediately instead of
+        // waiting for its ~1s remote-input timeout.
+        val transport = currentBoardTransport()
+        if (transport != null && boardStatus == BoardPhase.Connected && boardConfig != null) {
+            sendPayload(buildRemoteTiltCommand(transport, REMOTE_TILT_CENTER))
+        }
         return wasActive
     }
 

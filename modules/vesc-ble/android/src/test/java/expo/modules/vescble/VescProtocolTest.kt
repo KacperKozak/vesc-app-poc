@@ -9,18 +9,20 @@ import org.junit.Test
 
 class VescProtocolTest {
   @Test
-  fun buildsDirectFloatyMoveCommand() {
+  fun buildsRemoteTiltChuckCommand() {
+    // Neutral slider (128) inverts to a centered chuck Y byte (127).
     assertArrayEquals(
-      byteArrayOf(COMM_CUSTOM_APP_DATA.toByte(), REFLOAT_MAGIC.toByte(), REFLOAT_MOVE.toByte(), 1, 60, 1, 61, 60),
-      buildRefloatMoveCommand(BoardTransport.Direct, direction = 1, value = 60),
+      byteArrayOf(COMM_SET_CHUCK_DATA.toByte(), 0, 127),
+      buildRemoteTiltCommand(BoardTransport.Direct, value = 128),
     )
   }
 
   @Test
-  fun framesFloatyMoveCommandForCan() {
+  fun framesRemoteTiltChuckForCan() {
+    // Full slider (255) inverts to chuck Y 0, wrapped in a CAN forward frame.
     assertArrayEquals(
-      byteArrayOf(COMM_FORWARD_CAN.toByte(), 7, COMM_CUSTOM_APP_DATA.toByte(), REFLOAT_MAGIC.toByte(), REFLOAT_MOVE.toByte(), 0, 20, 1, 21, 20),
-      buildRefloatMoveCommand(BoardTransport.Can(7), direction = 0, value = 20),
+      byteArrayOf(COMM_FORWARD_CAN.toByte(), 7, COMM_SET_CHUCK_DATA.toByte(), 0, 0),
+      buildRemoteTiltCommand(BoardTransport.Can(7), value = 255),
     )
   }
 

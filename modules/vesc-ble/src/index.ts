@@ -643,7 +643,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   backupDatabase(): Promise<DatabaseBackupResult>
   restoreDatabase(uri: string): Promise<void>
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
-  setRemoteTilt(direction: number, value: number): Promise<boolean>
+  setRemoteTilt(value: number): Promise<boolean>
   stopRemoteTilt(): Promise<boolean>
   getTuneProfiles(boardId: string): Promise<TuneProfile[]>
   getTuneProfile(profileId: string): Promise<TuneProfile | null>
@@ -924,13 +924,16 @@ export async function getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
   return native.getRefloatConfigSnapshot()
 }
 
-/** Start Floaty's temporary Refloat remote-control input. */
-export async function setRemoteTilt(direction: 0 | 1, value: number): Promise<boolean> {
+/**
+ * Stream Floaty's temporary remote-tilt input. `value` is the 0..255 slider
+ * (128 = neutral). Requires `inputtilt_remote_type` = UART in the board config.
+ */
+export async function setRemoteTilt(value: number): Promise<boolean> {
   if (E2E_ENABLED) return true
-  return native.setRemoteTilt(direction, value)
+  return native.setRemoteTilt(value)
 }
 
-/** Stop transmitting temporary remote-control input. Refloat then expires it. */
+/** Stop streaming tilt and snap the board back to neutral. */
 export async function stopRemoteTilt(): Promise<boolean> {
   if (E2E_ENABLED) return true
   return native.stopRemoteTilt()

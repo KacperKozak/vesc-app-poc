@@ -1,6 +1,6 @@
 import Slider from '@react-native-community/slider'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { computeAutoRange } from '@/components/ui/charts/chartMath'
 import { ControlDetailLayout } from '@/components/domain/control/ControlDetailLayout'
@@ -17,6 +17,9 @@ import { setRemoteTilt, stopRemoteTilt } from 'vesc-ble'
 const pitchCfg = telemetry.pitch
 const rollCfg = telemetry.roll
 const balanceCfg = telemetry.balancePitch
+
+/** Neutral position of the remote-tilt slider (0..255), matching native. */
+const REMOTE_TILT_CENTER = 128
 
 function latestValue(points: { value: number }[]) {
   return points.at(-1)?.value ?? null
@@ -64,9 +67,8 @@ export default function ImuScreen() {
   const balancePitch = useLiveMetric(liveSelectors.balancePitch)
   const windowMs = useLiveWindowMs()
   const boardConnected = useBleStore((state) => state.status === 'connected')
-  const [remoteTiltValue, setRemoteTiltValue] = useState(60)
-  const [remoteTiltDirection, setRemoteTiltDirection] = useState<0 | 1>(1)
-  const [remoteTiltActive, setRemoteTiltActive] = useState(false)
+  const [remoteTiltValue, setRemoteTiltValue] = useState(REMOTE_TILT_CENTER)
+  const remoteTiltPercent = Math.round(((remoteTiltValue - REMOTE_TILT_CENTER) / 127) * 100)
 
   useEffect(
     () => () => {
@@ -77,17 +79,12 @@ export default function ImuScreen() {
 
   const updateRemoteTilt = (value: number) => {
     setRemoteTiltValue(value)
-    if (remoteTiltActive) void setRemoteTilt(remoteTiltDirection, value)
+    void setRemoteTilt(value)
   }
 
-  const startRemoteTilt = (direction: 0 | 1) => {
-    setRemoteTiltDirection(direction)
-    setRemoteTiltActive(true)
-    void setRemoteTilt(direction, remoteTiltValue)
-  }
-
-  const stopRemoteTiltControl = () => {
-    setRemoteTiltActive(false)
+  // Spring back to neutral on release; native snaps the board back too.
+  const releaseRemoteTilt = () => {
+    setRemoteTiltValue(REMOTE_TILT_CENTER)
     void stopRemoteTilt()
   }
 
@@ -194,53 +191,27 @@ export default function ImuScreen() {
       <View style={styles.remoteTiltControl}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionLabel}>REMOTE TILT</Text>
-          <Text style={styles.remoteTiltValue}>{remoteTiltValue}</Text>
+          <Text style={styles.remoteTiltValue}>
+            {remoteTiltPercent > 0 ? `+${remoteTiltPercent}` : remoteTiltPercent}%
+          </Text>
         </View>
         <Text style={styles.remoteTiltHint}>
-          Set value, then hold a direction. Releasing stops temporary control. No tune XML write.
+          Drag to tilt the nose; release springs back to neutral. Requires Remote Tilt (UART)
+          enabled in the board config.
         </Text>
-        <Text style={styles.remoteTiltWarning}>Can drive motor while board is READY.</Text>
+        <Text style={styles.remoteTiltWarning}>Moves the setpoint live while riding.</Text>
         <Slider
           disabled={!boardConnected}
-          minimumValue={20}
-          maximumValue={80}
+          minimumValue={0}
+          maximumValue={255}
           step={1}
           value={remoteTiltValue}
           minimumTrackTintColor={theme.wheel.color}
           maximumTrackTintColor={theme.neutral.border}
           thumbTintColor={theme.wheel.color}
           onValueChange={updateRemoteTilt}
+          onSlidingComplete={releaseRemoteTilt}
         />
-        <View style={styles.remoteTiltActions}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={!boardConnected}
-            onPressIn={() => startRemoteTilt(0)}
-            onPressOut={stopRemoteTiltControl}
-            style={({ pressed }) => [
-              styles.remoteTiltButton,
-              remoteTiltActive && remoteTiltDirection === 0 && styles.remoteTiltButtonActive,
-              pressed && styles.remoteTiltButtonPressed,
-              !boardConnected && styles.remoteTiltButtonDisabled,
-            ]}
-          >
-            <Text style={styles.remoteTiltButtonText}>HOLD BACK</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={!boardConnected}
-            onPressIn={() => startRemoteTilt(1)}
-            onPressOut={stopRemoteTiltControl}
-            style={({ pressed }) => [
-              styles.remoteTiltButton,
-              remoteTiltActive && remoteTiltDirection === 1 && styles.remoteTiltButtonActive,
-              pressed && styles.remoteTiltButtonPressed,
-              !boardConnected && styles.remoteTiltButtonDisabled,
-            ]}
-          >
-            <Text style={styles.remoteTiltButtonText}>HOLD FORWARD</Text>
-          </Pressable>
-        </View>
         {!boardConnected ? (
           <Text style={styles.remoteTiltDisabled}>Connect board to control tilt.</Text>
         ) : null}
@@ -352,33 +323,6 @@ const styles = StyleSheet.create({
     color: theme.warning.text,
     fontSize: 12,
     fontWeight: '600',
-  },
-  remoteTiltActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  remoteTiltButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
-  },
-  remoteTiltButtonActive: {
-    borderColor: theme.wheel.color,
-    backgroundColor: theme.wheel.color,
-  },
-  remoteTiltButtonPressed: {
-    opacity: 0.75,
-  },
-  remoteTiltButtonDisabled: {
-    opacity: 0.45,
-  },
-  remoteTiltButtonText: {
-    color: theme.neutral.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
   },
   attitudeView: {
     flex: 1,
