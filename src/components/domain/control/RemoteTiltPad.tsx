@@ -242,7 +242,11 @@ export function RemoteTiltPad({
           <Text
             key={`vl${percent}`}
             pointerEvents="none"
-            style={[styles.tiltLabel, { left: `${xFractionForTilt(percent) * 100}%` }]}
+            style={[
+              styles.tiltLabel,
+              percent === 0 && styles.zeroTiltLabel,
+              { left: `${xFractionForTilt(percent) * 100}%` },
+            ]}
           >
             {percent > 0 ? `+${percent}` : percent}%
           </Text>
@@ -340,7 +344,9 @@ const styles = StyleSheet.create({
   },
   centerLine: {
     left: '50%',
-    backgroundColor: theme.neutral.border,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: theme.wheel.color,
   },
   gridLineH: {
     position: 'absolute',
@@ -366,6 +372,10 @@ const styles = StyleSheet.create({
     color: theme.neutral.textDim,
     fontSize: 9,
     fontWeight: '600',
+  },
+  zeroTiltLabel: {
+    color: theme.wheel.text,
+    fontWeight: '800',
   },
   axisLabel: {
     position: 'absolute',
