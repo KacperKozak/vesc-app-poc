@@ -38,16 +38,26 @@ export default function TemperaturesScreen() {
         { label: controller.label, controlId: controller.controlId!, unit: controller.unit },
       ]}
     >
-      <MetricDetailGauge metric={motor} value={liveTelemetryRuntime.values.motorTemp} />
-      <MetricDetailGauge metric={controller} value={liveTelemetryRuntime.values.controllerTemp} />
+      <MetricDetailGauge
+        metric={motor}
+        value={liveTelemetryRuntime.values.motorTemp}
+        label={motor.label}
+      />
+      <MetricDetailGauge
+        metric={controller}
+        value={liveTelemetryRuntime.values.controllerTemp}
+        label={controller.label}
+      />
       <MetricDetailChart
         metric={motor}
+        label={motor.label}
         points={motorPoints}
         range={motorRange}
         windowMs={windowMs}
       />
       <MetricDetailChart
         metric={controller}
+        label={controller.label}
         points={controllerPoints}
         range={controllerRange}
         windowMs={windowMs}

@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { StyleSheet, Text } from 'react-native'
+import { useSharedValue } from 'react-native-reanimated'
 
 import { computeAutoRange } from '@/components/ui/charts/chartMath'
 import { BmsCellVoltages } from '@/components/domain/control/BmsCellVoltages'
@@ -16,7 +17,7 @@ import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
 import { theme } from '@/constants/theme'
 
 const battVoltageCfg = telemetry.battVoltage
-const battPercentCfg = { ...battVoltageCfg, unit: '%', decimals: 0, label: 'BATTERY' }
+const battPercentCfg = { ...battVoltageCfg, unit: '%', decimals: 0 }
 const formatPercent = (value: number) => `${Math.round(value)}%`
 const formatVoltage = battVoltageCfg.formatWithUnit
 
@@ -32,6 +33,15 @@ export default function BatteryScreen() {
 
   const voltagePoints = useMemo(() => toTelemetryChartPoints(batteryVoltage), [batteryVoltage])
   const percentPoints = useMemo(() => toTelemetryChartPoints(batteryPercent), [batteryPercent])
+
+  // Gauge reads the latest of the calm ~1Hz decimated series — the same SoC source/cadence the
+  // center BatteryIndicator uses. The per-frame `liveTelemetryRuntime` tick carries the identical
+  // smoothed estimate but updates every BLE frame, which made the big % readout jitter.
+  const latestPercent = batteryPercent.at(-1)?.value ?? null
+  const percentValue = useSharedValue<number | null>(latestPercent)
+  useEffect(() => {
+    percentValue.value = latestPercent
+  }, [latestPercent, percentValue])
   const battery = useMemo(
     () => deriveBatteryConfig(board?.batteryConfig ?? null),
     [board?.batteryConfig],
@@ -57,7 +67,7 @@ export default function BatteryScreen() {
 
   return (
     <ControlDetailLayout
-      title={battVoltageCfg.label}
+      title="Battery"
       controlId={battVoltageCfg.controlId}
       unit={battVoltageCfg.unit}
     >
@@ -68,23 +78,19 @@ export default function BatteryScreen() {
       ) : null}
       <MetricDetailGauge
         metric={configured ? battPercentCfg : battVoltageCfg}
-        value={
-          configured
-            ? liveTelemetryRuntime.values.batteryPercent
-            : liveTelemetryRuntime.values.batteryVoltage
-        }
+        value={configured ? percentValue : liveTelemetryRuntime.values.batteryVoltage}
         min={configured ? 0 : voltageRange.y.min}
         max={configured ? 100 : voltageRange.y.max}
       />
       {configured ? (
         <MetricDetailChart
           metric={battVoltageCfg}
-          label="BATTERY %"
           points={percentPoints}
           range={PERCENT_RANGE}
           formatValue={formatPercent}
           windowMs={windowMs}
           secondary={voltageSecondary}
+          showStats={false}
         />
       ) : (
         <MetricDetailChart
@@ -92,6 +98,7 @@ export default function BatteryScreen() {
           points={voltagePoints}
           range={voltageRange}
           windowMs={windowMs}
+          showStats={false}
         />
       )}
       <BmsCellVoltages />

@@ -23,7 +23,7 @@ export function MetricDetailGauge({
   value,
   min = metric.chartRange.min,
   max = metric.chartRange.max,
-  label = metric.label.toUpperCase(),
+  label,
 }: MetricDetailGaugeProps) {
   const alertRules = useAlertsStore((s) => s.rules)
   const gradientsEnabled = useSettingsStore((s) => s.historyMetricGradientsEnabled)

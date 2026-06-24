@@ -38,12 +38,14 @@ export default function CurrentsScreen() {
     >
       <MetricDetailChart
         metric={motor}
+        label={motor.label}
         points={motorPoints}
         range={motorRange}
         windowMs={windowMs}
       />
       <MetricDetailChart
         metric={battery}
+        label={battery.label}
         points={batteryPoints}
         range={batteryRange}
         windowMs={windowMs}

@@ -53,7 +53,7 @@ export function MetricDetailChart({
   height = 120,
   showStats = true,
   formatValue = metric.formatWithUnit,
-  label = metric.label.toUpperCase(),
+  label,
   excludedRanges,
   secondary,
 }: MetricDetailChartProps) {

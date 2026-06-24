@@ -163,6 +163,7 @@ export default function ImuScreen() {
 
       <MetricDetailChart
         metric={pitchCfg}
+        label={pitchCfg.label}
         points={pitchPoints}
         range={pitchRange}
         height={80}
@@ -172,6 +173,7 @@ export default function ImuScreen() {
 
       <MetricDetailChart
         metric={rollCfg}
+        label={rollCfg.label}
         points={rollPoints}
         range={rollRange}
         height={80}
@@ -181,6 +183,7 @@ export default function ImuScreen() {
 
       <MetricDetailChart
         metric={balanceCfg}
+        label={balanceCfg.label}
         points={balancePoints}
         range={balanceRange}
         height={80}
