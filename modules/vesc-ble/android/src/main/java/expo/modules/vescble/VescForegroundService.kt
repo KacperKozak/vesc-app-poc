@@ -69,7 +69,6 @@ private const val LIVE_SERIES_INTERVAL_MS = 1_000L
 private const val LIVE_SERIES_BUCKETS = 64
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
-private const val REMOTE_TILT_REPEAT_MS = 40L
 
 data class SessionConfig(
     val appBoardId: String?,
@@ -300,6 +299,13 @@ class VescForegroundService : Service() {
     private val connectionCoordinator = ConnectionCoordinator(
         scheduler = scheduler,
         isCurrentSession = ::isCurrentBoardSession,
+    )
+    private val remoteTiltController = RemoteTiltController(
+        scheduler = scheduler,
+        transport = {
+            if (boardStatus == BoardPhase.Connected && boardConfig != null) currentBoardTransport() else null
+        },
+        send = ::sendPayload,
     )
     private val notificationController by lazy {
         VescNotificationController(
@@ -599,8 +605,6 @@ class VescForegroundService : Service() {
     private var latestPreciseLocation: LocationSnapshot? = null
     private var lastGpsPersistedAt = 0L
     private var isStoppingService = false
-    private var remoteTiltValue: Int? = null
-    private var remoteTiltRepeat: Cancellable? = null
     private var connectionSoundsEnabled = true
     private var configFsmState: ConfigRWState = ConfigRWState.Idle
     private var configReadCallbacks: PendingConfigRead? = null
@@ -1485,64 +1489,9 @@ class VescForegroundService : Service() {
         return gattClient.sendPayload(payload)
     }
 
-    /**
-     * Stream Floaty's temporary remote-tilt input (0..255 slider, 128 neutral).
-     * Refloat drops the remote input after ~1s of silence, so native repeats the
-     * current value while JS holds the slider. Requires `inputtilt_remote_type`
-     * to be set to UART in the board config.
-     *
-     * The repeat loop is the sole sender: rapid slider updates only mutate
-     * [remoteTiltValue] and coalesce to the latest value, instead of flooding the
-     * serialized GATT write queue with stale packets (which lagged the board the
-     * longer the slider was dragged).
-     */
-    fun setRemoteTilt(value: Int): Boolean {
-        val transport = currentBoardTransport()
-        if (transport == null || boardStatus != BoardPhase.Connected || boardConfig == null) return false
+    fun setRemoteTilt(value: Int): Boolean = remoteTiltController.set(value)
 
-        val clamped = value.coerceIn(0, 255)
-        val alreadyStreaming = remoteTiltValue != null
-        remoteTiltValue = clamped
-        if (alreadyStreaming) return true
-
-        // First press: send once immediately, then let the loop drive the stream.
-        val sent = sendPayload(buildRemoteTiltCommand(transport, clamped))
-        scheduleRemoteTiltRepeat()
-        return sent
-    }
-
-    private fun scheduleRemoteTiltRepeat() {
-        remoteTiltRepeat = scheduler.postDelayed(REMOTE_TILT_REPEAT_MS) {
-            val value = remoteTiltValue ?: return@postDelayed
-            val transport = currentBoardTransport()
-            if (boardStatus != BoardPhase.Connected || boardConfig == null || transport == null) {
-                remoteTiltValue = null
-                remoteTiltRepeat = null
-                return@postDelayed
-            }
-            sendPayload(buildRemoteTiltCommand(transport, value))
-            scheduleRemoteTiltRepeat()
-        }
-    }
-
-    fun stopRemoteTilt(): Boolean {
-        val wasActive = remoteTiltValue != null
-        remoteTiltValue = null
-        remoteTiltRepeat?.cancel()
-        remoteTiltRepeat = null
-
-        // Snap to neutral so the board releases tilt immediately instead of
-        // waiting for its ~1s remote-input timeout.
-        val transport = currentBoardTransport()
-        if (transport != null && boardStatus == BoardPhase.Connected && boardConfig != null) {
-            sendPayload(buildRemoteTiltCommand(transport, REMOTE_TILT_CENTER))
-        }
-        return wasActive
-    }
-
-    private fun clearRemoteTilt() {
-        stopRemoteTilt()
-    }
+    fun stopRemoteTilt(): Boolean = remoteTiltController.stop()
 
     private fun sendPayloadWithRetry(payload: ByteArray, session: BoardSession? = boardSession): Boolean {
         if (session != null && !isCurrentBoardSession(session)) return false
@@ -1565,7 +1514,7 @@ class VescForegroundService : Service() {
     }
 
     private fun stopCurrentBoardSession(emitDisconnected: Boolean, updateNotification: Boolean = true) {
-        clearRemoteTilt()
+        remoteTiltController.stop()
         flushTelemetryDiagnostics("stop")
         if (configFsmState !is ConfigRWState.Idle) {
             dispatchConfigEvent(
