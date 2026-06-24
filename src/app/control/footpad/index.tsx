@@ -33,6 +33,7 @@ export default function FootpadScreen() {
     <ControlDetailLayout title="Footpad">
       <MetricDetailChart
         metric={adc1}
+        label={adc1.label}
         points={adc1Points}
         range={adc1Range}
         height={80}
@@ -42,6 +43,7 @@ export default function FootpadScreen() {
 
       <MetricDetailChart
         metric={adc2}
+        label={adc2.label}
         points={adc2Points}
         range={adc2Range}
         height={80}

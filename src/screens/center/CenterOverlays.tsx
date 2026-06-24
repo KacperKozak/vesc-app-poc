@@ -11,7 +11,7 @@ import {
   SlidersHorizontalIcon,
   XIcon,
 } from 'phosphor-react-native'
-import { useCallback, useEffect, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 import {
   ActivityIndicator,
   Platform,
@@ -22,6 +22,7 @@ import {
   View,
 } from 'react-native'
 import Animated, {
+  cancelAnimation,
   FadeOut,
   useAnimatedStyle,
   useSharedValue,
@@ -563,12 +564,9 @@ export function CenterOverlays({
   const weatherLoading = useWeatherStore((s) => s.loading)
   const historyBusy = history.loadingSession || history.historyLoading
   const telemetryInteractive = mode === 'telemetry' && !revealGestureActive
-  const interfaceFadeStyle = useAnimatedStyle(
-    () => ({
-      opacity: telemetryInteractive ? (1 - dragOpacity.value) * telemetryReturnOpacity.value : 0,
-    }),
-    [telemetryInteractive],
-  )
+  const interfaceFadeStyle = useAnimatedStyle(() => ({
+    opacity: (1 - dragOpacity.value) * telemetryReturnOpacity.value,
+  }))
 
   const handleRemovePress = useCallback(() => {
     setRemoveConfirmVisible(true)
@@ -584,8 +582,8 @@ export function CenterOverlays({
   }, [])
 
   const handleRevealPan = useCallback(
-    (totalX: number, totalY: number, animationDuration?: number) => {
-      mapRef.current?.previewPanBy(totalX, totalY, animationDuration)
+    (totalX: number, totalY: number, animationDuration?: number, revealProgress?: number) => {
+      mapRef.current?.previewPanBy(totalX, totalY, animationDuration, revealProgress)
     },
     [mapRef],
   )
@@ -630,7 +628,8 @@ export function CenterOverlays({
     [mapRef, mode],
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    cancelAnimation(telemetryReturnOpacity)
     if (mode === 'telemetry') {
       revealProgress.value = 0
       dragOpacity.value = withTiming(0, TELEMETRY_FADE_TIMING)
@@ -643,6 +642,12 @@ export function CenterOverlays({
 
   return (
     <>
+      <MapVignette
+        mode={mode}
+        panelHeight={mode === 'history' ? panelHeight : 0}
+        visible={mode !== 'map'}
+        fadeOutProgress={dragOpacity}
+      />
       {(mode === 'telemetry' || revealGestureActive) && (
         <MapRevealGesture
           progress={revealProgress}
@@ -734,7 +739,6 @@ export function CenterOverlays({
         pointerEvents={mode === 'weather' ? 'box-none' : 'none'}
         style={[styles.weatherInterface, mode === 'weather' ? styles.visible : styles.hidden]}
       >
-        <MapVignette mode={mode} idPrefix="weather-map-vignette" />
         <IconButton
           icon={ArrowLeftIcon}
           onPress={map.exitWeather}
@@ -761,7 +765,6 @@ export function CenterOverlays({
 
       {mode === 'history' && history.selectedSession && (
         <>
-          <MapVignette mode={mode} panelHeight={panelHeight} idPrefix="history-map-vignette" />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
               <ActivityIndicator size="small" color={theme.wheel.color} />
@@ -801,11 +804,6 @@ export function CenterOverlays({
 
       {mode === 'history' && !history.selectedSession && (
         <>
-          <MapVignette
-            mode={mode}
-            panelHeight={panelHeight || 150}
-            idPrefix="history-map-vignette-loading"
-          />
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
               <ActivityIndicator size="small" color={theme.wheel.color} />

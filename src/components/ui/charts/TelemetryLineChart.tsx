@@ -70,7 +70,7 @@ export interface SecondaryChartSeries {
 }
 
 interface TelemetryLineChartProps {
-  label: string
+  label?: string
   value: string
   points: TelemetryChartPoint[]
   currentPoint: TelemetryChartPoint | null
@@ -293,7 +293,7 @@ export function TelemetryLineChart({
   return (
     <View style={[styles.card, containerStyle]}>
       <View style={styles.header}>
-        <Text style={styles.label}>{label}</Text>
+        {label ? <Text style={styles.label}>{label}</Text> : <View />}
         <View style={styles.headerRight}>
           {isDragging && currentPoint && (
             <Text style={styles.headerTime}>{formatTime(currentPoint.date)}</Text>
@@ -479,6 +479,7 @@ const styles = StyleSheet.create({
     color: theme.neutral.textSecondary,
     fontSize: 10,
     fontWeight: '700',
+    textTransform: 'uppercase',
   },
   value: {
     color: theme.neutral.textPrimary,

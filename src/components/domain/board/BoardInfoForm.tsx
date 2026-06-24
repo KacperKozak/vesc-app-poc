@@ -25,7 +25,6 @@ export function BoardInfoForm({
       <Input
         value={name}
         onChangeText={onChangeName}
-        placeholder="e.g. FloBoard Pro"
         placeholderTextColor={theme.neutral.textDim}
         returnKeyType="next"
         testID={nameTestID}
@@ -36,7 +35,7 @@ export function BoardInfoForm({
         style={styles.inputMultiline}
         value={description}
         onChangeText={onChangeDescription}
-        placeholder="Optional notes about this board"
+        placeholder="Optional"
         placeholderTextColor={theme.neutral.textDim}
         multiline
         numberOfLines={3}

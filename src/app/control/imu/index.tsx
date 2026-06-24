@@ -163,28 +163,28 @@ export default function ImuScreen() {
 
       <MetricDetailChart
         metric={pitchCfg}
+        label={pitchCfg.label}
         points={pitchPoints}
         range={pitchRange}
         height={80}
-        showStats={false}
         windowMs={windowMs}
       />
 
       <MetricDetailChart
         metric={rollCfg}
+        label={rollCfg.label}
         points={rollPoints}
         range={rollRange}
         height={80}
-        showStats={false}
         windowMs={windowMs}
       />
 
       <MetricDetailChart
         metric={balanceCfg}
+        label={balanceCfg.label}
         points={balancePoints}
         range={balanceRange}
         height={80}
-        showStats={false}
         windowMs={windowMs}
       />
     </ControlDetailLayout>

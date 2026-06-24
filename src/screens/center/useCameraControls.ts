@@ -9,6 +9,8 @@ import { getCameraAfterScreenDrag } from '@/screens/center/cameraPanProjection'
 import { getHistoryRouteCamera, type HistoryCameraViewport } from '@/screens/center/historyCamera'
 
 const MIN_ZOOM = 0
+const MAP_REVEAL_ZOOM_OUT_DELTA = 0.65
+const HISTORY_PREVIEW_ZOOM_OUT_DELTA = 0.8
 const HISTORY_DYNAMIC_FULL_DISTANCE_M = 80_000
 const HISTORY_DYNAMIC_MAX_EXTRA_DURATION_MS = 450
 const INSTANT_JUMP_DISTANCE_M = 10_000
@@ -80,6 +82,10 @@ function historyMoveDuration(distanceM: number) {
 
 function cameraMoveDuration(distanceM: number, smoothDuration: number) {
   return distanceM > INSTANT_JUMP_DISTANCE_M ? 0 : smoothDuration
+}
+
+function getHistoryPreviewZoom(zoomLevel: number) {
+  return clamp(zoomLevel - HISTORY_PREVIEW_ZOOM_OUT_DELTA, MIN_ZOOM, MAP_DEFAULTS.maxZoom)
 }
 
 function liveFollowKey(timestamp: number, camera: Pick<CameraSnapshot, 'heading' | 'zoomLevel'>) {
@@ -263,7 +269,9 @@ export function useCameraControls({
         viewport: historyViewport,
         maxZoom: MAP_DEFAULTS.maxZoom,
       })
-      const zoomLevel = camera?.zoomLevel ?? MAP_DEFAULTS.persistedGpsFallbackZoom
+      const zoomLevel = getHistoryPreviewZoom(
+        camera?.zoomLevel ?? MAP_DEFAULTS.persistedGpsFallbackZoom,
+      )
       return {
         centerCoordinate:
           camera?.centerCoordinate ??
@@ -366,10 +374,12 @@ export function useCameraControls({
           maxZoom: MAP_DEFAULTS.maxZoom,
         })
         if (historyCamera) {
+          const zoomLevel = getHistoryPreviewZoom(historyCamera.zoomLevel)
           cameraRef.current?.setCamera({
             ...historyCamera,
+            zoomLevel,
             heading: 0,
-            pitch: getPitchForZoom(historyCamera.zoomLevel, perspectiveEnabled),
+            pitch: getPitchForZoom(zoomLevel, perspectiveEnabled),
             animationDuration: duration,
             animationMode: 'easeTo',
           })
@@ -451,13 +461,19 @@ export function useCameraControls({
             : baseCamera
         setFollowGps(false)
       },
-      previewPanBy(deltaX: number, deltaY: number, animationDuration = 0) {
+      previewPanBy(deltaX: number, deltaY: number, animationDuration = 0, revealProgress = 0) {
         setFollowGps(false)
         const baseCamera = previewPanBaseRef.current
         if (!baseCamera) return
+        const zoomLevel = clamp(
+          baseCamera.zoomLevel - MAP_REVEAL_ZOOM_OUT_DELTA * revealProgress,
+          MIN_ZOOM,
+          MAP_DEFAULTS.maxZoom,
+        )
         cameraRef.current?.setCamera({
           ...getCameraAfterScreenDrag(baseCamera, deltaX, deltaY),
-          pitch: baseCamera.pitch,
+          zoomLevel,
+          pitch: getPitchForZoom(zoomLevel, perspectiveEnabled),
           animationMode: 'linearTo',
           animationDuration,
         })
