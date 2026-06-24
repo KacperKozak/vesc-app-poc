@@ -126,6 +126,10 @@ public class VescBleModule: Module {
       self.liveState()
     }
 
+    Function("getRemoteTiltState") { () -> [String: Any]? in
+      nil
+    }
+
     Function("setSelectedBoard") { (boardId: String?) in
       self.selectedBoardId = boardId
       var settings = Self.loadSettings()

@@ -115,6 +115,45 @@ class RemoteTiltControllerTest {
   }
 
   @Test
+  fun exposesCommandedValueAndLockState() {
+    val controller = controller()
+    assertEquals(REMOTE_TILT_CENTER, controller.currentValue)
+    assertFalse(controller.isLocked)
+
+    controller.lock(200)
+    assertEquals(200, controller.currentValue)
+    assertTrue(controller.isLocked)
+
+    // A live drag (hold) clears the lock but keeps reporting the held value.
+    controller.hold(160)
+    assertEquals(160, controller.currentValue)
+    assertFalse(controller.isLocked)
+
+    // Re-lock, then release: lock clears and the value tracks the ease.
+    controller.lock(255)
+    assertTrue(controller.isLocked)
+    controller.release(255, 400)
+    assertFalse(controller.isLocked)
+    scheduler.advance(200) // mid-ease
+    assertTrue(controller.currentValue in REMOTE_TILT_CENTER until 255)
+
+    scheduler.advance(400) // ease completes
+    assertEquals(REMOTE_TILT_CENTER, controller.currentValue)
+    assertFalse(controller.isLocked)
+  }
+
+  @Test
+  fun stopClearsLockState() {
+    val controller = controller()
+    controller.lock(200)
+    assertTrue(controller.isLocked)
+
+    controller.stop()
+    assertFalse(controller.isLocked)
+    assertEquals(REMOTE_TILT_CENTER, controller.currentValue)
+  }
+
+  @Test
   fun holdReturnsFalseWhenNotStreamable() {
     transport = null
     val controller = controller()

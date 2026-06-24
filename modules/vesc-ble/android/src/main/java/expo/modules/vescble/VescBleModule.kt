@@ -143,6 +143,9 @@ class VescBleModule : Module() {
     Function("getLiveState") {
       liveStateWithScan(VescForegroundService.currentLiveState(context.applicationContext))
     }
+    Function("getRemoteTiltState") {
+      VescForegroundService.currentRemoteTiltState()
+    }
     Function("setSelectedBoard") { boardId: String? ->
       runBlocking { AppDataRepository.get(context.applicationContext).setSelectedBoardId(boardId) }
     }
@@ -246,6 +249,9 @@ class VescBleModule : Module() {
     }
     AsyncFunction("setRemoteTilt") { value: Int ->
       VescForegroundService.setRemoteTilt(value)
+    }
+    AsyncFunction("lockRemoteTilt") { value: Int ->
+      VescForegroundService.lockRemoteTilt(value)
     }
     AsyncFunction("releaseRemoteTilt") { value: Int, durationMs: Int ->
       VescForegroundService.releaseRemoteTilt(value, durationMs.toLong())

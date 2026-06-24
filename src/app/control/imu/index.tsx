@@ -12,7 +12,12 @@ import { useLiveMetric, liveSelectors } from '@/hooks/useLiveMetric'
 import { useLiveWindowMs } from '@/store/settingsStore'
 import { useBleStore } from '@/store/bleStore'
 import { theme } from '@/constants/theme'
-import { releaseRemoteTilt, setRemoteTilt, stopRemoteTilt } from 'vesc-ble'
+import {
+  lockRemoteTilt as lockRemoteTiltNative,
+  releaseRemoteTilt,
+  setRemoteTilt,
+  stopRemoteTilt,
+} from 'vesc-ble'
 
 const pitchCfg = telemetry.pitch
 const rollCfg = telemetry.roll
@@ -64,13 +69,12 @@ export default function ImuScreen() {
   const balancePitch = useLiveMetric(liveSelectors.balancePitch)
   const windowMs = useLiveWindowMs()
   const boardConnected = useBleStore((state) => state.status === 'connected')
+  const syncRemoteTilt = useBleStore((state) => state.syncRemoteTilt)
 
-  useEffect(
-    () => () => {
-      void stopRemoteTilt()
-    },
-    [],
-  )
+  // Rehydrate the pad without reseeding native telemetry into chart history.
+  useEffect(() => {
+    syncRemoteTilt()
+  }, [syncRemoteTilt])
 
   const updateRemoteTilt = (value: number) => {
     void setRemoteTilt(value)
@@ -83,7 +87,7 @@ export default function ImuScreen() {
 
   // Lock band: hold the tilt indefinitely (native keeps streaming until cancel).
   const lockRemoteTilt = (value: number) => {
-    void setRemoteTilt(value)
+    void lockRemoteTiltNative(value)
   }
 
   // Cancel: native snaps to neutral; the pad stops its own thumb glide.

@@ -6,6 +6,18 @@ import kotlin.math.roundToInt
 
 private const val REMOTE_TILT_REPEAT_MS = 40L
 
+internal enum class RemoteTiltPhase(val wireValue: String) {
+    Idle("idle"),
+    Holding("holding"),
+    Decaying("decaying"),
+    Locked("locked"),
+}
+
+internal data class RemoteTiltDecayProgress(
+    val elapsedMs: Long,
+    val totalMs: Long,
+)
+
 /**
  * Streams Floaty's temporary remote-tilt input (0..255 slider, 128 neutral) to
  * the board. Refloat drops the remote input after ~1s of silence, so the active
@@ -64,9 +76,51 @@ internal class RemoteTiltController(
     private var stream: Stream? = null
     private var tick = 0
     private var repeat: Cancellable? = null
+    private var locked = false
+
+    /**
+     * The tilt currently being commanded (0..255), or [REMOTE_TILT_CENTER] when
+     * idle. Reflects the held/easing target the controller is streaming, not the
+     * board's own ramped angle.
+     */
+    val currentValue: Int
+        get() = stream?.valueAt(tick) ?: REMOTE_TILT_CENTER
+
+    /** Whether the active hold is a lock (held until cancelled), not a live drag. */
+    val isLocked: Boolean
+        get() = locked
+
+    val phase: RemoteTiltPhase
+        get() = when {
+            stream == null -> RemoteTiltPhase.Idle
+            locked -> RemoteTiltPhase.Locked
+            stream is Stream.Decay -> RemoteTiltPhase.Decaying
+            else -> RemoteTiltPhase.Holding
+        }
+
+    /** Exact native decay timing, used to render the pad's diagonal return path. */
+    val decayProgress: RemoteTiltDecayProgress?
+        get() {
+            val decay = stream as? Stream.Decay ?: return null
+            return RemoteTiltDecayProgress(
+                elapsedMs = tick.toLong() * REMOTE_TILT_REPEAT_MS,
+                totalMs = decay.steps.toLong() * REMOTE_TILT_REPEAT_MS,
+            )
+        }
 
     /** Hold a constant tilt (live pad drag). Streams until [release] or [stop]. */
-    fun hold(value: Int): Boolean = start(Stream.Hold(value.coerceIn(0, 255)))
+    fun hold(value: Int): Boolean {
+        val started = start(Stream.Hold(value.coerceIn(0, 255)))
+        if (started) locked = false
+        return started
+    }
+
+    /** Lock a constant tilt, held indefinitely until [stop] or a new [hold]/[release]. */
+    fun lock(value: Int): Boolean {
+        val started = start(Stream.Hold(value.coerceIn(0, 255)))
+        locked = started
+        return started
+    }
 
     /**
      * Release the pad into a linear ease from [value] back to neutral over
@@ -75,7 +129,9 @@ internal class RemoteTiltController(
     fun release(value: Int, durationMs: Long): Boolean {
         val steps = (durationMs / REMOTE_TILT_REPEAT_MS).toInt()
         if (steps <= 0) return stop()
-        return start(Stream.Decay(value.coerceIn(0, 255), steps))
+        val started = start(Stream.Decay(value.coerceIn(0, 255), steps))
+        if (started) locked = false
+        return started
     }
 
     fun stop(): Boolean {
@@ -124,6 +180,7 @@ internal class RemoteTiltController(
     private fun clear() {
         stream = null
         tick = 0
+        locked = false
         repeat?.cancel()
         repeat = null
     }

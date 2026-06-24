@@ -10,6 +10,8 @@ import {
 } from 'react-native'
 
 import { theme } from '@/constants/theme'
+import { useBleStore } from '@/store/bleStore'
+import type { RemoteTiltPhase } from 'vesc-ble'
 
 /** Neutral tilt (0..255), matching native `REMOTE_TILT_CENTER`. */
 const TILT_CENTER = 128
@@ -103,6 +105,10 @@ export function RemoteTiltPad({
   const onReleaseRef = useRef(onRelease)
   const onLockRef = useRef(onLock)
   const onCancelRef = useRef(onCancel)
+  const remoteTilt = useBleStore((state) => state.remoteTilt)
+  const remoteTiltRef = useRef(remoteTilt)
+  // A finger owns only its in-progress gesture presentation.
+  const interactingRef = useRef(false)
 
   useEffect(() => {
     disabledRef.current = disabled
@@ -110,13 +116,17 @@ export function RemoteTiltPad({
     onReleaseRef.current = onRelease
     onLockRef.current = onLock
     onCancelRef.current = onCancel
+    remoteTiltRef.current = remoteTilt
   })
 
   const [thumb, setThumb] = useState<{ x: number; y: number } | null>(null)
   const thumbRef = useRef<{ x: number; y: number } | null>(null)
   const [active, setActive] = useState(false)
-  const [display, setDisplay] = useState({ value: TILT_CENTER, durationMs: 0, locked: false })
-  const easeTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [display, setDisplay] = useState<{
+    value: number
+    durationMs: number
+    phase: RemoteTiltPhase
+  }>({ value: TILT_CENTER, durationMs: 0, phase: 'idle' })
 
   const moveThumb = (next: { x: number; y: number }) => {
     thumbRef.current = next
@@ -131,37 +141,65 @@ export function RemoteTiltPad({
 
   const rest = () => {
     moveThumb(restPosition())
-    setDisplay({ value: TILT_CENTER, durationMs: 0, locked: false })
+    setDisplay({ value: TILT_CENTER, durationMs: 0, phase: 'idle' })
     setActive(false)
   }
 
-  const stopEase = () => {
-    if (easeTimer.current) {
-      clearInterval(easeTimer.current)
-      easeTimer.current = null
+  // Native owns the active command. A finger controls local presentation only
+  // until release; native telemetry is the sole visible state afterwards.
+  const syncFromNative = () => {
+    if (interactingRef.current) return
+    const { width, height } = layoutRef.current
+    if (width === 0) return
+    const snapshot = remoteTiltRef.current
+    if (!snapshot) {
+      if (active || display.value !== TILT_CENTER || display.phase !== 'idle') rest()
+      return
     }
+    const x = (snapshot.value / TILT_MAX) * width
+    const restY = height - THUMB_RADIUS
+    const decayStartY = snapshot.decay ? yForDecay(snapshot.decay.totalMs, height) : restY
+    const y =
+      snapshot.phase === 'locked'
+        ? LOCK_BAND / 2
+        : snapshot.phase === 'decaying' && snapshot.decay
+          ? decayStartY +
+            (restY - decayStartY) * Math.min(1, snapshot.decay.elapsedMs / snapshot.decay.totalMs)
+          : restY
+    moveThumb({ x, y })
+    intentRef.current = {
+      value: snapshot.value,
+      durationMs: 0,
+      locked: snapshot.phase === 'locked',
+    }
+    setDisplay({ value: snapshot.value, durationMs: 0, phase: snapshot.phase })
+    setActive(true)
   }
 
-  useEffect(() => stopEase, [])
+  // Re-sync on mount and on every native telemetry snapshot.
+  useEffect(() => {
+    syncFromNative()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncs from refs; only re-run as native state changes
+  }, [remoteTilt])
 
   const track = useCallback((event: GestureResponderEvent) => {
     const { width, height } = layoutRef.current
     if (width === 0) return
-    stopEase()
+    interactingRef.current = true
     setActive(true)
     const x = clamp(event.nativeEvent.locationX, 0, width)
     const y = clamp(event.nativeEvent.locationY, 0, height)
     moveThumb({ x, y })
     const next = positionToIntent(x, y, width, height)
     intentRef.current = next
-    setDisplay(next)
+    setDisplay({ ...next, phase: 'holding' })
     onChangeRef.current(next.value)
   }, [])
 
-  // Glide the thumb to the center line while native eases tilt back to neutral.
+  // Release intent hands ownership straight back to native; no JS decay clock.
   const end = useCallback(() => {
+    interactingRef.current = false
     const { value, durationMs, locked } = intentRef.current
-    stopEase()
 
     // Lock band: hold the tilt forever. Native is already streaming the held
     // value, so just freeze the thumb and keep it active until cancelled.
@@ -172,33 +210,10 @@ export function RemoteTiltPad({
     }
 
     onReleaseRef.current(value, durationMs)
-    intentRef.current = { value: TILT_CENTER, durationMs: 0, locked: false }
-
-    const { width, height } = layoutRef.current
-    const start = thumbRef.current
-    if (durationMs <= 0 || start === null || width === 0) {
-      rest()
-      return
-    }
-    const target = restPosition()
-    const startedAt = Date.now()
-    easeTimer.current = setInterval(() => {
-      const t = Math.min(1, (Date.now() - startedAt) / durationMs)
-      const x = start.x + (target.x - start.x) * t
-      const y = start.y + (target.y - start.y) * t // slide to bottom as time runs out
-      moveThumb({ x, y })
-      setDisplay(positionToIntent(x, y, width, height))
-      if (t >= 1) {
-        stopEase()
-        rest()
-      }
-    }, 30)
   }, [])
 
   const cancel = useCallback(() => {
-    stopEase()
-    intentRef.current = { value: TILT_CENTER, durationMs: 0, locked: false }
-    rest()
+    interactingRef.current = false
     onCancelRef.current()
   }, [])
 
@@ -220,10 +235,15 @@ export function RemoteTiltPad({
     const { width, height } = event.nativeEvent.layout
     layoutRef.current = { width, height }
     if (thumbRef.current === null) moveThumb(restPosition())
+    syncFromNative()
   }
 
   const tiltPercent = Math.round(((display.value - TILT_CENTER) / (TILT_MAX - TILT_CENTER)) * 100)
   const decaySeconds = (display.durationMs / 1000).toFixed(1)
+  const remainingDecaySeconds =
+    remoteTilt?.phase === 'decaying' && remoteTilt.decay
+      ? (Math.max(0, remoteTilt.decay.totalMs - remoteTilt.decay.elapsedMs) / 1000).toFixed(1)
+      : null
 
   return (
     <View>
@@ -280,7 +300,13 @@ export function RemoteTiltPad({
           {tiltPercent > 0 ? `+${tiltPercent}` : tiltPercent}%
         </Text>
         <Text style={styles.readoutTime}>
-          {display.locked ? 'LOCKED ∞' : `ease ${decaySeconds}s`}
+          {display.phase === 'locked'
+            ? 'LOCKED ∞'
+            : display.phase === 'decaying'
+              ? `RETURNING ${remainingDecaySeconds ?? '0.0'}s`
+              : display.phase === 'holding'
+                ? 'ACTIVE'
+                : `ease ${decaySeconds}s`}
         </Text>
       </View>
       {active ? (
