@@ -96,9 +96,9 @@ export function HPill({ id, label, icon: IconComp, badge, color, onPress, childr
   const { activeId, openMenu, closeMenu } = useHPillsCtx()
   const pillRef = useRef<View>(null)
   const active = id === activeId
-  const accentBg = color?.bg ?? theme.gps.bg
-  const accentBorder = color?.border ?? theme.gps.border
-  const accentColor = color?.color ?? theme.gps.color
+  const accentBg = color?.bg ?? theme.palette.green.bg
+  const accentBorder = color?.border ?? theme.palette.green.border
+  const accentColor = color?.color ?? theme.palette.green.color
 
   const hasMenu = !!children
 
@@ -123,7 +123,11 @@ export function HPill({ id, label, icon: IconComp, badge, color, onPress, childr
       delayLongPress={400}
     >
       {IconComp ? (
-        <IconComp size={13} color={active ? accentColor : theme.neutral.textMuted} weight="fill" />
+        <IconComp
+          size={13}
+          color={active ? accentColor : theme.palette.slate.textMuted}
+          weight="fill"
+        />
       ) : null}
       <Text
         style={[
@@ -147,7 +151,7 @@ export function HPillAdd({ onPress }: HPillAddProps) {
   const { addRef } = useHPillsCtx()
   return (
     <Pressable ref={addRef} style={styles.addPill} onPress={onPress}>
-      <PlusIcon size={14} color="#64748b" weight="bold" />
+      <PlusIcon size={14} color={theme.palette.slate.color} weight="bold" />
     </Pressable>
   )
 }
@@ -178,7 +182,7 @@ export function HPillMenuItem({
     >
       <IconComp
         size={15}
-        color={danger ? theme.error.text : theme.neutral.textSecondary}
+        color={danger ? theme.status.error.text : theme.palette.slate.textSecondary}
         weight="bold"
       />
       <Text style={[styles.menuItemText, danger && styles.menuItemTextDanger]}>{label}</Text>
@@ -221,15 +225,15 @@ const styles = StyleSheet.create({
     maxWidth: 160,
   },
   pillInactive: {
-    backgroundColor: theme.neutral.surface,
-    borderColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.surface,
+    borderColor: theme.palette.slate.border,
   },
   pillText: {
     fontSize: 13,
     fontWeight: '700',
   },
   pillTextInactive: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
   },
   addPill: {
     height: 36,
@@ -237,7 +241,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -254,33 +258,33 @@ const styles = StyleSheet.create({
   },
   menuItemSeparator: {
     borderTopWidth: 1,
-    borderTopColor: theme.neutral.surface,
+    borderTopColor: theme.palette.slate.surface,
   },
   menuItemText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 14,
     fontWeight: '700',
   },
   menuItemTextDanger: {
-    color: theme.error.text,
+    color: theme.status.error.text,
   },
   draftDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: theme.neutral.textDim,
+    backgroundColor: theme.palette.slate.textDim,
   },
   enabledDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: theme.gps.color,
+    backgroundColor: theme.palette.green.color,
   },
   disabledDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     borderWidth: 1.5,
-    borderColor: theme.neutral.textDim,
+    borderColor: theme.palette.slate.textDim,
   },
 })

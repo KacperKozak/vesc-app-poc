@@ -70,8 +70,8 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
     const a = tick.adc1.value
     const active = a != null && a > FOOTPAD_ACTIVE_V
     return {
-      borderColor: active ? theme.gps.text : theme.neutral.textDim,
-      backgroundColor: active ? theme.gps.text : 'transparent',
+      borderColor: active ? theme.palette.green.text : theme.palette.slate.textDim,
+      backgroundColor: active ? theme.palette.green.text : 'transparent',
     }
   })
 
@@ -79,8 +79,8 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
     const a = tick.adc2.value
     const active = a != null && a > FOOTPAD_ACTIVE_V
     return {
-      borderColor: active ? theme.gps.text : theme.neutral.textDim,
-      backgroundColor: active ? theme.gps.text : 'transparent',
+      borderColor: active ? theme.palette.green.text : theme.palette.slate.textDim,
+      backgroundColor: active ? theme.palette.green.text : 'transparent',
     }
   })
 
@@ -178,13 +178,21 @@ export function BottomTelemetryStrip({ revealProgress }: BottomTelemetryStripPro
             <View
               style={[
                 styles.imuMarker,
-                { borderColor: imuConnected ? theme.target.color : theme.neutral.textMuted },
+                {
+                  borderColor: imuConnected
+                    ? theme.palette.purple.color
+                    : theme.palette.slate.textMuted,
+                },
               ]}
             />
             <Animated.View
               style={[
                 styles.imuLine,
-                { backgroundColor: imuConnected ? theme.target.color : theme.neutral.textMuted },
+                {
+                  backgroundColor: imuConnected
+                    ? theme.palette.purple.color
+                    : theme.palette.slate.textMuted,
+                },
                 imuLineStyle,
               ]}
             />
@@ -227,13 +235,13 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   subLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 8,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   value: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontFamily: 'monospace',
     fontWeight: '800',
@@ -263,7 +271,7 @@ const styles = StyleSheet.create({
     height: 9,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: theme.neutral.textDim,
+    borderColor: theme.palette.slate.textDim,
     backgroundColor: 'transparent',
   },
   cellPressed: {
@@ -273,7 +281,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 1,
     borderRadius: 1,
-    backgroundColor: theme.target.color,
+    backgroundColor: theme.palette.purple.color,
   },
   imuMarker: {
     position: 'absolute',
@@ -281,7 +289,7 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.target.color,
+    borderColor: theme.palette.purple.color,
     backgroundColor: 'transparent',
   },
 })

@@ -57,7 +57,7 @@ export function HistoryStatsBar({ session }: HistoryStatsBarProps) {
               ))}
               <View style={styles.toggleCell}>
                 <View style={styles.expandedToggle}>
-                  <CaretUpIcon size={16} color={theme.neutral.textSecondary} weight="bold" />
+                  <CaretUpIcon size={16} color={theme.palette.slate.textSecondary} weight="bold" />
                 </View>
               </View>
             </View>
@@ -74,7 +74,7 @@ export function HistoryStatsBar({ session }: HistoryStatsBarProps) {
             ))}
             <View style={styles.toggleCell}>
               <View style={styles.toggle}>
-                <CaretDownIcon size={16} color={theme.neutral.textSecondary} weight="bold" />
+                <CaretDownIcon size={16} color={theme.palette.slate.textSecondary} weight="bold" />
               </View>
             </View>
           </View>
@@ -112,63 +112,63 @@ function sessionToStats(session: HistorySession | null): StatItem[] {
       label: 'Distance',
       value: session ? formatDistance(session.distanceM) : '',
       icon: RoadHorizonIcon,
-      accent: theme.wheel.color,
+      accent: theme.palette.sky.color,
     },
     {
       key: 'topSpeed',
       label: 'Top Speed',
       value: session ? formatSpeed(session.maxSpeedKmh) : '',
       icon: GaugeIcon,
-      accent: theme.warning.color,
+      accent: theme.telemetry.speed,
     },
     {
       key: 'avgSpeed',
       label: 'Avg Speed',
       value: session ? formatSpeed(session.avgSpeedKmh) : '',
       icon: RepeatIcon,
-      accent: theme.teal.color,
+      accent: theme.palette.teal.color,
     },
     {
       key: 'rideTime',
       label: 'Time',
       value: session ? formatDuration(rideDurationMs(session)) : '',
       icon: ClockCountdownIcon,
-      accent: theme.target.color,
+      accent: theme.palette.purple.color,
     },
     {
       key: 'mosfetTemp',
       label: 'Ctrl Max',
       value: session ? formatTemp(session.maxTempMosfet) : '',
       icon: ThermometerHotIcon,
-      accent: theme.error.color,
+      accent: theme.telemetry.controllerTemp,
     },
     {
       key: 'motorTemp',
       label: 'Motor Max',
       value: session ? formatTemp(session.maxTempMotor) : '',
       icon: ThermometerSimpleIcon,
-      accent: theme.highlight.color,
+      accent: theme.telemetry.motorTemp,
     },
     {
       key: 'batteryUsed',
       label: 'Used',
       value: session ? formatWh(session.batteryUsedWh) : '',
       icon: BatteryMediumIcon,
-      accent: theme.warning.color,
+      accent: theme.status.warning.color,
     },
     {
       key: 'batteryRegen',
       label: 'Regen',
       value: session ? formatWh(session.batteryRegenWh) : '',
       icon: BatteryChargingIcon,
-      accent: theme.gps.color,
+      accent: theme.palette.green.color,
     },
     {
       key: 'maxDuty',
       label: 'Max Duty',
       value: session ? formatDuty(session.maxDuty) : '',
       icon: LightningIcon,
-      accent: theme.bran.color,
+      accent: theme.telemetry.duty,
     },
   ]
 }
@@ -216,13 +216,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   compactValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
     textAlign: 'left',
   },
   compactLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 8,
     fontWeight: '700',
     textAlign: 'left',
@@ -254,9 +254,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   expandedPanel: {
-    backgroundColor: theme.neutral.mapOverlayPill,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.6),
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
     borderRadius: 12,
     paddingTop: 0,
     paddingBottom: 8,
@@ -284,9 +284,9 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
   },
   expandedToggle: {
     width: 38,

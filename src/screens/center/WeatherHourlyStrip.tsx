@@ -69,17 +69,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   hour: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
   },
   temp: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },
   precip: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 10,
     fontWeight: '600',
   },

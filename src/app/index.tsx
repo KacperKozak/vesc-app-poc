@@ -98,6 +98,6 @@ export default function MainScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
 })

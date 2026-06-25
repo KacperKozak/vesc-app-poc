@@ -3,6 +3,7 @@
   "tags": ["-lintignore"],
   "ignoreBinaries": ["maestro"],
   "ignore": ["scripts/**/*", ".agents/**/*", ".claude/**/*", "app.config.ts"],
+  "ignoreExportsUsedInFile": true,
   "workspaces": {
     ".": {
       "entry": ["plugins/**/*"]

@@ -93,7 +93,7 @@ export default function ModalsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
-  previewHint: { color: theme.neutral.textDim, fontSize: 12, fontStyle: 'italic' },
+  previewHint: { color: theme.palette.slate.textDim, fontSize: 12, fontStyle: 'italic' },
 })

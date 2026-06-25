@@ -45,14 +45,14 @@ export function EditBoardSettings({
         title={name.trim() || 'Unnamed board'}
         description={description.trim() || 'No description'}
         iconSize={48}
-        iconColor={theme.wheel.color}
+        iconColor={theme.palette.sky.color}
         iconWeight="duotone"
       />
 
       <SettingsCard>
         <BoardSettingRow
           icon={BatteryChargingIcon}
-          iconColor={theme.highlight.text}
+          iconColor={theme.palette.yellow.text}
           label={keepMissingBatteryConfig ? 'Not configured' : batterySummary.title}
           value={batterySummary.value}
           hint={batterySummary.hint}
@@ -64,7 +64,7 @@ export function EditBoardSettings({
       <SettingsCard>
         <SettingsRow
           icon={LinkIcon}
-          iconColor={theme.teal.color}
+          iconColor={theme.palette.cyan.color}
           label="Board Link"
           hint={
             link
@@ -112,7 +112,7 @@ export function EditBoardSettings({
         android_ripple={interaction.ripple}
         onPress={onRemove}
       >
-        <TrashIcon size={14} color={theme.error.text} weight="bold" />
+        <TrashIcon size={14} color={theme.status.error.text} weight="bold" />
         <Text style={styles.removeLabel}>Remove board</Text>
       </Pressable>
     </>
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     backgroundColor: interaction.pressedBg,
   },
   removeLabel: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     fontSize: 12,
     fontWeight: '600',
   },

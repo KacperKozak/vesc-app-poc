@@ -27,7 +27,7 @@ function ZonePillsShowcase() {
           id="home"
           label="Home"
           badge={<HPillDot status="enabled" />}
-          color={theme.gps}
+          color={theme.palette.green}
           onPress={() => setSelectedId('home')}
         >
           <HPillMenuItem icon={TrashIcon} label="Delete" onPress={() => undefined} danger />
@@ -36,7 +36,7 @@ function ZonePillsShowcase() {
           id="work"
           label="Work"
           badge={<HPillDot status="disabled" />}
-          color={theme.gps}
+          color={theme.palette.green}
           onPress={() => setSelectedId('work')}
         >
           <HPillMenuItem icon={TrashIcon} label="Delete" onPress={() => undefined} danger />
@@ -45,7 +45,7 @@ function ZonePillsShowcase() {
           id="custom"
           label="Custom"
           badge={<HPillDot status="draft" />}
-          color={theme.gps}
+          color={theme.palette.green}
           onPress={() => setSelectedId('custom')}
         >
           <HPillMenuItem icon={PencilSimpleIcon} label="Rename" onPress={() => undefined} />
@@ -75,7 +75,7 @@ function MapOptionSelectorShowcase() {
         icon: (
           <ArrowUpIcon
             size={20}
-            color={active === 'north' ? theme.gps.text : theme.neutral.textDim}
+            color={active === 'north' ? theme.palette.green.text : theme.palette.slate.textDim}
             weight="bold"
           />
         ),
@@ -86,7 +86,7 @@ function MapOptionSelectorShowcase() {
         icon: (
           <NavigationArrowIcon
             size={20}
-            color={active === 'gps' ? theme.gps.text : theme.neutral.textDim}
+            color={active === 'gps' ? theme.palette.green.text : theme.palette.slate.textDim}
             weight="fill"
           />
         ),
@@ -97,7 +97,7 @@ function MapOptionSelectorShowcase() {
         icon: (
           <ArrowsClockwiseIcon
             size={20}
-            color={active === 'free' ? theme.gps.text : theme.neutral.textDim}
+            color={active === 'free' ? theme.palette.green.text : theme.palette.slate.textDim}
             weight="bold"
           />
         ),
@@ -107,10 +107,11 @@ function MapOptionSelectorShowcase() {
   )
 
   const activeIcon = useMemo(() => {
-    if (active === 'north') return <ArrowUpIcon size={21} color={theme.gps.text} weight="bold" />
+    if (active === 'north')
+      return <ArrowUpIcon size={21} color={theme.palette.green.text} weight="bold" />
     if (active === 'gps')
-      return <NavigationArrowIcon size={21} color={theme.gps.text} weight="fill" />
-    return <ArrowsClockwiseIcon size={21} color={theme.gps.text} weight="bold" />
+      return <NavigationArrowIcon size={21} color={theme.palette.green.text} weight="fill" />
+    return <ArrowsClockwiseIcon size={21} color={theme.palette.green.text} weight="bold" />
   }, [active])
 
   return (
@@ -132,8 +133,8 @@ function MapOptionSelectorShowcase() {
         <MapOptionSelector
           activeKey={active}
           activeIcon={activeIcon}
-          activeColor={theme.gps.text}
-          activeBackground={theme.gps.bg}
+          activeColor={theme.palette.green.text}
+          activeBackground={theme.palette.green.bg}
           collapsedAccessibilityLabel="Navigation mode"
           expanded={expanded}
           options={options}
@@ -164,6 +165,6 @@ export default function MenusPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
 })

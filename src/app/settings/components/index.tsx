@@ -95,6 +95,6 @@ export default function ComponentsIndex() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 16, gap: 8 },
 })

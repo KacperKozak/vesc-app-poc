@@ -19,14 +19,14 @@ export function ShowcaseCard({ name, children, controls }: ShowcaseCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     overflow: 'hidden',
   },
   name: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 12,
     fontWeight: '800',
     fontFamily: 'monospace',
@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   },
   controls: {
     borderTopWidth: 1,
-    borderTopColor: theme.neutral.border,
+    borderTopColor: theme.palette.slate.border,
     paddingHorizontal: 14,
     paddingVertical: 8,
     gap: 6,

@@ -154,7 +154,7 @@ export default function ImuScreen() {
             value={currentPitch == null ? DASH : pitchCfg.formatWithUnit(currentPitch)}
           >
             <ZeroLevelMarker
-              color={currentPitch == null ? theme.neutral.textDim : theme.wheel.color}
+              color={currentPitch == null ? theme.palette.slate.textDim : theme.palette.sky.color}
             />
             <View
               style={[
@@ -169,7 +169,8 @@ export default function ImuScreen() {
                 styles.sideBoard,
                 {
                   transform: [{ rotate: `${pitchDeg}deg` }],
-                  backgroundColor: currentPitch == null ? theme.neutral.textDim : theme.wheel.color,
+                  backgroundColor:
+                    currentPitch == null ? theme.palette.slate.textDim : theme.palette.sky.color,
                 },
               ]}
             />
@@ -180,14 +181,15 @@ export default function ImuScreen() {
             value={currentRoll == null ? DASH : rollCfg.formatWithUnit(currentRoll)}
           >
             <ZeroLevelMarker
-              color={currentRoll == null ? theme.neutral.textDim : theme.teal.color}
+              color={currentRoll == null ? theme.palette.slate.textDim : theme.palette.cyan.color}
             />
             <View
               style={[
                 styles.frontBoard,
                 {
                   transform: [{ rotate: `${rollDeg}deg` }],
-                  backgroundColor: currentRoll == null ? theme.neutral.textDim : theme.teal.color,
+                  backgroundColor:
+                    currentRoll == null ? theme.palette.slate.textDim : theme.palette.cyan.color,
                 },
               ]}
             />
@@ -254,19 +256,19 @@ const styles = StyleSheet.create({
   },
   liveCell: {
     flex: 1,
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 10,
     padding: 14,
     gap: 6,
   },
   liveLabel: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   liveValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 20,
     fontFamily: 'monospace',
     fontWeight: '600',
@@ -281,13 +283,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionLabel: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   sectionHint: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -300,27 +302,27 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surface,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surface,
   },
   remoteTiltHint: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     lineHeight: 17,
   },
   remoteTiltDisabled: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 12,
   },
   remoteTiltWarning: {
-    color: theme.warning.text,
+    color: theme.status.warning.text,
     fontSize: 12,
     fontWeight: '600',
   },
   attitudeView: {
     flex: 1,
     minHeight: 176,
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 10,
     padding: 10,
     gap: 10,
@@ -332,13 +334,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   attitudeTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   attitudeValue: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontFamily: 'monospace',
     fontWeight: '600',
@@ -367,14 +369,14 @@ const styles = StyleSheet.create({
     width: 12,
     height: 2,
     borderRadius: 1,
-    backgroundColor: theme.neutral.textDim,
+    backgroundColor: theme.palette.slate.textDim,
   },
   zeroRing: {
     width: 12,
     height: 12,
     borderRadius: 999,
     borderWidth: 0,
-    backgroundColor: theme.neutral.textDim,
+    backgroundColor: theme.palette.slate.textDim,
   },
   sideBoard: {
     position: 'absolute',
@@ -387,7 +389,7 @@ const styles = StyleSheet.create({
     width: '54%',
     height: 3,
     borderRadius: 2,
-    backgroundColor: theme.neutral.textMuted,
+    backgroundColor: theme.palette.slate.textMuted,
   },
   frontBoard: {
     position: 'absolute',

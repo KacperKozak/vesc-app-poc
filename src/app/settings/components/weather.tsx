@@ -41,12 +41,18 @@ export default function WeatherPage() {
           }
         >
           <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center', paddingVertical: 8 }}>
-            <WeatherIcon code={code} size={48} color={theme.wheel.color} />
+            <WeatherIcon code={code} size={48} color={theme.palette.sky.color} />
             <View>
-              <Text style={{ color: theme.neutral.textSecondary, fontSize: 12, fontWeight: '600' }}>
+              <Text
+                style={{
+                  color: theme.palette.slate.textSecondary,
+                  fontSize: 12,
+                  fontWeight: '600',
+                }}
+              >
                 Code: {code}
               </Text>
-              <Text style={{ color: theme.neutral.textDim, fontSize: 11 }}>
+              <Text style={{ color: theme.palette.slate.textDim, fontSize: 11 }}>
                 {weatherCodes.find((w) => w.code === code)?.label ?? 'Unknown'}
               </Text>
             </View>
@@ -58,6 +64,6 @@ export default function WeatherPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
 })

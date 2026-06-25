@@ -25,7 +25,7 @@ export function BoardInfoForm({
       <Input
         value={name}
         onChangeText={onChangeName}
-        placeholderTextColor={theme.neutral.textDim}
+        placeholderTextColor={theme.palette.slate.textDim}
         returnKeyType="next"
         testID={nameTestID}
         accessibilityLabel="Board name"
@@ -36,7 +36,7 @@ export function BoardInfoForm({
         value={description}
         onChangeText={onChangeDescription}
         placeholder="Optional"
-        placeholderTextColor={theme.neutral.textDim}
+        placeholderTextColor={theme.palette.slate.textDim}
         multiline
         numberOfLines={3}
         textAlignVertical="top"
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   label: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,

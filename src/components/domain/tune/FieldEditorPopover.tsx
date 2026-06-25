@@ -80,7 +80,7 @@ function FieldEditorPopoverInner({ target, onCancel, onApply }: FieldEditorPopov
             <Text style={styles.fieldId}>{target.fieldId}</Text>
           </View>
           <Pressable style={styles.closeBtn} onPress={onCancel}>
-            <XIcon size={14} color={theme.neutral.textSecondary} weight="bold" />
+            <XIcon size={14} color={theme.palette.slate.textSecondary} weight="bold" />
           </Pressable>
         </View>
 
@@ -137,7 +137,7 @@ function FieldEditorPopoverInner({ target, onCancel, onApply }: FieldEditorPopov
             style={styles.applyBtn}
             onPress={() => onApply(snapValue(draftValue, target.min, target.max, target.step))}
           >
-            <CheckIcon size={14} color={theme.neutral.surfaceDeep} weight="bold" />
+            <CheckIcon size={14} color={theme.palette.slate.surfaceDeep} weight="bold" />
             <Text style={styles.applyText}>Apply</Text>
           </Pressable>
         </View>
@@ -165,12 +165,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '800',
   },
   fieldId: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -180,10 +180,10 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
   },
   help: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -196,12 +196,12 @@ const styles = StyleSheet.create({
   },
   linkedSection: {
     borderTopWidth: 1,
-    borderTopColor: theme.neutral.surface,
+    borderTopColor: theme.palette.slate.surface,
     paddingTop: 10,
     gap: 6,
   },
   linkedTitle: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -214,13 +214,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkedLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '600',
     flex: 1,
   },
   linkedValue: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -236,12 +236,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -249,14 +249,14 @@ const styles = StyleSheet.create({
     height: 38,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: theme.wheel.color,
+    backgroundColor: theme.palette.sky.color,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   applyText: {
-    color: theme.neutral.surfaceDeep,
+    color: theme.palette.slate.surfaceDeep,
     fontSize: 13,
     fontWeight: '900',
   },

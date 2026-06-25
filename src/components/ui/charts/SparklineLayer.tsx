@@ -1,5 +1,7 @@
 import { Circle, Path, Skia } from '@shopify/react-native-skia'
 
+import { theme } from '@/constants/theme'
+
 export interface SparklinePoint {
   ts: number
   value: number
@@ -25,8 +27,8 @@ export interface SparklinePaths {
   maxPos: { x: number; y: number } | null
 }
 
-const BASELINE_COLOR = '#334155'
-const MAX_DOT_STROKE = '#0f172a'
+const BASELINE_COLOR = theme.palette.slate.border
+const MAX_DOT_STROKE = theme.palette.slate.surfaceDeep
 
 export function buildSparklinePaths({
   points,

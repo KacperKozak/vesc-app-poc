@@ -128,15 +128,15 @@ const OFFSCREEN_GPS_INDICATOR_SIZE = 64
 const OFFSCREEN_GPS_EDGE_SIDE_INSET = 58
 const OFFSCREEN_GPS_EDGE_TOP_INSET = 122
 const OFFSCREEN_GPS_EDGE_BOTTOM_INSET = 142
-const GPS_POINT_COLOR = theme.target.color
-const GPS_POINT_TEXT_COLOR = theme.target.text
-const DESTINATION_POINT_COLOR = theme.gps.color
-const DESTINATION_POINT_TEXT_COLOR = theme.gps.text
+const GPS_POINT_COLOR = theme.map.user
+const GPS_POINT_TEXT_COLOR = theme.palette.purple.text
+const DESTINATION_POINT_COLOR = theme.map.target
+const DESTINATION_POINT_TEXT_COLOR = theme.palette.green.text
 const HISTORY_ROUTE_HIGHLIGHT_INTERVAL_MS = 50
 const HISTORY_ROUTE_HIGHLIGHT_DELAY_MS = 500
 const HISTORY_ROUTE_HIGHLIGHT_WIDTH = 0.24
-const HISTORY_ROUTE_HIGHLIGHT_COLOR = theme.neutral.routeHighlight
-const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = theme.neutral.routeHighlightTransparent
+const HISTORY_ROUTE_HIGHLIGHT_COLOR = theme.alpha(theme.palette.mono.white, 0.85)
+const HISTORY_ROUTE_HIGHLIGHT_TRANSPARENT = theme.alpha(theme.palette.mono.white, 0)
 const HISTORY_ROUTE_HIGHLIGHT_MIN_DURATION_MS = 1400
 const HISTORY_ROUTE_HIGHLIGHT_MAX_DURATION_MS = 5200
 const HISTORY_ROUTE_HIGHLIGHT_MS_PER_KM = 260
@@ -176,12 +176,12 @@ const HISTORY_MARKER_ICONS: Record<HistoryMarker['type'], Icon> = {
 }
 
 const HISTORY_MARKER_COLORS: Record<HistoryMarker['type'], string> = {
-  app_stop: theme.highlight.color,
-  connected: theme.gps.color,
-  connection_lost: theme.warning.color,
-  disconnected: theme.warning.color,
-  error: theme.error.color,
-  gap: theme.highlight.color,
+  app_stop: theme.palette.yellow.color,
+  connected: theme.palette.green.color,
+  connection_lost: theme.status.warning.color,
+  disconnected: theme.status.warning.color,
+  error: theme.status.error.color,
+  gap: theme.palette.yellow.color,
 }
 
 function formatMarkerTime(ms: number): string {
@@ -602,10 +602,18 @@ function HistoryMapLayers({
         </ShapeSource>
       )}
       {rideRoute[0] && (
-        <MapPin id="center-ride-start" coordinate={rideRoute[0]} color={theme.gps.color} />
+        <MapPin
+          id="center-ride-start"
+          coordinate={rideRoute[0]}
+          color={theme.palette.green.color}
+        />
       )}
       {rideRoute.at(-1) && (
-        <MapPin id="center-ride-end" coordinate={rideRoute.at(-1)!} color={theme.error.color} />
+        <MapPin
+          id="center-ride-end"
+          coordinate={rideRoute.at(-1)!}
+          color={theme.status.error.color}
+        />
       )}
       {seekPosition && seekPosition.latitude != null && seekPosition.longitude != null && (
         <MapPin
@@ -948,9 +956,7 @@ function CenterMapLayers({
           minZoomLevel={14}
           maxZoomLevel={22}
           style={{
-            fillExtrusionColor: isOneDark
-              ? theme.neutral.mapBuildingDark
-              : theme.neutral.mapBuildingLight,
+            fillExtrusionColor: isOneDark ? theme.map.buildingDark : theme.map.buildingLight,
             fillExtrusionHeight: ['coalesce', ['get', 'height'], 12],
             fillExtrusionBase: ['coalesce', ['get', 'min_height'], 0],
             fillExtrusionOpacity: isOneDark ? 0.65 : 0.42,
@@ -1833,8 +1839,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: GPS_POINT_COLOR,
-    backgroundColor: theme.neutral.surfaceDeep,
-    shadowColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
+    shadowColor: theme.palette.slate.surfaceDeep,
     shadowOpacity: 0.32,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
@@ -1852,7 +1858,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     width: EDGE_GUARD_WIDTH,
-    backgroundColor: theme.neutral.touchInvisible,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0),
     zIndex: 3,
   },
   edgeGuardRight: {
@@ -1861,24 +1867,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: EDGE_GUARD_WIDTH,
-    backgroundColor: theme.neutral.touchInvisible,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0),
     zIndex: 3,
   },
   emptyContainer: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
     paddingHorizontal: 28,
     gap: 8,
   },
   emptyTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 18,
     fontWeight: '700',
   },
   emptyText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
@@ -1887,10 +1893,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     left: 6,
-    color: theme.neutral.textDimLight,
+    color: theme.alpha(theme.palette.mono.white, 0.6),
     fontSize: 10,
     fontWeight: '500',
-    backgroundColor: theme.neutral.dimOverlay,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.3),
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,

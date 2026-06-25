@@ -430,7 +430,7 @@ export function HistoryTelemetryPanel({
                 secondary: {
                   points: batteryVoltagePoints,
                   range: batteryRange,
-                  color: theme.neutral.textMuted,
+                  color: theme.palette.slate.textMuted,
                   value: telemetry.battVoltage.formatWithUnit(headSample.batteryVoltage),
                 },
               }
@@ -539,7 +539,7 @@ export function HistoryTelemetryPanel({
             onPress={onPrevious}
             disabled={!canPrevious}
           >
-            <CaretLeftIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+            <CaretLeftIcon size={22} color={theme.palette.slate.textSecondary} weight="bold" />
           </Pressable>
           <View style={styles.navDivider} />
           <Pressable
@@ -555,7 +555,7 @@ export function HistoryTelemetryPanel({
                 {formatRideMeta(titleStartMs, titleEndMs, deviceName)}
               </Text>
             </View>
-            <CaretDownIcon size={12} color={theme.neutral.textSecondary} weight="bold" />
+            <CaretDownIcon size={12} color={theme.palette.slate.textSecondary} weight="bold" />
           </Pressable>
           <View style={styles.navDivider} />
           <Pressable
@@ -568,7 +568,7 @@ export function HistoryTelemetryPanel({
             onPress={onNext}
             disabled={!canNext}
           >
-            <CaretRightIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+            <CaretRightIcon size={22} color={theme.palette.slate.textSecondary} weight="bold" />
           </Pressable>
         </View>
         <View style={styles.navSide}>
@@ -640,7 +640,7 @@ export function HistoryTelemetryPanel({
                   <View
                     style={[
                       styles.metricTabLine,
-                      { backgroundColor: active ? cfg.color : theme.neutral.surface },
+                      { backgroundColor: active ? cfg.color : theme.palette.slate.surface },
                     ]}
                   />
                   {metric.multilineLabel ? (
@@ -676,14 +676,19 @@ export function HistoryTelemetryPanel({
           <View style={styles.metricLegend}>
             <View style={styles.metricLegendItem}>
               <View
-                style={[styles.metricLegendLine, { backgroundColor: theme.neutral.textSecondary }]}
+                style={[
+                  styles.metricLegendLine,
+                  { backgroundColor: theme.palette.slate.textSecondary },
+                ]}
               />
               <Text style={styles.metricLegendText} numberOfLines={1}>
                 Low speed
               </Text>
             </View>
             <View style={styles.metricLegendItem}>
-              <View style={[styles.metricLegendLine, { backgroundColor: theme.highlight.color }]} />
+              <View
+                style={[styles.metricLegendLine, { backgroundColor: theme.palette.yellow.color }]}
+              />
               <Text style={styles.metricLegendText} numberOfLines={1}>
                 Free spin
               </Text>
@@ -730,13 +735,13 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 27,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     overflow: 'hidden',
   },
   mediaEnabled: {
-    borderColor: theme.target.border,
-    backgroundColor: theme.target.bg,
+    borderColor: theme.palette.purple.border,
+    backgroundColor: theme.palette.purple.bg,
   },
   mediaCountBadge: {
     position: 'absolute',
@@ -749,11 +754,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: theme.neutral.surfaceDeep,
-    backgroundColor: theme.target.color,
+    borderColor: theme.palette.slate.surfaceDeep,
+    backgroundColor: theme.palette.purple.color,
   },
   mediaCountText: {
-    color: theme.neutral.bg,
+    color: theme.palette.slate.bg,
     fontSize: 9,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
@@ -773,7 +778,7 @@ const styles = StyleSheet.create({
   navDivider: {
     width: 1,
     height: 24,
-    backgroundColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.border,
   },
   titleButton: {
     flex: 1,
@@ -791,12 +796,12 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   titleTime: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
   },
   titleMeta: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 9,
     fontWeight: '600',
   },
@@ -807,8 +812,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     overflow: 'hidden',
   },
   metricTab: {
@@ -816,17 +821,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 10,
   },
   metricTabDivider: {
     borderRightWidth: 1,
-    borderRightColor: theme.neutral.border,
+    borderRightColor: theme.palette.slate.border,
   },
   metricTabActive: {
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
   },
   metricTabLine: {
     width: '60%',
@@ -841,7 +846,7 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   metricTabText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 10,
     fontWeight: '700',
     width: '100%',
@@ -849,7 +854,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   metricTabTextActive: {
-    color: theme.wheel.text,
+    color: theme.palette.sky.text,
   },
   metricLegend: {
     marginTop: 2,
@@ -872,12 +877,12 @@ const styles = StyleSheet.create({
     borderRadius: 0.5,
   },
   metricLegendText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 8,
     fontWeight: '600',
   },
   empty: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',

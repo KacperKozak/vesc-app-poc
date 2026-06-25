@@ -17,7 +17,7 @@ export type SettingsRowProps = {
 
 export function SettingsRow({
   icon: IconComponent,
-  iconColor = theme.neutral.textSecondary,
+  iconColor = theme.palette.slate.textSecondary,
   iconWeight = 'duotone',
   label,
   hint,
@@ -37,7 +37,9 @@ export function SettingsRow({
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       </View>
       {right}
-      {showChevron ? <CaretRightIcon size={18} color="#64748b" weight="bold" /> : null}
+      {showChevron ? (
+        <CaretRightIcon size={18} color={theme.palette.slate.color} weight="bold" />
+      ) : null}
     </View>
   )
 
@@ -73,7 +75,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -82,12 +84,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   label: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '600',
   },
   hint: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
   },
 })

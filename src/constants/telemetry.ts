@@ -62,7 +62,7 @@ const telemetryDefinitions = {
   speed: {
     label: 'Speed',
     unit: 'km/h',
-    color: theme.wheel.color,
+    color: theme.telemetry.speed,
     decimals: 0,
     chartRange: { min: 0, max: 50 },
     controlId: 'speed',
@@ -71,7 +71,7 @@ const telemetryDefinitions = {
   duty: {
     label: 'Duty Cycle',
     unit: '%',
-    color: theme.teal.color,
+    color: theme.telemetry.duty,
     decimals: 0,
     chartRange: { min: 0, max: 100 },
     controlId: 'duty',
@@ -79,7 +79,7 @@ const telemetryDefinitions = {
   motorCurrent: {
     label: 'Motor Current',
     unit: 'A',
-    color: '#818cf8',
+    color: theme.telemetry.motorCurrent,
     decimals: 0,
     chartRange: { min: -30, max: 30 },
     minSpan: 20,
@@ -88,7 +88,7 @@ const telemetryDefinitions = {
   battCurrent: {
     label: 'Batt Current',
     unit: 'A',
-    color: '#60a5fa',
+    color: theme.telemetry.battCurrent,
     decimals: 0,
     chartRange: { min: -30, max: 30 },
     minSpan: 20,
@@ -97,7 +97,7 @@ const telemetryDefinitions = {
   battVoltage: {
     label: 'Battery Voltage',
     unit: 'V',
-    color: '#4ade80',
+    color: theme.telemetry.battVoltage,
     decimals: 1,
     compactUnit: true,
     chartRange: { min: 0, max: 100 },
@@ -107,7 +107,7 @@ const telemetryDefinitions = {
   motorTemp: {
     label: 'Motor Temp',
     unit: '°C',
-    color: theme.warning.color,
+    color: theme.telemetry.motorTemp,
     decimals: 0,
     chartRange: { min: 0, max: 80 },
     minSpan: 30,
@@ -116,7 +116,7 @@ const telemetryDefinitions = {
   controllerTemp: {
     label: 'Controller Temp',
     unit: '°C',
-    color: theme.target.color,
+    color: theme.telemetry.controllerTemp,
     decimals: 0,
     chartRange: { min: 0, max: 80 },
     minSpan: 30,
@@ -125,7 +125,7 @@ const telemetryDefinitions = {
   footpadAdc1: {
     label: 'ADC 1',
     unit: '',
-    color: theme.neutral.textSecondary,
+    color: theme.telemetry.footpad1,
     decimals: 3,
     chartRange: { min: 0, max: 3.3 },
     minSpan: 0.5,
@@ -133,7 +133,7 @@ const telemetryDefinitions = {
   footpadAdc2: {
     label: 'ADC 2',
     unit: '',
-    color: theme.neutral.textMuted,
+    color: theme.telemetry.footpad2,
     decimals: 3,
     chartRange: { min: 0, max: 3.3 },
     minSpan: 0.5,
@@ -141,7 +141,7 @@ const telemetryDefinitions = {
   pitch: {
     label: 'Pitch',
     unit: '°',
-    color: '#a78bfa',
+    color: theme.telemetry.pitch,
     decimals: 1,
     chartRange: { min: -15, max: 15 },
     minSpan: 20,
@@ -149,7 +149,7 @@ const telemetryDefinitions = {
   roll: {
     label: 'Roll',
     unit: '°',
-    color: '#c084fc',
+    color: theme.telemetry.roll,
     decimals: 1,
     chartRange: { min: -15, max: 15 },
     minSpan: 20,
@@ -157,7 +157,7 @@ const telemetryDefinitions = {
   balancePitch: {
     label: 'Balance Pitch',
     unit: '°',
-    color: '#e879f9',
+    color: theme.telemetry.balancePitch,
     decimals: 1,
     chartRange: { min: -15, max: 15 },
     minSpan: 20,

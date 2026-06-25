@@ -19,16 +19,16 @@ interface FloatingBarProps {
 
 const ALERT_CONFIG = {
   warning: {
-    bg: theme.warning.bg,
-    border: theme.warning.border,
-    text: theme.warning.text,
-    btnBg: theme.warning.color,
+    bg: theme.status.warning.bg,
+    border: theme.status.warning.border,
+    text: theme.status.warning.text,
+    btnBg: theme.status.warning.color,
   },
   error: {
-    bg: theme.error.bg,
-    border: theme.error.border,
-    text: theme.error.text,
-    btnBg: theme.error.color,
+    bg: theme.status.error.bg,
+    border: theme.status.error.border,
+    text: theme.status.error.text,
+    btnBg: theme.status.error.color,
   },
 } as const
 
@@ -63,36 +63,66 @@ function getStatusPill(
       onPress: () => router.push({ pathname: routes.addBoardScan, params: { boardId: board.id } }),
     }
   if (scanStatus === 'scanning' && status === 'idle')
-    return { kind: 'spinner', text: 'Searching…', color: theme.wheel.color, onPress: onStopScan }
+    return {
+      kind: 'spinner',
+      text: 'Searching…',
+      color: theme.palette.sky.color,
+      onPress: onStopScan,
+    }
   if (status === 'discovering')
-    return { kind: 'spinner', text: 'Discovering…', color: theme.wheel.color, onPress: onStopScan }
+    return {
+      kind: 'spinner',
+      text: 'Discovering…',
+      color: theme.palette.sky.color,
+      onPress: onStopScan,
+    }
   if (status === 'subscribing')
-    return { kind: 'spinner', text: 'Subscribing…', color: theme.wheel.color, onPress: onStopScan }
+    return {
+      kind: 'spinner',
+      text: 'Subscribing…',
+      color: theme.palette.sky.color,
+      onPress: onStopScan,
+    }
   if (status === 'waiting_for_telemetry')
     return {
       kind: 'spinner',
       text: 'Waiting for telemetry…',
-      color: theme.wheel.color,
+      color: theme.palette.sky.color,
       onPress: onStopScan,
     }
   if (status === 'reconnecting')
-    return { kind: 'spinner', text: 'Reconnecting…', color: theme.wheel.color, onPress: onStopScan }
+    return {
+      kind: 'spinner',
+      text: 'Reconnecting…',
+      color: theme.palette.sky.color,
+      onPress: onStopScan,
+    }
   if (status === 'rescanning')
-    return { kind: 'spinner', text: 'Searching…', color: theme.wheel.color, onPress: onStopScan }
+    return {
+      kind: 'spinner',
+      text: 'Searching…',
+      color: theme.palette.sky.color,
+      onPress: onStopScan,
+    }
   if (status === 'disconnecting')
     return {
       kind: 'spinner',
       text: 'Disconnecting…',
-      color: theme.wheel.color,
+      color: theme.palette.sky.color,
       onPress: onStopScan,
     }
   if (status === 'connecting')
-    return { kind: 'spinner', text: 'Connecting…', color: theme.wheel.color, onPress: onStopScan }
+    return {
+      kind: 'spinner',
+      text: 'Connecting…',
+      color: theme.palette.sky.color,
+      onPress: onStopScan,
+    }
   if (status === 'stale')
     return {
       kind: 'spinner',
       text: 'Telemetry stale',
-      color: theme.error.color,
+      color: theme.status.error.color,
       onPress: onStopScan,
     }
   if (status === 'idle')
@@ -186,9 +216,9 @@ export function FloatingBar({
         testID="floating-bar-record"
       >
         {recording ? (
-          <StopIcon size={22} color={theme.neutral.textPrimary} weight="fill" />
+          <StopIcon size={22} color={theme.palette.slate.textPrimary} weight="fill" />
         ) : (
-          <RecordIcon size={22} color={theme.error.color} weight="fill" />
+          <RecordIcon size={22} color={theme.status.error.color} weight="fill" />
         )}
         <Text style={[styles.fabLabel, recording && styles.fabLabelActive]}>
           {recording ? 'STOP' : 'REC'}
@@ -217,8 +247,8 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     gap: 10,
-    backgroundColor: theme.neutral.surfaceDeep,
-    shadowColor: '#000',
+    backgroundColor: theme.palette.slate.surfaceDeep,
+    shadowColor: theme.palette.mono.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -237,7 +267,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pillButtonText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -250,23 +280,23 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: theme.error.color,
+    borderColor: theme.status.error.color,
     gap: 8,
   },
   fabActive: {
-    backgroundColor: theme.error.color,
-    borderColor: theme.error.color,
+    backgroundColor: theme.status.error.color,
+    borderColor: theme.status.error.color,
   },
   fabDisabled: {
     opacity: 0.45,
   },
   fabLabel: {
-    color: theme.error.color,
+    color: theme.status.error.color,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
   },
   fabLabelActive: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
   },
 })

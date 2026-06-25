@@ -37,11 +37,11 @@ const VALUE_LABEL_WIDTH = 28
 const VALUE_LABEL_HEIGHT = 14
 const CURRENT_VALUE_TOP = 2
 const MARKER_LINE_WIDTH = 2.5
-const INDICATOR_COLOR = theme.error.color
-const PREV_MARK_COLOR = theme.highlight.color
-const MAJOR_TICK_COLOR = theme.neutral.textMuted
-const MINOR_TICK_COLOR = theme.neutral.border
-const LABEL_COLOR = theme.neutral.textMuted
+const INDICATOR_COLOR = theme.status.error.color
+const PREV_MARK_COLOR = theme.palette.yellow.color
+const MAJOR_TICK_COLOR = theme.palette.slate.textMuted
+const MINOR_TICK_COLOR = theme.palette.slate.border
+const LABEL_COLOR = theme.palette.slate.textMuted
 
 const SNAP_SPRING = { damping: 18, stiffness: 700, mass: 0.8 }
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput)
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     height: RULER_LABEL_BAND_TOP - TOP_VALUE_BAND_HEIGHT,
     marginLeft: -1.5,
     alignItems: 'center',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
   },
   prevMarkDash: {
     width: 1,
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     left: '50%',
     marginLeft: 7,
     bottom: 3,
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 9,
     fontWeight: '800',
     lineHeight: 10,

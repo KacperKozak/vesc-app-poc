@@ -17,7 +17,7 @@ export function MapStyleSwitch({ activeKey, expanded, onToggle, onSelect }: MapS
     icon: (
       <style.Icon
         size={21}
-        color={activeKey === style.key ? theme.wheel.text : theme.neutral.textSecondary}
+        color={activeKey === style.key ? theme.palette.sky.text : theme.palette.slate.textSecondary}
         weight={activeKey === style.key ? 'fill' : 'bold'}
       />
     ),
@@ -26,9 +26,9 @@ export function MapStyleSwitch({ activeKey, expanded, onToggle, onSelect }: MapS
   return (
     <MapOptionSelector
       activeKey={activeKey}
-      activeIcon={<activeStyle.Icon size={21} color={theme.wheel.text} weight="fill" />}
-      activeColor={theme.wheel.text}
-      activeBackground={`${theme.wheel.color}1f`}
+      activeIcon={<activeStyle.Icon size={21} color={theme.palette.sky.text} weight="fill" />}
+      activeColor={theme.palette.sky.text}
+      activeBackground={`${theme.palette.sky.color}1f`}
       collapsedAccessibilityLabel={`Basemap: ${activeStyle.label}`}
       expanded={expanded}
       options={options}

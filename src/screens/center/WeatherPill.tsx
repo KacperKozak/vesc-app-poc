@@ -32,7 +32,7 @@ export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
   const iconColor =
     weather.weatherCode != null
       ? weatherCodeToColor(weather.weatherCode, currentHour, isNight)
-      : theme.bran.text
+      : theme.palette.cyan.text
 
   if (expanded) {
     return (
@@ -69,7 +69,7 @@ export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
         </View>
         {precipitationProbability != null && precipitationProbability > 0 && (
           <View style={styles.precipRow}>
-            <DropIcon size={14} color={theme.wheel.color} weight="duotone" />
+            <DropIcon size={14} color={theme.palette.sky.color} weight="duotone" />
             <Text style={styles.precipText}>{precipitationProbability}%</Text>
           </View>
         )}
@@ -90,7 +90,7 @@ export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
       <Text style={styles.temp}>{weather.temperature}°</Text>
       {precipitationProbability != null && precipitationProbability > 0 && (
         <>
-          <DropIcon size={12} color={theme.wheel.color} weight="duotone" />
+          <DropIcon size={12} color={theme.palette.sky.color} weight="duotone" />
           <Text style={styles.pillPrecip}>{precipitationProbability}%</Text>
         </>
       )}
@@ -103,20 +103,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: theme.neutral.mapOverlayPill,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.6),
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   temp: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },
   pillPrecip: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -136,12 +136,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   expandedTemp: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 22,
     fontWeight: '700',
   },
   expandedLabel: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sunTimeText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   precipText: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 13,
     fontWeight: '600',
   },

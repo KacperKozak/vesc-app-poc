@@ -62,7 +62,7 @@ export function CenterScreen({
     return (
       <View style={styles.container}>
         <View style={styles.empty}>
-          <ActivityIndicator size="small" color={theme.wheel.color} />
+          <ActivityIndicator size="small" color={theme.palette.sky.color} />
           <Text style={styles.emptySubtitle}>Loading boards...</Text>
         </View>
       </View>
@@ -182,7 +182,7 @@ export function CenterScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   empty: {
     flex: 1,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptySubtitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     textAlign: 'center',
   },

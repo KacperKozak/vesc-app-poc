@@ -50,7 +50,7 @@ export function MapPin({
                 style={styles.selectedMapPointDelete}
                 onPress={onRemove}
               >
-                <TrashIcon size={16} color={theme.error.text} weight="bold" />
+                <TrashIcon size={16} color={theme.status.error.text} weight="bold" />
               </Pressable>
             </View>
           </View>
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 11,
     borderWidth: 3,
-    backgroundColor: theme.neutral.textPrimary,
+    backgroundColor: theme.palette.slate.textPrimary,
   },
   iconPin: {
     width: 22,
@@ -103,9 +103,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 11,
     borderWidth: 2,
-    backgroundColor: theme.neutral.mapOverlayPin,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.6),
     opacity: 0.78,
-    shadowColor: theme.neutral.surfaceDeep,
+    shadowColor: theme.palette.slate.surfaceDeep,
     shadowOpacity: 0.22,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 2 },
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 3,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     opacity: 1,
     shadowOpacity: 0.36,
     shadowRadius: 7,
@@ -143,12 +143,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 18,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     zIndex: 1,
   },
   selectedMapPointLabel: {
     flexShrink: 1,
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
   },

@@ -62,10 +62,10 @@ function CellBar({ group }: { group: BmsCellGroup }) {
   )
   const color =
     group.extreme === 'min'
-      ? theme.warning.color
+      ? theme.status.warning.color
       : group.extreme === 'max'
-        ? theme.highlight.color
-        : theme.wheel.color
+        ? theme.palette.yellow.color
+        : theme.palette.sky.color
 
   return (
     <View style={styles.cell}>
@@ -92,10 +92,10 @@ function Stat({
 }) {
   const color =
     tone === 'min'
-      ? theme.warning.text
+      ? theme.status.warning.text
       : tone === 'max'
-        ? theme.highlight.text
-        : theme.neutral.textPrimary
+        ? theme.palette.yellow.text
+        : theme.palette.slate.textPrimary
   return (
     <View style={styles.stat}>
       <Text style={styles.statLabel}>{label}</Text>
@@ -106,7 +106,7 @@ function Stat({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     padding: 14,
     gap: 12,
@@ -117,19 +117,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   spread: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '800',
     fontFamily: 'monospace',
   },
   empty: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   statLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 56,
     borderRadius: 5,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: theme.gps.color,
+    backgroundColor: theme.palette.green.color,
   },
   cellValue: {
     fontSize: 10,
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   cellIndex: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 9,
     fontWeight: '700',
   },

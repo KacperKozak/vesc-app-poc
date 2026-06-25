@@ -30,8 +30,8 @@ const EXCLUSION_MARKER_HEIGHT = 1
 const EXCLUSION_MARKER_INSET = 1
 
 function exclusionColor(reason: string): string {
-  if (reason === 'free_spin') return theme.highlight.color
-  return theme.neutral.textSecondary
+  if (reason === 'free_spin') return theme.palette.yellow.color
+  return theme.palette.slate.textSecondary
 }
 
 function formatTime(date: Date): string {
@@ -337,7 +337,7 @@ export function TelemetryLineChart({
               y1={0.5}
               x2={chartWidth}
               y2={0.5}
-              stroke={theme.neutral.surface}
+              stroke={theme.palette.slate.surface}
               strokeWidth={0.5}
             />
             <SvgLine
@@ -345,7 +345,7 @@ export function TelemetryLineChart({
               y1={height / 2}
               x2={chartWidth}
               y2={height / 2}
-              stroke={theme.neutral.surface}
+              stroke={theme.palette.slate.surface}
               strokeWidth={0.5}
               strokeDasharray="4,4"
             />
@@ -354,7 +354,7 @@ export function TelemetryLineChart({
               y1={height - 0.5}
               x2={chartWidth}
               y2={height - 0.5}
-              stroke={theme.neutral.surface}
+              stroke={theme.palette.slate.surface}
               strokeWidth={0.5}
             />
 
@@ -406,7 +406,7 @@ export function TelemetryLineChart({
                 y1={0}
                 x2={markerPosition.x}
                 y2={height}
-                stroke={theme.neutral.textDim}
+                stroke={theme.palette.slate.textDim}
                 strokeWidth={1}
                 strokeDasharray="3,3"
               />
@@ -417,7 +417,7 @@ export function TelemetryLineChart({
                 cx={markerPosition.x}
                 cy={markerPosition.y}
                 r={4}
-                fill={theme.neutral.surfaceDeep}
+                fill={theme.palette.slate.surfaceDeep}
                 stroke={activeColor}
                 strokeWidth={2}
               />
@@ -471,18 +471,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerTime: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 9,
     fontVariant: ['tabular-nums'],
   },
   label: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   value: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 11,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   yLabel: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 8,
     fontVariant: ['tabular-nums'],
     lineHeight: 10,
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   xLabel: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 8,
     fontVariant: ['tabular-nums'],
   },
@@ -528,10 +528,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 2,
     width: TOOLTIP_WIDTH,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     paddingHorizontal: 6,
     paddingVertical: 2,
     flexDirection: 'column',
@@ -545,13 +545,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tooltipValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 9,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
   tooltipTime: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 8,
     fontVariant: ['tabular-nums'],
   },

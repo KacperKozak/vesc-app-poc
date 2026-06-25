@@ -94,14 +94,14 @@ function DiagnosticRowView({ label, value }: DiagnosticRow) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
     gap: 8,
   },
   sectionTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -111,10 +111,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     overflow: 'hidden',
   },
   row: {
@@ -126,17 +126,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.neutral.border,
+    borderBottomColor: theme.palette.slate.border,
   },
   rowLabel: {
     flex: 1,
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   rowValue: {
     flex: 1,
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontVariant: ['tabular-nums'],
     textAlign: 'right',

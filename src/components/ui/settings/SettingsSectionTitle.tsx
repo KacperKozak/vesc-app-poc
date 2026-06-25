@@ -11,7 +11,7 @@ export function SettingsSectionTitle({ children }: SettingsSectionTitleProps) {
 
 const styles = StyleSheet.create({
   title: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',

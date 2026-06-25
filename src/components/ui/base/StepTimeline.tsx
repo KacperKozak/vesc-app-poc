@@ -65,7 +65,11 @@ function StepRow({
           <View
             style={[
               styles.connector,
-              { backgroundColor: connectorDone ? theme.gps.color : theme.neutral.border },
+              {
+                backgroundColor: connectorDone
+                  ? theme.palette.green.color
+                  : theme.palette.slate.border,
+              },
             ]}
           />
         )}
@@ -93,7 +97,7 @@ function StepGlyph({ icon: StepIcon, state }: { icon: Icon; state: StepState }) 
   return (
     <View style={[styles.glyph, { borderColor: color }]}>
       {state === 'active' ? (
-        <ActivityIndicator size="small" color={theme.wheel.color} />
+        <ActivityIndicator size="small" color={theme.palette.sky.color} />
       ) : (
         <StepIcon size={22} color={color} weight="duotone" />
       )}
@@ -102,11 +106,11 @@ function StepGlyph({ icon: StepIcon, state }: { icon: Icon; state: StepState }) 
 }
 
 const GLYPH_COLOR: Record<StepState, string> = {
-  done: theme.gps.color,
-  active: theme.wheel.color,
-  failed: theme.error.color,
-  pending: theme.neutral.border,
-  absent: theme.neutral.border,
+  done: theme.palette.green.color,
+  active: theme.palette.sky.color,
+  failed: theme.status.error.color,
+  pending: theme.palette.slate.border,
+  absent: theme.palette.slate.border,
 }
 
 const styles = StyleSheet.create({
@@ -144,20 +148,20 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   rowLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
   rowLabelDim: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
   },
   rowCaption: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
   },
   rowCaptionError: {
-    color: theme.error.text,
+    color: theme.status.error.text,
   },
 })

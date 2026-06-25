@@ -1,161 +1,240 @@
 /**
- * Semantic color palette for VibeWheel.
+ * Semantic color tokens for VibeWheel.
  *
- * Each entry covers four use-cases:
- *   color  – the primary/fill shade (icons, accents, highlights)
- *   bg     – dark tinted background (pills, cards, badges)
- *   text   – readable text on a dark background
- *   border – subtle border / divider
+ * New structure:
+ *   - palette: named hue swatches + mono + slate (surface/text scale + map buildings)
+ *   - telemetry: single-color token per metric
+ *   - map: user/target/building colors
+ *   - status: semantic UI-state tokens (info/success/warning/error/favorite)
+ *   - alpha: typed opacity helper for every translucent value
  *
- * Add new semantic entries here as needed. Never hardcode a color that
- * belongs to one of these categories directly in a component.
+ * Never hardcode a color that belongs to one of these categories directly in a
+ * component. Add new tokens here first, then reference them via theme.*.
  */
-export const theme = {
-  /** Brand / primary – modern turquoise */
-  bran: {
-    color: '#06b6d4', // cyan-500
-    bg: '#083344',
-    text: '#67e8f9', // cyan-300
-    border: '#0e7490', // cyan-700
+
+/** Allowed opacity levels for every translucent color value. */
+export type AlphaLevel = 0 | 0.12 | 0.3 | 0.6 | 0.85
+
+function alpha(color: string, level: AlphaLevel): string {
+  'worklet'
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const [r, g, b] =
+      hex.length === 3
+        ? [
+            Number.parseInt(hex[0] + hex[0], 16),
+            Number.parseInt(hex[1] + hex[1], 16),
+            Number.parseInt(hex[2] + hex[2], 16),
+          ]
+        : [
+            Number.parseInt(hex.slice(0, 2), 16),
+            Number.parseInt(hex.slice(2, 4), 16),
+            Number.parseInt(hex.slice(4, 6), 16),
+          ]
+    return `rgba(${r},${g},${b},${level})`
+  }
+
+  if (color.startsWith('rgba')) {
+    return color.replace(/,[^,]+\)$/, `,${level})`)
+  }
+
+  if (color.startsWith('rgb')) {
+    return color.replace(')', `,${level})`).replace('rgb', 'rgba')
+  }
+
+  throw new Error(`Unsupported color format for alpha(): ${color}`)
+}
+
+type Hue = {
+  color: string
+  /** Alternate shade within the same hue — aliases `light`. */
+  alt: string
+  light: string
+  text: string
+  bg: string
+  border: string
+}
+
+function hue(color: string, light: string, text: string, bg: string, border: string): Hue {
+  return { color, alt: light, light, text, bg, border }
+}
+
+export const palette = {
+  mono: {
+    black: '#000000',
+    white: '#ffffff',
   },
 
-  /** Wheel / board data – lightning blue */
-  wheel: {
-    color: '#38bdf8', // sky-400
-    bg: '#0c2a3f',
-    text: '#7dd3fc', // sky-300
-    border: '#0369a1', // sky-700
-  },
-
-  /** GPS signal – grass green */
-  gps: {
-    color: '#22c55e', // green-500
-    bg: '#14532d', // green-900
-    text: '#4ade80', // green-400
-    border: '#15803d', // green-700
-  },
-
-  /** Target location – purple */
-  target: {
-    color: '#a855f7', // purple-500
-    bg: '#1e1338',
-    text: '#d8b4fe', // purple-200
-    border: '#7e22ce', // purple-800
-  },
-
-  /** Warning state – orange */
-  warning: {
-    color: '#f97316', // orange-500
-    bg: '#431407',
-    text: '#fb923c', // orange-400
-    border: '#9a3412', // orange-800
-  },
-
-  /** Error state – red */
-  error: {
-    color: '#ef4444', // red-500
-    bg: '#7f1d1d', // red-900
-    text: '#f87171', // red-400
-    border: '#991b1b', // red-800
-  },
-
-  /** Highlight / star – yellow */
-  highlight: {
-    color: '#facc15', // yellow-400
-    bg: '#422006', // yellow-950
-    text: '#fde047', // yellow-300
-    border: '#854d0e', // yellow-700
-  },
-
-  /** Secondary data – teal */
-  teal: {
-    color: '#14b8a6', // teal-500
-    bg: '#042f2e', // teal-950
-    text: '#2dd4bf', // teal-400
-    border: '#0f766e', // teal-700
-  },
-
-  /** Banner callouts – info, warning, error */
-  banner: {
-    info: {
-      bg: '#0f1d2e',
-      border: '#1e3a5f',
-      icon: '#60a5fa', // blue-400
-      title: '#60a5fa', // blue-400
-      message: '#bfdbfe', // blue-200
-    },
-    warning: {
-      bg: '#2a1a0f',
-      border: '#78350f',
-      icon: '#f59e0b', // amber-500
-      title: '#f59e0b', // amber-500
-      message: '#fde68a', // amber-200
-    },
-    error: {
-      bg: '#2a0f0f',
-      border: '#7f1d1d',
-      icon: '#ef4444', // red-500
-      title: '#ef4444', // red-500
-      message: '#fecaca', // red-200
-    },
-  },
-
-  /** Weather condition icons */
-  weather: {
-    sun: '#fbbf24', // amber-400
-    partly: '#f59e0b', // amber-500
-    moon: '#a78bfa', // violet-400
-    moonPartly: '#7c3aed', // violet-600
-    cloud: '#94a3b8', // slate-400
-    fog: '#cbd5e1', // slate-300
-    rain: '#60a5fa', // blue-400
-    snow: '#bae6fd', // sky-200
-    thunder: '#c084fc', // purple-400
-  },
-
-  /** Neutral palette – surfaces, text, borders, structure. Max 2 levels deep. */
-  neutral: {
+  slate: {
+    ...hue('#64748b', '#94a3b8', '#cbd5e1', '#1e293b', '#334155'),
     bg: '#111827',
     surface: '#1e293b',
     surfaceDeep: '#0f172a',
-    border: '#334155',
     textPrimary: '#f1f5f9',
     textSecondary: '#94a3b8',
     textMuted: '#64748b',
     textDim: '#475569',
-    /** Semi-transparent overlays and map component backgrounds. */
-    mapOverlayPin: 'rgba(15,23,42,0.58)',
-    mapOverlayPill: 'rgba(15,23,42,0.72)',
-    mapOverlaySelector: 'rgba(15,23,42,0.9)',
-    dimOverlay: 'rgba(0,0,0,0.3)',
-    modalBackdrop: 'rgba(0,0,0,0.6)',
-    loadingOverlay: 'rgba(17,24,39,0.6)',
-    textShadow: 'rgba(0,0,0,0.8)',
-    textDimLight: 'rgba(255,255,255,0.55)',
-    borderMuted: 'rgba(148,163,184,0.28)',
-    touchInvisible: 'rgba(0,0,0,0.001)',
-    transparent: 'rgba(0,0,0,0)',
-    routeHighlight: 'rgba(255,255,255,0.98)',
-    routeHighlightTransparent: 'rgba(255,255,255,0)',
     mapBuildingDark: '#3e4451',
     mapBuildingLight: '#e5e7eb',
   },
-  /** Privacy zone colors – green GPS zone markers. */
-  zone: {
-    bg: 'rgba(34,197,94,0.18)',
-    border: 'rgba(34,197,94,0.70)',
-    borderDim: 'rgba(100,116,139,0.50)',
+
+  // Board / primary data — original `wheel`
+  sky: {
+    ...hue('#38bdf8', '#7dd3fc', '#7dd3fc', '#0c2a3f', '#0369a1'),
+    snow: '#bae6fd',
+  },
+  // Brand / primary accents — original `bran`
+  cyan: hue('#06b6d4', '#67e8f9', '#67e8f9', '#083344', '#0e7490'),
+  // Currents / info — original motorCurrent/battCurrent/banner-info
+  blue: hue('#60a5fa', '#818cf8', '#bfdbfe', '#0f1d2e', '#1e3a5f'),
+  // GPS / Android / success — original `gps`
+  green: hue('#22c55e', '#4ade80', '#4ade80', '#14532d', '#15803d'),
+  // Energy / database — original `warning` non-warning usage
+  amber: hue('#f59e0b', '#fbbf24', '#fde68a', '#451a03', '#92400e'),
+  // Temperatures — original `warning` color
+  orange: hue('#f97316', '#fb923c', '#fdba74', '#431407', '#9a3412'),
+  // Errors — original `error`
+  red: hue('#ef4444', '#f87171', '#fca5a5', '#7f1d1d', '#991b1b'),
+  // Stars / achievements / gauges — original `highlight`
+  yellow: hue('#facc15', '#fde047', '#fde047', '#422006', '#854d0e'),
+  // Time / iOS / profiles / pitch — original `target`
+  purple: {
+    ...hue('#a855f7', '#a78bfa', '#d8b4fe', '#1e1338', '#7e22ce'),
+    thunder: '#c084fc',
+  },
+  // Roll / balance pitch — original roll/balancePitch
+  fuchsia: hue('#c084fc', '#e879f9', '#f0abfc', '#4a0444', '#a21caf'),
+  // Map trail / marker accents
+  violet: {
+    ...hue('#7c6fef', '#8b5cf6', '#a78bfa', '#2e1065', '#5b21b6'),
+    moon: '#a78bfa',
+  },
+  // Secondary data / duty — original `teal`
+  teal: hue('#14b8a6', '#2dd4bf', '#99f6e4', '#042f2e', '#0f766e'),
+  // Balance pitch alternate — kept for pink family completeness
+  pink: hue('#ec4899', '#f472b6', '#fbcfe8', '#500724', '#be185d'),
+} as const
+
+export const telemetry = {
+  speed: palette.sky.color,
+  duty: palette.teal.color,
+  motorCurrent: palette.blue.light,
+  battCurrent: palette.blue.color,
+  controllerTemp: palette.orange.color,
+  motorTemp: palette.red.color,
+  battVoltage: palette.green.light,
+  footpad1: palette.slate.light,
+  footpad2: palette.slate.color,
+  pitch: palette.purple.light,
+  roll: palette.fuchsia.color,
+  balancePitch: palette.fuchsia.light,
+} as const
+
+export const map = {
+  user: palette.purple.color,
+  target: palette.green.color,
+  buildingDark: palette.slate.mapBuildingDark,
+  buildingLight: palette.slate.mapBuildingLight,
+} as const
+
+export const status = {
+  info: {
+    color: palette.blue.color,
+    text: palette.blue.text,
+    bg: palette.blue.bg,
+    border: palette.blue.border,
+  },
+  success: {
+    color: palette.green.color,
+    text: palette.green.text,
+    bg: palette.green.bg,
+    border: palette.green.border,
+  },
+  warning: {
+    color: palette.orange.color,
+    text: palette.orange.text,
+    bg: palette.orange.bg,
+    border: palette.orange.border,
+  },
+  error: {
+    color: palette.red.color,
+    text: palette.red.text,
+    bg: palette.red.bg,
+    border: palette.red.border,
+  },
+  favorite: {
+    color: palette.yellow.color,
+    text: palette.yellow.text,
+    bg: palette.yellow.bg,
+    border: palette.yellow.border,
   },
 } as const
 
-/** Shared press/touch interaction tokens. Use these on every Pressable to keep feedback uniform. */
+/** Banner callouts — derived from status tokens. */
+export const banner = {
+  info: {
+    bg: status.info.bg,
+    border: status.info.border,
+    icon: status.info.color,
+    title: status.info.color,
+    message: status.info.text,
+  },
+  warning: {
+    bg: status.warning.bg,
+    border: status.warning.border,
+    icon: status.warning.color,
+    title: status.warning.color,
+    message: status.warning.text,
+  },
+  error: {
+    bg: status.error.bg,
+    border: status.error.border,
+    icon: status.error.color,
+    title: status.error.color,
+    message: status.error.text,
+  },
+} as const
+
+/** Weather condition icon colors — derived from palette. */
+export const weather = {
+  sun: palette.amber.light,
+  partly: palette.amber.color,
+  moon: palette.violet.moon,
+  moonPartly: palette.violet.color,
+  cloud: palette.slate.light,
+  fog: palette.slate.text,
+  rain: palette.blue.color,
+  snow: palette.sky.snow,
+  thunder: palette.purple.thunder,
+} as const
+
+/** Privacy zone tints — derived from palette via alpha(). */
+export const zone = {
+  bg: alpha(palette.green.color, 0.12),
+  border: alpha(palette.green.color, 0.6),
+  borderDim: alpha(palette.slate.color, 0.6),
+} as const
+
+/** Shared press/touch interaction tokens. */
 export const interaction = {
   /** Android ripple for bounded pressables (cards, cells). */
-  ripple: { color: 'rgba(148,163,184,0.18)', borderless: false, foreground: true },
+  ripple: { color: alpha(palette.slate.light, 0.12), borderless: false, foreground: true },
   /** Android ripple for icon-only pressables with no visible bounds. */
-  rippleBorderless: { color: 'rgba(148,163,184,0.18)', borderless: true, foreground: true },
+  rippleBorderless: { color: alpha(palette.slate.light, 0.12), borderless: true, foreground: true },
   /** iOS/cross-platform pressed background for list rows and sheet items. */
-  pressedBg: '#253548',
+  pressedBg: palette.slate.surface,
   /** iOS/cross-platform pressed opacity for metric cells and icon buttons. */
   pressedOpacity: 0.55,
+} as const
+
+export const theme = {
+  palette,
+  telemetry,
+  map,
+  status,
+  alpha,
+  banner,
+  weather,
+  zone,
+  interaction,
 } as const

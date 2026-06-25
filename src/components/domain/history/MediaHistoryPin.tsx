@@ -36,7 +36,7 @@ export function MediaHistoryPin({
             <Image source={first.uri} contentFit="cover" style={styles.thumbnail} />
             {first.mediaType === 'video' ? (
               <View style={styles.videoBadge}>
-                <PlayIcon size={8} color={theme.target.text} weight="fill" />
+                <PlayIcon size={8} color={theme.palette.purple.text} weight="fill" />
               </View>
             ) : null}
           </>
@@ -53,8 +53,8 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: theme.target.color,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.purple.color,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   cluster: {
     alignItems: 'center',
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   count: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 11,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
@@ -82,6 +82,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.mapOverlayPill,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.6),
   },
 })

@@ -60,9 +60,9 @@ export default function DiagnosticSettingsScreen() {
           <View style={styles.row}>
             <View style={styles.rowIcon}>
               {posthogReady ? (
-                <CheckCircleIcon size={20} color={theme.gps.color} weight="fill" />
+                <CheckCircleIcon size={20} color={theme.palette.green.color} weight="fill" />
               ) : (
-                <WarningCircleIcon size={20} color="#f59e0b" weight="fill" />
+                <WarningCircleIcon size={20} color={theme.palette.amber.color} weight="fill" />
               )}
             </View>
             <View style={styles.rowBody}>
@@ -85,7 +85,7 @@ export default function DiagnosticSettingsScreen() {
         <View style={styles.card}>
           <Pressable style={styles.row} onPress={sendNativeDiagnostic}>
             <View style={styles.rowIcon}>
-              <TestTubeIcon size={20} color="#94a3b8" weight="duotone" />
+              <TestTubeIcon size={20} color={theme.palette.slate.light} weight="duotone" />
             </View>
             <View style={styles.rowBody}>
               <Text style={styles.rowLabel}>Send native diagnostic</Text>
@@ -97,7 +97,7 @@ export default function DiagnosticSettingsScreen() {
 
           <Pressable style={styles.row} onPress={sendUiDiagnostic}>
             <View style={styles.rowIcon}>
-              <WarningCircleIcon size={20} color="#94a3b8" weight="duotone" />
+              <WarningCircleIcon size={20} color={theme.palette.slate.light} weight="duotone" />
             </View>
             <View style={styles.rowBody}>
               <Text style={styles.rowLabel}>Send UI diagnostic</Text>
@@ -138,14 +138,14 @@ export default function DiagnosticSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
     gap: 8,
   },
   sectionTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -155,10 +155,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     overflow: 'hidden',
   },
   row: {
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -181,35 +181,35 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   rowLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '600',
   },
   rowHint: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
   },
   separator: {
     height: 1,
-    backgroundColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.border,
     marginLeft: 58,
   },
   resultCard: {
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 14,
     gap: 4,
   },
   resultLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   resultValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontVariant: ['tabular-nums'],
   },

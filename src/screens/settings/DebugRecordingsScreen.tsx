@@ -49,22 +49,22 @@ export function DebugRecordingsScreen() {
         <SettingsRow
           icon={RecordIcon}
           iconWeight="fill"
-          iconColor={theme.error.color}
+          iconColor={theme.status.error.color}
           label="Record future sessions"
           hint="Applies to every new board session until disabled"
           right={
             <Switch
               value={debug.enabled}
               onValueChange={debug.setEnabled}
-              trackColor={{ false: theme.neutral.border, true: theme.error.border }}
-              thumbColor={debug.enabled ? theme.error.color : theme.neutral.textMuted}
+              trackColor={{ false: theme.palette.slate.border, true: theme.status.error.border }}
+              thumbColor={debug.enabled ? theme.status.error.color : theme.palette.slate.textMuted}
             />
           }
         />
       </SettingsCard>
 
       <View style={styles.warning}>
-        <WarningIcon size={16} color={theme.warning.color} weight="fill" />
+        <WarningIcon size={16} color={theme.status.warning.color} weight="fill" />
         <Text style={styles.warningText}>
           Captures location and raw BLE traffic. Files remain until app data is cleared.
         </Text>
@@ -83,7 +83,7 @@ export function DebugRecordingsScreen() {
         </Text>
       ) : null}
       {debug.loading ? (
-        <ActivityIndicator color={theme.wheel.color} />
+        <ActivityIndicator color={theme.palette.sky.color} />
       ) : debug.recordings.length === 0 ? (
         <Text style={styles.emptyText}>No debug recordings yet.</Text>
       ) : (
@@ -92,7 +92,7 @@ export function DebugRecordingsScreen() {
             <SettingsRow
               key={recording.name}
               icon={RecordIcon}
-              iconColor={theme.wheel.color}
+              iconColor={theme.palette.sky.color}
               label={recording.name}
               hint={`${formatCreatedAt(recording.createdAt)} · ${formatBytes(recording.sizeBytes)}`}
               right={
@@ -118,18 +118,18 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 16,
     gap: 8,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   warning: {
     flexDirection: 'row',
     gap: 8,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: theme.warning.bg,
+    backgroundColor: theme.status.warning.bg,
   },
   warningText: {
     flex: 1,
-    color: theme.warning.text,
+    color: theme.status.warning.text,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -139,16 +139,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   refreshText: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 13,
     fontWeight: '700',
   },
   errorText: {
-    color: theme.error.color,
+    color: theme.status.error.color,
     fontSize: 12,
   },
   emptyText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: 20,

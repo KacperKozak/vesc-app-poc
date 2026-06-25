@@ -34,8 +34,8 @@ export function IconButton({
   const isDisabled = disabled || loading
   const dim = SIZES[size]
   const iconSize = ICON_SIZES[size]
-  const iconColor = destructive ? theme.error.text : theme.neutral.textSecondary
-  const borderColor = destructive ? theme.error.border : theme.neutral.border
+  const iconColor = destructive ? theme.status.error.text : theme.palette.slate.textSecondary
+  const borderColor = destructive ? theme.status.error.border : theme.palette.slate.border
 
   return (
     <Pressable
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderWidth: 1,
     overflow: 'hidden',
   },

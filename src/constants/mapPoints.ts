@@ -2,15 +2,7 @@ import type { MapPointKind } from 'vesc-ble'
 
 import { theme } from '@/constants/theme'
 
-type MapPointThemeKey =
-  | 'bran'
-  | 'wheel'
-  | 'gps'
-  | 'target'
-  | 'warning'
-  | 'error'
-  | 'highlight'
-  | 'teal'
+type MapPointThemeKey = 'sky' | 'green' | 'purple' | 'amber' | 'red' | 'yellow' | 'cyan'
 
 export interface MapPointKindOption {
   kind: MapPointKind
@@ -19,13 +11,13 @@ export interface MapPointKindOption {
 }
 
 export const MAP_POINT_KIND_OPTIONS: readonly MapPointKindOption[] = [
-  { kind: 'drop', label: 'Drop', themeKey: 'wheel' },
-  { kind: 'bonk', label: 'Bonk', themeKey: 'warning' },
-  { kind: 'nose_slide', label: 'Nose slide', themeKey: 'target' },
-  { kind: 'trail_entry', label: 'Trail entry', themeKey: 'teal' },
-  { kind: 'viewpoint', label: 'Viewpoint', themeKey: 'highlight' },
-  { kind: 'charging', label: 'Charging', themeKey: 'bran' },
-  { kind: 'direction', label: 'Direction point', themeKey: 'gps' },
+  { kind: 'drop', label: 'Drop', themeKey: 'sky' },
+  { kind: 'bonk', label: 'Bonk', themeKey: 'amber' },
+  { kind: 'nose_slide', label: 'Nose slide', themeKey: 'purple' },
+  { kind: 'trail_entry', label: 'Trail entry', themeKey: 'cyan' },
+  { kind: 'viewpoint', label: 'Viewpoint', themeKey: 'yellow' },
+  { kind: 'charging', label: 'Charging', themeKey: 'cyan' },
+  { kind: 'direction', label: 'Direction point', themeKey: 'green' },
 ] as const
 
 export const FILTERABLE_MAP_POINT_KIND_OPTIONS = MAP_POINT_KIND_OPTIONS.filter(
@@ -37,13 +29,13 @@ const MAP_POINT_OPTIONS_BY_KIND = new Map(
 )
 
 export function getMapPointKindColor(kind: MapPointKind) {
-  return theme[MAP_POINT_OPTIONS_BY_KIND.get(kind)?.themeKey ?? MAP_POINT_KIND_OPTIONS[0].themeKey]
-    .color
+  const key = MAP_POINT_OPTIONS_BY_KIND.get(kind)?.themeKey ?? MAP_POINT_KIND_OPTIONS[0].themeKey
+  return theme.palette[key].color
 }
 
 export function getMapPointKindTextColor(kind: MapPointKind) {
-  return theme[MAP_POINT_OPTIONS_BY_KIND.get(kind)?.themeKey ?? MAP_POINT_KIND_OPTIONS[0].themeKey]
-    .text
+  const key = MAP_POINT_OPTIONS_BY_KIND.get(kind)?.themeKey ?? MAP_POINT_KIND_OPTIONS[0].themeKey
+  return theme.palette[key].text
 }
 
 export function getMapPointKindLabel(kind: MapPointKind) {

@@ -42,7 +42,7 @@ export default function DatabaseSettingsScreen() {
                 disabled={db.rebuildState === 'running'}
               >
                 {db.rebuildState === 'done' && (
-                  <CheckCircleIcon size={13} color={theme.gps.text} weight="fill" />
+                  <CheckCircleIcon size={13} color={theme.palette.green.text} weight="fill" />
                 )}
                 <Text style={styles.rebuildButtonText}>
                   {db.rebuildState === 'running'
@@ -74,7 +74,7 @@ export default function DatabaseSettingsScreen() {
           </SettingsRow>
           <SettingsRow
             icon={DownloadSimpleIcon}
-            iconColor={theme.gps.color}
+            iconColor={theme.palette.green.color}
             label="Back up database"
             hint={db.backupHint}
             right={
@@ -90,7 +90,7 @@ export default function DatabaseSettingsScreen() {
           />
           <SettingsRow
             icon={UploadSimpleIcon}
-            iconColor={theme.warning.color}
+            iconColor={theme.status.warning.color}
             label="Restore database"
             hint={db.restoreHint}
             right={
@@ -122,16 +122,16 @@ export default function DatabaseSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
     gap: 8,
   },
   rebuildButton: {
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -143,11 +143,11 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   rebuildButtonDone: {
-    borderColor: theme.gps.border,
-    backgroundColor: theme.gps.bg,
+    borderColor: theme.palette.green.border,
+    backgroundColor: theme.palette.green.bg,
   },
   rebuildButtonText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -161,17 +161,17 @@ const styles = StyleSheet.create({
   rebuildProgressTrack: {
     flex: 1,
     height: 3,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 999,
     overflow: 'hidden',
   },
   rebuildProgressFill: {
     height: '100%',
-    backgroundColor: theme.warning.color,
+    backgroundColor: theme.status.warning.color,
   },
   rebuildProgressText: {
     minWidth: 44,
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '700',
     textAlign: 'right',

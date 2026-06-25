@@ -52,7 +52,7 @@ export function BoardSelectorSheet({
               <View style={[styles.boardIcon, isActive && styles.boardIconActive]}>
                 <LightningIcon
                   size={16}
-                  color={isActive ? theme.wheel.color : theme.neutral.textMuted}
+                  color={isActive ? theme.palette.sky.color : theme.palette.slate.textMuted}
                   weight={isActive ? 'fill' : 'regular'}
                 />
               </View>
@@ -61,7 +61,9 @@ export function BoardSelectorSheet({
                   {board.name}
                 </Text>
               </View>
-              {isActive && <CheckCircleIcon size={20} color={theme.wheel.color} weight="fill" />}
+              {isActive && (
+                <CheckCircleIcon size={20} color={theme.palette.sky.color} weight="fill" />
+              )}
               <Pressable
                 onPress={(e) => {
                   e.stopPropagation()
@@ -70,7 +72,7 @@ export function BoardSelectorSheet({
                 }}
                 hitSlop={8}
               >
-                <PencilSimpleIcon size={15} color={theme.neutral.textDim} weight="bold" />
+                <PencilSimpleIcon size={15} color={theme.palette.slate.textDim} weight="bold" />
               </Pressable>
             </Pressable>
           )
@@ -83,7 +85,7 @@ export function BoardSelectorSheet({
           accessibilityLabel="Add new board"
         >
           <View style={styles.addIcon}>
-            <PlusIcon size={16} color={theme.wheel.color} weight="bold" />
+            <PlusIcon size={16} color={theme.palette.sky.color} weight="bold" />
           </View>
           <Text style={styles.addText}>Add new board</Text>
         </Pressable>
@@ -94,7 +96,7 @@ export function BoardSelectorSheet({
 
 const styles = StyleSheet.create({
   sectionTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
@@ -113,7 +115,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   boardRowActive: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
   },
   boardRowPressed: {
     backgroundColor: interaction.pressedBg,
@@ -122,24 +124,24 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   boardIconActive: {
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
   },
   boardInfo: {
     flex: 1,
     gap: 2,
   },
   boardName: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 14,
     fontWeight: '600',
   },
   boardNameActive: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
   },
   addRow: {
     flexDirection: 'row',
@@ -155,13 +157,13 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },
   addText: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 14,
     fontWeight: '700',
   },

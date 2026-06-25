@@ -18,7 +18,7 @@ export function BoardPickerModal({ visible, boards, onSelect, onDismiss }: Board
           <View style={styles.promptHeader}>
             <Text style={styles.promptTitle}>Copy to board</Text>
             <Pressable style={styles.promptCloseBtn} onPress={onDismiss}>
-              <XIcon size={14} color="#cbd5e1" weight="bold" />
+              <XIcon size={14} color={theme.palette.slate.text} weight="bold" />
             </Pressable>
           </View>
           {boards.length === 0 ? (
@@ -45,15 +45,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.neutral.modalBackdrop,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.6),
     padding: 32,
   },
   promptModal: {
     width: '100%',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 16,
     gap: 14,
   },
@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   promptTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 16,
     fontWeight: '900',
   },
@@ -73,23 +73,23 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   boardPickerItem: {
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderTopWidth: 1,
-    borderTopColor: theme.neutral.surfaceDeep,
+    borderTopColor: theme.palette.slate.surfaceDeep,
     minHeight: 44,
     justifyContent: 'center',
   },
   boardPickerText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 14,
     fontWeight: '700',
   },
   emptyText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: 16,

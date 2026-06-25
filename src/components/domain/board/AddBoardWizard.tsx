@@ -26,10 +26,10 @@ import { useBleStore, NUS_SERVICE_UUID } from '@/store/bleStore'
 import { usePermissions } from '@/hooks/usePermissions'
 
 const STEP_META: Record<WizardStepId, { label: string; icon: typeof Bluetooth; color: string }> = {
-  scan: { label: 'Pair', icon: Bluetooth, color: theme.wheel.color },
-  name: { label: 'Name', icon: TextT, color: theme.highlight.color },
-  battery: { label: 'Battery', icon: BatteryFull, color: theme.gps.color },
-  confirm: { label: 'Confirm', icon: CheckCircle, color: theme.target.color },
+  scan: { label: 'Pair', icon: Bluetooth, color: theme.palette.sky.color },
+  name: { label: 'Name', icon: TextT, color: theme.palette.yellow.color },
+  battery: { label: 'Battery', icon: BatteryFull, color: theme.palette.green.color },
+  confirm: { label: 'Confirm', icon: CheckCircle, color: theme.palette.purple.color },
 }
 
 interface Props {
@@ -70,7 +70,7 @@ function ProgressBar({ step }: { step: number }) {
             <View key={id} style={styles.progressLabelItem}>
               <meta.icon
                 size={12}
-                color={active ? meta.color : theme.neutral.textDim}
+                color={active ? meta.color : theme.palette.slate.textDim}
                 weight="bold"
               />
               <Text style={[styles.progressLabel, active && { color: meta.color }]}>
@@ -183,7 +183,7 @@ function ScanSelectStep({ wizard }: Props) {
   return (
     <View style={styles.step}>
       <View style={styles.stepHeader}>
-        <Bluetooth size={20} color={theme.wheel.color} weight="duotone" />
+        <Bluetooth size={20} color={theme.palette.sky.color} weight="duotone" />
         <Text style={styles.stepTitle}>Pair your board</Text>
         <View style={styles.stepHeaderSpacer} />
         {wizard.draftLink ? (
@@ -200,7 +200,7 @@ function ScanSelectStep({ wizard }: Props) {
       {wizard.draftLink ? (
         <>
           <View style={styles.pairedBanner}>
-            <Bluetooth size={16} color={theme.gps.color} weight="duotone" />
+            <Bluetooth size={16} color={theme.palette.green.color} weight="duotone" />
             <Text style={styles.pairedText}>
               Linked to {wizard.bleName || wizard.bleId} ·{' '}
               {formatBoardTransport(wizard.draftLink.transport)}
@@ -217,10 +217,10 @@ function ScanSelectStep({ wizard }: Props) {
       ) : (
         <>
           <View style={styles.scanHeader}>
-            {isScanning && <ActivityIndicator color={theme.wheel.color} size="small" />}
+            {isScanning && <ActivityIndicator color={theme.palette.sky.color} size="small" />}
             <SignalIcon
               size={14}
-              color={isScanning ? theme.wheel.color : theme.neutral.textMuted}
+              color={isScanning ? theme.palette.sky.color : theme.palette.slate.textMuted}
               weight="bold"
             />
             <Text style={styles.scanStatus}>
@@ -253,9 +253,9 @@ function ScanSelectStep({ wizard }: Props) {
                 hitSlop={8}
               >
                 {showOther ? (
-                  <CaretDown size={12} color={theme.neutral.textMuted} weight="bold" />
+                  <CaretDown size={12} color={theme.palette.slate.textMuted} weight="bold" />
                 ) : (
-                  <CaretRight size={12} color={theme.neutral.textMuted} weight="bold" />
+                  <CaretRight size={12} color={theme.palette.slate.textMuted} weight="bold" />
                 )}
                 <Text style={styles.otherDevicesLabel}>Other devices ({otherDevices.length})</Text>
               </Pressable>
@@ -279,7 +279,7 @@ function ScanSelectStep({ wizard }: Props) {
 
 function NameStep({ wizard }: Props) {
   return (
-    <StepContainer title="Name your board" icon={TextT} color={theme.highlight.color}>
+    <StepContainer title="Name your board" icon={TextT} color={theme.palette.yellow.color}>
       <BoardInfoForm
         name={wizard.name}
         description={wizard.description}
@@ -300,7 +300,7 @@ function NameStep({ wizard }: Props) {
 
 function BatteryStep({ wizard }: Props) {
   return (
-    <StepContainer title="Battery config" icon={BatteryFull} color={theme.gps.color}>
+    <StepContainer title="Battery config" icon={BatteryFull} color={theme.palette.green.color}>
       <BoardBatteryForm
         batteryMode={wizard.batteryMode}
         cellPresetId={wizard.cellPresetId}
@@ -328,11 +328,11 @@ function BatteryStep({ wizard }: Props) {
 
 function ConfirmStep({ wizard }: Props) {
   return (
-    <StepContainer title="Review & save" icon={CheckCircle} color={theme.target.color}>
+    <StepContainer title="Review & save" icon={CheckCircle} color={theme.palette.purple.color}>
       <View style={styles.confirmCard}>
         <ConfirmRow
           icon={Bluetooth}
-          iconColor={theme.wheel.color}
+          iconColor={theme.palette.sky.color}
           label="Board Link"
           value={
             wizard.draftLink
@@ -343,7 +343,7 @@ function ConfirmStep({ wizard }: Props) {
         <View style={styles.confirmDivider} />
         <ConfirmRow
           icon={TextT}
-          iconColor={theme.highlight.color}
+          iconColor={theme.palette.yellow.color}
           label="Name"
           value={wizard.name.trim() || 'Unnamed board'}
         />
@@ -352,7 +352,7 @@ function ConfirmStep({ wizard }: Props) {
             <View style={styles.confirmDivider} />
             <ConfirmRow
               icon={TextT}
-              iconColor={theme.highlight.color}
+              iconColor={theme.palette.yellow.color}
               label="Description"
               value={wizard.description.trim()}
             />
@@ -361,7 +361,7 @@ function ConfirmStep({ wizard }: Props) {
         <View style={styles.confirmDivider} />
         <ConfirmRow
           icon={BatteryFull}
-          iconColor={theme.gps.color}
+          iconColor={theme.palette.green.color}
           label={wizard.batterySummary.title}
           value={wizard.batterySummary.value}
         />
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 2,
     borderRadius: 1,
-    backgroundColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.border,
   },
   progressLabels: {
     flexDirection: 'row',
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   progressLabel: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -497,12 +497,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   skipLink: {
-    color: theme.bran.text,
+    color: theme.palette.cyan.text,
     fontSize: 13,
     fontWeight: '700',
   },
   stepTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 20,
     fontWeight: '800',
   },
@@ -512,12 +512,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   scanStatus: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     fontWeight: '600',
   },
   emptyHint: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     textAlign: 'center',
     marginTop: 32,
     fontSize: 13,
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   otherDevicesLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -537,15 +537,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: theme.gps.bg,
+    backgroundColor: theme.palette.green.bg,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: theme.gps.border,
+    borderColor: theme.palette.green.border,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   pairedText: {
-    color: theme.gps.text,
+    color: theme.palette.green.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -558,10 +558,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   confirmCard: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     paddingVertical: 4,
   },
   confirmRow: {
@@ -577,17 +577,17 @@ const styles = StyleSheet.create({
   },
   confirmDivider: {
     height: 1,
-    backgroundColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.border,
     marginLeft: 42,
   },
   confirmLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   confirmValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },

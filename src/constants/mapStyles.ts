@@ -17,20 +17,20 @@ export const MAP_DEFAULTS = {
   animationDuration: 350,
   followAnimationDuration: 450,
   pitchThreshold: 10,
-  markerColor: '#7c6fef',
-  markerInactiveColor: '#9ca3af',
-  trailColor: '#7c6fef',
+  markerColor: theme.palette.violet.color,
+  markerInactiveColor: theme.palette.slate.light,
+  trailColor: theme.palette.violet.color,
   trailWidth: 3,
-  accuracyFillColor: 'rgba(124,111,239,0.18)',
-  trailGradientStart: 'rgba(124,111,239,0)',
-  trailGradientEnd: 'rgba(124,111,239,0.85)',
+  accuracyFillColor: theme.alpha(theme.palette.violet.color, 0.12),
+  trailGradientStart: theme.alpha(theme.palette.violet.color, 0),
+  trailGradientEnd: theme.alpha(theme.palette.violet.color, 0.85),
 } as const
 
 export const BLANK_STYLE = JSON.stringify({
   version: 8,
   sources: {},
   layers: [
-    { id: 'background', type: 'background', paint: { 'background-color': theme.neutral.bg } },
+    { id: 'background', type: 'background', paint: { 'background-color': theme.palette.slate.bg } },
   ],
 })
 

@@ -14,16 +14,16 @@ Visual design principles for the Vibe Wheel app. Follow these when building or m
 
 Dark-first. All screens use dark backgrounds with light text.
 
-| Role           | Token                         |
-| -------------- | ----------------------------- |
-| Background     | `theme.neutral.bg`            |
-| Card / surface | `theme.neutral.surface`       |
-| Deep surface   | `theme.neutral.surfaceDeep`   |
-| Border         | `theme.neutral.border`        |
-| Primary text   | `theme.neutral.textPrimary`   |
-| Secondary text | `theme.neutral.textSecondary` |
-| Muted text     | `theme.neutral.textMuted`     |
-| Dim text       | `theme.neutral.textDim`       |
+| Role           | Token                               |
+| -------------- | ----------------------------------- |
+| Background     | `theme.palette.slate.bg`            |
+| Card / surface | `theme.palette.slate.surface`       |
+| Deep surface   | `theme.palette.slate.surfaceDeep`   |
+| Border         | `theme.palette.slate.border`        |
+| Primary text   | `theme.palette.slate.textPrimary`   |
+| Secondary text | `theme.palette.slate.textSecondary` |
+| Muted text     | `theme.palette.slate.textMuted`     |
+| Dim text       | `theme.palette.slate.textDim`       |
 
 ## Layout Principles
 
@@ -34,22 +34,80 @@ Dark-first. All screens use dark backgrounds with light text.
 
 ## Semantic Colors
 
-Use `src/constants/theme.ts` for all accent colors. Never hardcode a color that belongs to one of these categories directly in a component.
+Use `src/constants/theme.ts` for all accent colors. Never hardcode a hex value, `rgba(...)` literal, or any color string directly in a component.
 
-| Token       | `.color`  | Purpose                        |
-| ----------- | --------- | ------------------------------ |
-| `wheel`     | `#38bdf8` | Board data, version, distance  |
-| `bran`      | `#06b6d4` | Brand / primary accents        |
-| `gps`       | `#22c55e` | GPS, Android platform, success |
-| `target`    | `#a855f7` | Time, iOS platform, profiles   |
-| `warning`   | `#f97316` | Database, speed, warnings      |
-| `error`     | `#ef4444` | Destructive, errors            |
-| `highlight` | `#facc15` | Stars, achievements, gauges    |
-| `teal`      | `#14b8a6` | Secondary data, avg metrics    |
+The theme is organized into domains:
 
-Each token also provides `.bg`, `.text`, and `.border` variants for pills, cards, and badges.
+### `palette`
 
-Neutral row icons use `theme.neutral.textSecondary`.
+Named hue swatches. Every hue exposes `.color`, `.alt` (alias of `.light`), `.light`, `.text`, `.bg`, and `.border`.
+
+| Hue       | Purpose                                        |
+| --------- | ---------------------------------------------- |
+| `cyan`    | Brand / primary accents                        |
+| `sky`     | Board data, version, distance, speed           |
+| `green`   | GPS, Android platform, success, battery        |
+| `purple`  | Time, iOS platform, profiles                   |
+| `amber`   | Weather sun, diagnostic indicators             |
+| `orange`  | Warnings, motor and controller temperatures    |
+| `red`     | Destructive actions, errors                    |
+| `yellow`  | Stars, achievements, gauges                    |
+| `blue`    | Currents, info states                          |
+| `fuchsia` | Roll telemetry                                 |
+| `pink`    | Balance pitch telemetry                        |
+| `violet`  | Map trail / marker accents                     |
+| `slate`   | Neutral surfaces, text, borders, map buildings |
+| `mono`    | Pure black and white                           |
+
+### `telemetry`
+
+Single-color tokens for every metric. Use these for charts, sparklines, gauges, and live readouts so the same metric always has the same color.
+
+| Token            | Source hue              |
+| ---------------- | ----------------------- |
+| `speed`          | `palette.sky.light`     |
+| `duty`           | `palette.teal.color`    |
+| `motorCurrent`   | `palette.blue.color`    |
+| `battCurrent`    | `palette.blue.alt`      |
+| `motorTemp`      | `palette.red.color`     |
+| `controllerTemp` | `palette.orange.color`  |
+| `battVoltage`    | `palette.green.light`   |
+| `footpad1`       | `palette.slate.light`   |
+| `footpad2`       | `palette.slate.color`   |
+| `pitch`          | `palette.purple.color`  |
+| `roll`           | `palette.fuchsia.light` |
+| `balancePitch`   | `palette.pink.color`    |
+
+### `map`
+
+| Token           | Purpose              |
+| --------------- | -------------------- |
+| `user`          | Current GPS position |
+| `target`        | Destination / target |
+| `buildingDark`  | Dark map buildings   |
+| `buildingLight` | Light map buildings  |
+
+### `status`
+
+Semantic UI-state tokens. Each exposes `.color`, `.text`, `.bg`, and `.border`.
+
+| Token      | Meaning                |
+| ---------- | ---------------------- |
+| `info`     | Informational callouts |
+| `success`  | Success / connected    |
+| `warning`  | Warnings               |
+| `error`    | Errors / destructive   |
+| `favorite` | Favorites / stars      |
+
+### `alpha`
+
+Every translucent value (overlays, backdrops, zone tints, glow gradients, vignettes) must be created with `theme.alpha(color, level)` using one of the typed levels:
+
+```ts
+type AlphaLevel = 0 | 0.12 | 0.3 | 0.6 | 0.85
+```
+
+Neutral row icons use `theme.palette.slate.textSecondary`.
 
 ## Icons
 

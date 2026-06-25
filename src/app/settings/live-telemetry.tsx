@@ -30,7 +30,7 @@ export default function LiveTelemetrySettingsScreen() {
         <SettingsCard>
           <SettingsRow
             icon={ClockCountdownIcon}
-            iconColor={theme.wheel.color}
+            iconColor={theme.palette.sky.color}
             label="Live history limit"
             hint="Minutes of telemetry visible in live graphs"
             right={
@@ -49,7 +49,7 @@ export default function LiveTelemetrySettingsScreen() {
           />
           <SettingsRow
             icon={GaugeIcon}
-            iconColor={theme.gps.color}
+            iconColor={theme.palette.green.color}
             label="Telemetry rate limit"
             hint="Caps telemetry requests per second. 0 = unlimited"
             right={
@@ -70,7 +70,7 @@ export default function LiveTelemetrySettingsScreen() {
           />
           <SettingsRow
             icon={WaveformIcon}
-            iconColor={theme.target.color}
+            iconColor={theme.palette.purple.color}
             label="Battery smoothing"
             hint="Median window steadies battery % for display and alerts. 0 = off"
             right={
@@ -98,7 +98,7 @@ export default function LiveTelemetrySettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,

@@ -80,7 +80,7 @@ function DropdownShowcase() {
         <View style={{ padding: 12, gap: 8 }}>
           <Text style={styles.dropdownItem}>Profile</Text>
           <Text style={styles.dropdownItem}>Settings</Text>
-          <Text style={[styles.dropdownItem, { color: theme.error.color }]}>Logout</Text>
+          <Text style={[styles.dropdownItem, { color: theme.status.error.color }]}>Logout</Text>
         </View>
       </Dropdown>
     </ShowcaseCard>
@@ -122,11 +122,11 @@ export default function FormsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
-  previewHint: { color: theme.neutral.textDim, fontSize: 12, fontStyle: 'italic' },
+  previewHint: { color: theme.palette.slate.textDim, fontSize: 12, fontStyle: 'italic' },
   dropdownItem: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '700',
     paddingVertical: 4,

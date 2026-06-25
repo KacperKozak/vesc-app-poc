@@ -43,9 +43,9 @@ const BAD_EVENTS = new Set([
 ])
 
 function getEventColor(eventName: string): string {
-  if (GOOD_EVENTS.has(eventName)) return theme.gps.color
-  if (BAD_EVENTS.has(eventName)) return theme.error.color
-  return theme.highlight.color
+  if (GOOD_EVENTS.has(eventName)) return theme.palette.green.color
+  if (BAD_EVENTS.has(eventName)) return theme.status.error.color
+  return theme.palette.yellow.color
 }
 
 function formatProperties(json: string): string {
@@ -215,7 +215,7 @@ export default function DiagnosticEventsScreen() {
         }
         ListFooterComponent={
           loading && events.length > 0 ? (
-            <ActivityIndicator color="#64748b" style={styles.footer} />
+            <ActivityIndicator color={theme.palette.slate.color} style={styles.footer} />
           ) : !hasMore && events.length > 0 ? (
             <Text style={styles.footerText}>— end —</Text>
           ) : null
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 12,
@@ -249,30 +249,30 @@ const styles = StyleSheet.create({
     height: 4,
   },
   emptyCard: {
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 14,
   },
   emptyText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 14,
   },
   footer: {
     paddingVertical: 16,
   },
   footerText: {
-    color: theme.neutral.border,
+    color: theme.palette.slate.border,
     fontSize: 12,
     textAlign: 'center',
     paddingVertical: 16,
   },
   eventRow: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 10,
     gap: 2,
   },
@@ -288,34 +288,34 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   eventTime: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontVariant: ['tabular-nums'],
     flexShrink: 0,
   },
   eventName: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '600',
     flex: 1,
   },
   eventMeta: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
   },
   eventMessage: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
   },
   eventExpanded: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: theme.neutral.border,
+    borderTopColor: theme.palette.slate.border,
     gap: 2,
   },
   fieldLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -324,12 +324,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   fieldValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontVariant: ['tabular-nums'],
   },
   eventJson: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 11,
     fontFamily: 'monospace',
   },

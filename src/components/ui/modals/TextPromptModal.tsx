@@ -31,7 +31,7 @@ function TextPromptModalContent({
           value={text}
           onChangeText={setText}
           placeholder={placeholder}
-          placeholderTextColor={theme.neutral.textDim}
+          placeholderTextColor={theme.palette.slate.textDim}
           autoFocus
           selectTextOnFocus
         />
@@ -43,7 +43,7 @@ function TextPromptModalContent({
             style={styles.promptConfirmBtn}
             onPress={() => text.trim() && onConfirm(text.trim())}
           >
-            <CheckIcon size={15} color={theme.neutral.surfaceDeep} weight="bold" />
+            <CheckIcon size={15} color={theme.palette.slate.surfaceDeep} weight="bold" />
             <Text style={styles.promptConfirmText}>{confirmLabel}</Text>
           </Pressable>
         </View>
@@ -92,20 +92,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.neutral.modalBackdrop,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.6),
     padding: 32,
   },
   promptModal: {
     width: '100%',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 16,
     gap: 14,
   },
   promptTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 16,
     fontWeight: '900',
   },
@@ -123,12 +123,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   promptCancelText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -136,14 +136,14 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: theme.wheel.color,
+    backgroundColor: theme.palette.sky.color,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   promptConfirmText: {
-    color: theme.neutral.surfaceDeep,
+    color: theme.palette.slate.surfaceDeep,
     fontSize: 13,
     fontWeight: '900',
   },

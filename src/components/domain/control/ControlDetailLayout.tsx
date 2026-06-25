@@ -40,7 +40,7 @@ export function ControlDetailLayout({
   const alerts = (
     <View style={styles.alertsSection}>
       <View style={styles.sectionHeader}>
-        <BellRingingIcon size={20} color={theme.highlight.color} weight="duotone" />
+        <BellRingingIcon size={20} color={theme.palette.yellow.color} weight="duotone" />
         <Text style={styles.sectionLabel}>Alerts</Text>
       </View>
       {controls.length > 0 ? (
@@ -81,7 +81,7 @@ export function ControlDetailLayout({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   alertControlLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -110,13 +110,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sectionLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   placeholder: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 14,
   },
 })

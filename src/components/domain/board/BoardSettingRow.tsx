@@ -42,7 +42,7 @@ export function BoardSettingRow({
           </Text>
         ) : null}
       </View>
-      <CaretRightIcon size={16} color="#64748b" weight="bold" />
+      <CaretRightIcon size={16} color={theme.palette.slate.color} weight="bold" />
     </Pressable>
   )
 }
@@ -65,17 +65,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   label: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
   value: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     fontWeight: '600',
   },
   hint: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '500',
   },

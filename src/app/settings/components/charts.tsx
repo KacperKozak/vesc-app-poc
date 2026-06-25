@@ -98,7 +98,7 @@ function SparklineShowcase() {
               telemetry.speed.color,
               telemetry.duty.color,
               telemetry.controllerTemp.color,
-              theme.highlight.color,
+              theme.palette.yellow.color,
             ]}
             selected={color}
             onSelect={setColor}
@@ -290,7 +290,7 @@ export default function ChartsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
   chartExample: { marginBottom: 10 },
 })

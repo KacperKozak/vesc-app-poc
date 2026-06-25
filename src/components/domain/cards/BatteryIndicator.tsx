@@ -23,7 +23,7 @@ const BATTERY_LOW_PCT = 30
 
 /** Warning shade when low on charge, else the battery metric color. Mirrors the gauge fill. */
 function pickColor(percent: number | null): string {
-  if (percent != null && percent < BATTERY_LOW_PCT) return theme.warning.color
+  if (percent != null && percent < BATTERY_LOW_PCT) return theme.status.warning.color
   return telemetry.battVoltage.color
 }
 

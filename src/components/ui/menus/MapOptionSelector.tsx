@@ -125,7 +125,7 @@ function MapOptionButton({
     () => ({
       width: withTiming(expanded && selected ? ACTIVE_WIDTH : OPTION_WIDTH, ANIMATION),
       backgroundColor: withTiming(
-        expanded && selected ? activeBackground : theme.neutral.transparent,
+        expanded && selected ? activeBackground : theme.alpha(theme.palette.mono.black, 0),
         ANIMATION,
       ),
     }),
@@ -166,9 +166,9 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     overflow: 'hidden',
-    backgroundColor: theme.neutral.mapOverlaySelector,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   options: {
     position: 'absolute',

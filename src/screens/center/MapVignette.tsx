@@ -1,5 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { StyleSheet, useWindowDimensions, View } from 'react-native'
+
+import { theme } from '@/constants/theme'
 import {
   Canvas,
   Group,
@@ -42,7 +44,7 @@ interface VignetteLayerProps {
   children?: ReactNode
 }
 
-const DARK = '#0f172a'
+const DARK = theme.palette.slate.surfaceDeep
 const RADIAL_POSITIONS = [0, 0.4, 0.68, 1]
 const TOP_POSITIONS = [0, 0.7, 1]
 const HISTORY_TOP_POSITIONS = [0, 0.52, 1]
@@ -50,10 +52,8 @@ const HISTORY_BOTTOM_POSITIONS = [0, 0.5, 0.6, 1]
 const WEATHER_TOP_POSITIONS = [0, 0.55, 1]
 const WEATHER_BOTTOM_POSITIONS = [0, 0.55, 1]
 
-function alpha(opacity: number) {
-  return `${DARK}${Math.round(opacity * 255)
-    .toString(16)
-    .padStart(2, '0')}`
+function vignetteOpacity(level: number) {
+  return theme.alpha(DARK, level as 0 | 0.12 | 0.3 | 0.6 | 0.85)
 }
 
 function VignetteLayer({
@@ -82,7 +82,7 @@ function VignetteLayer({
             <RadialGradient
               c={vec(width / 2, height / 2)}
               r={radialRadius}
-              colors={radial.map(alpha)}
+              colors={radial.map(vignetteOpacity)}
               positions={RADIAL_POSITIONS}
             />
           </Rect>
@@ -92,7 +92,7 @@ function VignetteLayer({
         <LinearGradient
           start={vec(0, 0)}
           end={vec(0, height * topEnd)}
-          colors={top.map(alpha)}
+          colors={top.map(vignetteOpacity)}
           positions={topPositions}
         />
       </Rect>
@@ -101,7 +101,7 @@ function VignetteLayer({
           <LinearGradient
             start={vec(0, height)}
             end={vec(0, height * bottomStart)}
-            colors={bottom.map(alpha)}
+            colors={bottom.map(vignetteOpacity)}
             positions={bottomPositions}
           />
         </Rect>
@@ -129,7 +129,7 @@ function AnimatedHistoryBottomGradient({
       <LinearGradient
         start={vec(0, height)}
         end={gradientEnd}
-        colors={[0.8, 0.7, 0.2, 0].map(alpha)}
+        colors={[0.85, 0.6, 0.3, 0].map(vignetteOpacity)}
         positions={HISTORY_BOTTOM_POSITIONS}
       />
     </Rect>
@@ -186,11 +186,11 @@ export function MapVignette({
           width={width}
           height={height}
           opacity={standardLayerOpacity}
-          radial={topOnly ? undefined : [0, 0.1, 0.32, 0.58]}
-          top={[0.88, 0.42, 0]}
+          radial={topOnly ? undefined : [0, 0.12, 0.3, 0.6]}
+          top={[0.85, 0.3, 0]}
           topPositions={TOP_POSITIONS}
           topEnd={0.34}
-          bottom={topOnly ? undefined : [0.9, 0.8, 0]}
+          bottom={topOnly ? undefined : [0.85, 0.6, 0]}
           bottomPositions={TOP_POSITIONS}
           bottomStart={topOnly ? undefined : 0.6}
         />
@@ -200,8 +200,8 @@ export function MapVignette({
               width={width}
               height={height}
               opacity={historyLayerOpacity}
-              radial={[0, 0.14, 0.4, 0.65]}
-              top={[0.9, 0.5, 0]}
+              radial={[0, 0.12, 0.3, 0.6]}
+              top={[0.85, 0.6, 0]}
               topPositions={HISTORY_TOP_POSITIONS}
               topEnd={0.38}
             >
@@ -215,11 +215,11 @@ export function MapVignette({
               width={width}
               height={height}
               opacity={weatherLayerOpacity}
-              radial={[0, 0.08, 0.28, 0.55]}
-              top={[0.92, 0.45, 0]}
+              radial={[0, 0.12, 0.3, 0.6]}
+              top={[0.85, 0.3, 0]}
               topPositions={WEATHER_TOP_POSITIONS}
               topEnd={0.3}
-              bottom={[0.88, 0.5, 0]}
+              bottom={[0.85, 0.6, 0]}
               bottomPositions={WEATHER_BOTTOM_POSITIONS}
               bottomStart={0.78}
             />

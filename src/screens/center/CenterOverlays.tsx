@@ -310,7 +310,11 @@ function FullMapControls({
       {searchOpen ? (
         <View style={[styles.mapSearchSheet, { top }]}>
           <View style={styles.mapSearchBar}>
-            <MagnifyingGlassIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+            <MagnifyingGlassIcon
+              size={22}
+              color={theme.palette.slate.textSecondary}
+              weight="bold"
+            />
             <TextInput
               autoFocus
               selectTextOnFocus
@@ -318,7 +322,7 @@ function FullMapControls({
               onChangeText={handleSearchQueryChange}
               onSubmitEditing={handleSearchSubmit}
               placeholder="Address or place"
-              placeholderTextColor={theme.neutral.textMuted}
+              placeholderTextColor={theme.palette.slate.textMuted}
               returnKeyType="search"
               style={styles.mapSearchInput}
             />
@@ -331,14 +335,14 @@ function FullMapControls({
                 pressed && styles.mapSearchClosePressed,
               ]}
             >
-              <XIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
+              <XIcon size={22} color={theme.palette.slate.textSecondary} weight="bold" />
             </Pressable>
           </View>
           {searchLoading || searchError || showNoResults || searchResults.length > 0 ? (
             <View style={styles.mapSearchResults}>
               {searchLoading ? (
                 <View style={styles.mapSearchStatusRow}>
-                  <ActivityIndicator size="small" color={theme.wheel.color} />
+                  <ActivityIndicator size="small" color={theme.palette.sky.color} />
                   <Text style={styles.mapSearchStatusText}>Searching Mapbox</Text>
                 </View>
               ) : null}
@@ -363,7 +367,7 @@ function FullMapControls({
                   onPress={() => handleSearchSelect(result)}
                 >
                   <View style={styles.mapSearchResultIcon}>
-                    <MapPinIcon size={16} color={theme.gps.text} weight="duotone" />
+                    <MapPinIcon size={16} color={theme.palette.green.text} weight="duotone" />
                   </View>
                   <View style={styles.mapSearchResultText}>
                     <Text style={styles.mapSearchResultTitle} numberOfLines={1}>
@@ -413,7 +417,7 @@ function FullMapControls({
         />
       </View>
       <Pressable style={[styles.mapBackAction, { bottom }]} onPress={map.exitMapFocus}>
-        <ArrowLeftIcon size={20} color={theme.neutral.textSecondary} weight="bold" />
+        <ArrowLeftIcon size={20} color={theme.palette.slate.textSecondary} weight="bold" />
         <Text style={styles.mapBackLabel}>GO BACK</Text>
       </Pressable>
       <View style={[styles.mapFilterAction, { bottom }]}>
@@ -767,7 +771,7 @@ export function CenterOverlays({
         <>
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
-              <ActivityIndicator size="small" color={theme.wheel.color} />
+              <ActivityIndicator size="small" color={theme.palette.sky.color} />
             </View>
           )}
           <HistoryTelemetryPanel
@@ -808,7 +812,7 @@ export function CenterOverlays({
         <>
           {historyBusy && (
             <View pointerEvents="none" style={styles.mapLoading}>
-              <ActivityIndicator size="small" color={theme.wheel.color} />
+              <ActivityIndicator size="small" color={theme.palette.sky.color} />
             </View>
           )}
           <HistoryTelemetryPanel
@@ -909,8 +913,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     zIndex: 32,
-    borderColor: theme.neutral.borderMuted,
-    backgroundColor: theme.neutral.mapOverlaySelector,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
   },
   mapSearchSheet: {
     position: 'absolute',
@@ -923,8 +927,8 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
-    backgroundColor: theme.neutral.mapOverlaySelector,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -934,7 +938,7 @@ const styles = StyleSheet.create({
   mapSearchInput: {
     flex: 1,
     minWidth: 0,
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '700',
     paddingVertical: 10,
@@ -952,8 +956,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
-    backgroundColor: theme.neutral.mapOverlaySelector,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
   },
   mapSearchStatusRow: {
     minHeight: 48,
@@ -963,12 +967,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   mapSearchStatusText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
   },
   mapSearchErrorText: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -989,22 +993,22 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: theme.gps.border,
+    borderColor: theme.palette.green.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   mapSearchResultText: {
     flex: 1,
     minWidth: 0,
   },
   mapSearchResultTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '800',
   },
   mapSearchResultSubtitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
@@ -1015,7 +1019,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 1,
-    backgroundColor: theme.neutral.borderMuted,
+    backgroundColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   mapSelectors: {
     position: 'absolute',
@@ -1032,15 +1036,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   mapBackLabel: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
@@ -1064,16 +1068,16 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     borderRadius: 21,
     overflow: 'hidden',
-    backgroundColor: theme.neutral.mapOverlaySelector,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   mapFilterMenuAttached: {
     borderBottomLeftRadius: 5,
   },
   mapFilterButtonAttached: {
-    backgroundColor: theme.neutral.mapOverlaySelector,
-    borderColor: theme.neutral.borderMuted,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
     borderTopLeftRadius: 5,
     borderTopRightRadius: 5,
     borderBottomLeftRadius: 27,
@@ -1092,7 +1096,7 @@ const styles = StyleSheet.create({
     opacity: 0.38,
   },
   mapFilterRowLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -1102,23 +1106,23 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 1,
-    backgroundColor: theme.neutral.borderMuted,
+    backgroundColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   mapAddMenu: {
     minWidth: 178,
     alignItems: 'stretch',
     borderRadius: 21,
     overflow: 'hidden',
-    backgroundColor: theme.neutral.mapOverlaySelector,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   mapAddMenuAttached: {
     borderBottomRightRadius: 5,
   },
   mapAddButtonAttached: {
-    backgroundColor: theme.neutral.mapOverlaySelector,
-    borderColor: theme.neutral.borderMuted,
+    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.85),
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
     borderTopLeftRadius: 5,
     borderTopRightRadius: 5,
     borderBottomLeftRadius: 27,
@@ -1152,7 +1156,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 7,
     width: 1,
-    backgroundColor: theme.neutral.borderMuted,
+    backgroundColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   mapAddRowBorder: {
     position: 'absolute',
@@ -1160,13 +1164,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 1,
-    backgroundColor: theme.neutral.borderMuted,
+    backgroundColor: theme.alpha(theme.palette.slate.light, 0.3),
   },
   mapAddRowPressed: {
     opacity: 0.55,
   },
   mapAddRowLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -1177,7 +1181,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   centerPlacementPointer: {
     ...StyleSheet.absoluteFill,
@@ -1190,15 +1194,15 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: theme.neutral.textPrimary,
-    backgroundColor: theme.neutral.transparent,
+    borderColor: theme.palette.slate.textPrimary,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0),
   },
   centerPlacementDot: {
     position: 'absolute',
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: theme.neutral.textPrimary,
+    backgroundColor: theme.palette.slate.textPrimary,
   },
   telemetryInterface: {
     ...StyleSheet.absoluteFill,
@@ -1258,12 +1262,12 @@ const styles = StyleSheet.create({
     zIndex: 25,
     borderRadius: 10,
     padding: 10,
-    backgroundColor: theme.error.bg,
+    backgroundColor: theme.status.error.bg,
     borderWidth: 1,
-    borderColor: theme.error.bg,
+    borderColor: theme.status.error.bg,
   },
   historyErrorText: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1277,9 +1281,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: theme.neutral.loadingOverlay,
+    backgroundColor: theme.alpha(theme.palette.slate.bg, 0.6),
     borderWidth: 1,
-    borderColor: theme.neutral.borderMuted,
+    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
     transform: [{ translateX: -17 }, { translateY: -17 }],
   },
 })

@@ -19,19 +19,19 @@ export default function StateScreen() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 10,
     padding: 16,
     gap: 8,
   },
   label: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   stateName: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 28,
     fontFamily: 'monospace',
     fontWeight: '600',
