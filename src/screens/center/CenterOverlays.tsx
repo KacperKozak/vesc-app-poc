@@ -51,11 +51,11 @@ import { searchMapResults, type MapSearchResult } from '@/lib/map/search'
 import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { routes } from '@/navigation/routes'
 import { BottomTelemetryStrip, STRIP_CONTENT_HEIGHT } from '@/screens/center/BottomTelemetryStrip'
+import { type CenterMapHandle } from '@/screens/center/CenterMap'
 import {
   OffscreenMapIndicator,
-  type CenterMapHandle,
   type OffscreenMapIndicatorState,
-} from '@/screens/center/CenterMap'
+} from '@/screens/center/offscreenMapIndicators'
 import type { MapSelector } from '@/screens/center/centerScreenStore'
 import type { CenterViewState } from '@/screens/center/centerViewState'
 import { HistoryControls } from '@/screens/center/HistoryControls'
