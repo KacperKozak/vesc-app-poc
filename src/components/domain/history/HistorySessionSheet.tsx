@@ -10,7 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native'
-import { CaretRightIcon, WarningCircleIcon } from 'phosphor-react-native'
+import { CaretRightIcon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia'
 
@@ -126,16 +126,6 @@ export function HistorySessionSheet({
                       {telemetry.speed.formatWithUnit(session.maxSpeedKmh)} · GPS{' '}
                       {session.gpsPointCount}
                     </Text>
-                    {session.faultCount > 0 && (
-                      <View style={styles.faultRow}>
-                        <WarningCircleIcon
-                          size={12}
-                          color={theme.status.error.color}
-                          weight="fill"
-                        />
-                        <Text style={styles.faultText}>{session.faultCount} faults</Text>
-                      </View>
-                    )}
                   </View>
                   <CaretRightIcon size={16} color={theme.palette.slate.textDim} weight="bold" />
                 </Pressable>
@@ -346,17 +336,6 @@ const styles = StyleSheet.create({
     height: 2,
     borderRadius: 1,
     backgroundColor: theme.palette.slate.border,
-  },
-  faultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 1,
-  },
-  faultText: {
-    color: theme.status.error.color,
-    fontSize: 11,
-    fontWeight: '700',
   },
   loadingRow: {
     minHeight: 34,
