@@ -170,29 +170,11 @@ export const status = {
   },
 } as const
 
-/** Banner callouts — derived from status tokens. */
+/** Banner callouts — flat row, accent icon + neutral text. */
 export const banner = {
-  info: {
-    bg: status.info.bg,
-    border: status.info.border,
-    icon: status.info.color,
-    title: status.info.color,
-    message: status.info.text,
-  },
-  warning: {
-    bg: status.warning.bg,
-    border: status.warning.border,
-    icon: status.warning.color,
-    title: status.warning.color,
-    message: status.warning.text,
-  },
-  error: {
-    bg: status.error.bg,
-    border: status.error.border,
-    icon: status.error.color,
-    title: status.error.color,
-    message: status.error.text,
-  },
+  info: { icon: status.info.color },
+  warning: { icon: status.warning.color },
+  error: { icon: status.error.color },
 } as const
 
 /** Weather condition icon colors — derived from palette. */
