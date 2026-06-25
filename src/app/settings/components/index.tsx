@@ -44,9 +44,9 @@ const sections = [
     icon: SquaresFourIcon,
   },
   {
-    label: 'Menus',
-    hint: 'HPills, MapOptionSelector, MapNavigationSelector',
-    route: '/settings/components/menus',
+    label: 'Controls',
+    hint: 'CircleButton, FloatingBar, PrevNextSelector, PillSelector, MapOptionSelector',
+    route: '/settings/components/controls',
     icon: SwatchesIcon,
   },
   {
@@ -63,7 +63,7 @@ const sections = [
   },
   {
     label: 'Weather',
-    hint: 'WeatherIcon',
+    hint: 'WeatherIcon, WeatherStat, WeatherPill, WeatherHourlyStrip',
     route: '/settings/components/weather',
     icon: CloudMoonIcon,
   },

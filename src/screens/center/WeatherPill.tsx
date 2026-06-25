@@ -1,14 +1,5 @@
-import { ArrowDownIcon, ArrowUpIcon, DropIcon, SunHorizonIcon } from 'phosphor-react-native'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-
-import { WeatherIcon } from '@/components/ui/weather/WeatherIcon'
-import { interaction, theme } from '@/constants/theme'
-import {
-  isNightAtTime,
-  parseHourLabel,
-  weatherCodeToColor,
-  weatherCodeToLabel,
-} from '@/lib/weather'
+import { WeatherPill as WeatherPillView } from '@/components/ui/weather/WeatherPill'
+import { isNightAtTime } from '@/lib/weather'
 import { useMapWeather } from '@/screens/center/useMapWeather'
 import { useWeatherStore } from '@/store/weatherStore'
 
@@ -18,6 +9,7 @@ interface WeatherPillProps {
   onPress: () => void
 }
 
+/** Store-bound container for the map weather pill. */
 export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
   const weather = useMapWeather(location)
   const precipitationProbability = useWeatherStore((s) => s.precipitationProbability)
@@ -27,146 +19,20 @@ export function WeatherPill({ location, expanded, onPress }: WeatherPillProps) {
   if (!weather) return null
 
   const now = new Date()
-  const currentHour = now.getHours()
-  const isNight = isNightAtTime(currentHour, now.getMinutes(), sunrise, sunset)
-  const iconColor =
-    weather.weatherCode != null
-      ? weatherCodeToColor(weather.weatherCode, currentHour, isNight)
-      : theme.palette.cyan.text
-
-  if (expanded) {
-    return (
-      <View style={styles.expanded}>
-        <WeatherIcon
-          code={weather.weatherCode}
-          hour={currentHour}
-          isNight={isNight}
-          size={28}
-          color={iconColor}
-          weight="duotone"
-        />
-        <View style={styles.expandedDetails}>
-          <View style={styles.expandedText}>
-            <Text style={styles.expandedTemp}>{weather.temperature}°</Text>
-            {weather.weatherCode != null && (
-              <Text style={styles.expandedLabel}>{weatherCodeToLabel(weather.weatherCode)}</Text>
-            )}
-          </View>
-          {sunrise && sunset && (
-            <View style={styles.sunTimes}>
-              <View style={styles.sunTime}>
-                <SunHorizonIcon size={14} color={theme.weather.sun} weight="duotone" />
-                <ArrowUpIcon size={10} color={theme.weather.sun} weight="bold" />
-                <Text style={styles.sunTimeText}>{parseHourLabel(sunrise)}</Text>
-              </View>
-              <View style={styles.sunTime}>
-                <SunHorizonIcon size={14} color={theme.weather.moonPartly} weight="duotone" />
-                <ArrowDownIcon size={10} color={theme.weather.moonPartly} weight="bold" />
-                <Text style={styles.sunTimeText}>{parseHourLabel(sunset)}</Text>
-              </View>
-            </View>
-          )}
-        </View>
-        {precipitationProbability != null && precipitationProbability > 0 && (
-          <View style={styles.precipRow}>
-            <DropIcon size={14} color={theme.palette.sky.color} weight="duotone" />
-            <Text style={styles.precipText}>{precipitationProbability}%</Text>
-          </View>
-        )}
-      </View>
-    )
-  }
+  const hour = now.getHours()
+  const isNight = isNightAtTime(hour, now.getMinutes(), sunrise, sunset)
 
   return (
-    <Pressable style={styles.pill} onPress={onPress} android_ripple={interaction.rippleBorderless}>
-      <WeatherIcon
-        code={weather.weatherCode}
-        hour={currentHour}
-        isNight={isNight}
-        size={16}
-        color={iconColor}
-        weight="duotone"
-      />
-      <Text style={styles.temp}>{weather.temperature}°</Text>
-      {precipitationProbability != null && precipitationProbability > 0 && (
-        <>
-          <DropIcon size={12} color={theme.palette.sky.color} weight="duotone" />
-          <Text style={styles.pillPrecip}>{precipitationProbability}%</Text>
-        </>
-      )}
-    </Pressable>
+    <WeatherPillView
+      code={weather.weatherCode}
+      temperature={weather.temperature}
+      hour={hour}
+      isNight={isNight}
+      precipProbability={precipitationProbability}
+      sunrise={sunrise}
+      sunset={sunset}
+      expanded={expanded}
+      onPress={onPress}
+    />
   )
 }
-
-const styles = StyleSheet.create({
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: theme.alpha(theme.palette.slate.surfaceDeep, 0.6),
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: theme.alpha(theme.palette.slate.light, 0.3),
-  },
-  temp: {
-    color: theme.palette.slate.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  pillPrecip: {
-    color: theme.palette.sky.color,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  expanded: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-  },
-  expandedText: {
-    gap: 1,
-  },
-  expandedDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  expandedTemp: {
-    color: theme.palette.slate.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  expandedLabel: {
-    color: theme.palette.slate.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  sunTimes: {
-    gap: 3,
-  },
-  sunTime: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  sunTimeText: {
-    color: theme.palette.slate.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  precipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginLeft: 8,
-  },
-  precipText: {
-    color: theme.palette.sky.color,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-})

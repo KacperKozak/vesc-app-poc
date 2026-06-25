@@ -91,13 +91,15 @@ const styles = StyleSheet.create({
   },
   chipRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     minHeight: 28,
     gap: 8,
   },
   chips: {
+    flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: 4,
   },
   chip: {

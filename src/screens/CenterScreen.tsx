@@ -1,11 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import { ActivityIndicator, View, Text, StyleSheet } from 'react-native'
 
-import {
-  CenterMap,
-  type CenterMapHandle,
-  type OffscreenMapIndicatorState,
-} from '@/screens/center/CenterMap'
+import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
+import type { OffscreenMapIndicatorState } from '@/screens/center/offscreenMapIndicators'
 import { CenterOverlays } from '@/screens/center/CenterOverlays'
 import { useCenterScreenController } from '@/screens/center/useCenterScreenController'
 import type { Board } from '@/store/boardStore'
