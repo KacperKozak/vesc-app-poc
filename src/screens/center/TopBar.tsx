@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   CaretDownIcon,
-  DropIcon,
   GearSixIcon,
   PencilSimpleIcon,
   PowerIcon,
@@ -13,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BoardSelectorSheet } from '@/components/domain/board/BoardSelectorSheet'
 import { IconButton } from '@/components/ui/base/IconButton'
-import { WeatherIcon } from '@/components/ui/weather/WeatherIcon'
+import { WeatherStat } from '@/components/ui/weather/WeatherStat'
 import { isNightAtTime } from '@/lib/weather'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
@@ -124,21 +123,14 @@ export function TopBar({
       </View>
       {hasWeather && (
         <Pressable style={styles.weatherRow} onPress={onWeatherPress}>
-          <WeatherIcon
-            code={weatherCode}
+          <WeatherStat
+            code={weatherCode!}
+            temperature={weatherTemp!}
             hour={now.getHours()}
             isNight={isNight}
-            size={13}
-            color={theme.palette.slate.textSecondary}
-            weight="duotone"
+            precipProbability={weatherPrecip}
+            size="sm"
           />
-          <Text style={styles.weatherText}>{weatherTemp}°</Text>
-          {weatherPrecip != null && weatherPrecip > 0 && (
-            <>
-              <DropIcon size={11} color={theme.palette.sky.color} weight="duotone" />
-              <Text style={styles.weatherPrecip}>{weatherPrecip}%</Text>
-            </>
-          )}
         </Pressable>
       )}
 
@@ -231,17 +223,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     marginTop: 4,
-  },
-  weatherText: {
-    color: theme.palette.slate.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  weatherPrecip: {
-    color: theme.palette.sky.color,
-    fontSize: 11,
-    fontWeight: '600',
   },
 })

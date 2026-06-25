@@ -63,7 +63,7 @@ const sections = [
   },
   {
     label: 'Weather',
-    hint: 'WeatherIcon',
+    hint: 'WeatherIcon, WeatherStat, WeatherPill, WeatherHourlyStrip',
     route: '/settings/components/weather',
     icon: CloudMoonIcon,
   },
