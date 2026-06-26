@@ -139,6 +139,9 @@ internal class BoardSessionController(private val service: VescForegroundService
             liveSeriesBuckets = LIVE_SERIES_BUCKETS,
         )
     }
+    private val watchPusher by lazy {
+        WatchTelemetryPusher(service.applicationContext, VescForegroundService.appDataScope)
+    }
     private val locationTracker by lazy {
         LocationTracker(
             service.applicationContext,
@@ -839,6 +842,8 @@ internal class BoardSessionController(private val service: VescForegroundService
                 val processed = telemetryPipeline.process(parsed, sessionToken) ?: return
                 markBoardReady()
                 telemetry = parsed
+                // Native cold-path push to the Wear OS Mirror; survives JS being backgrounded (ADR-0019).
+                watchPusher.pushSpeed(kotlin.math.abs(parsed.speed))
                 val batteryPct = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
