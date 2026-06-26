@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
@@ -72,22 +73,29 @@ private fun FrameLayout(frame: WatchFrame, muted: Boolean) {
     val speedColor = if (muted) DimText else SpeedColor
     val dutyColor = if (muted) DimText else DutyColor
     val battColor = if (muted) DimText else batteryColor(frame.battery)
+    val motorColor = if (muted) DimText else MotorTempColor
+    val ctrlColor = if (muted) DimText else CtrlTempColor
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Three rim gauges on one shared screen-centred circle.
+        // Rim gauges on one shared screen-centred circle.
         Canvas(modifier = Modifier.fillMaxSize()) {
             val radius = size.minDimension / 2f - HEAD_W.toPx()
             val center = Offset(size.width / 2f, size.height / 2f)
             val speedFrac = (frame.speed / SPEED_MAX).toFloat().coerceIn(0f, 1f)
             val dutyFrac = ((frame.duty ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
             val battFrac = ((frame.battery ?: 0.0) / 100.0).toFloat().coerceIn(0f, 1f)
+            val motorFrac = tempFraction(frame.motorTemp)
+            val ctrlFrac = tempFraction(frame.ctrlTemp)
 
             // Speed: left (180°) -> top, sweep clockwise.
-            drawGauge(center, radius, 180f, QUARTER_SWEEP, speedFrac, speedColor)
+            drawGauge(center, radius, 180f, QUARTER_SWEEP, speedFrac, speedColor, style = StrongGaugeStyle)
             // Duty: right (360°) -> top, sweep counter-clockwise.
-            drawGauge(center, radius, 360f, -QUARTER_SWEEP, dutyFrac, dutyColor)
+            drawGauge(center, radius, 360f, -QUARTER_SWEEP, dutyFrac, dutyColor, style = StrongGaugeStyle)
             // Battery: bottom arc, left (140°) -> right (40°) through 90°.
-            drawGauge(center, radius, 140f, -BATTERY_SWEEP, battFrac, battColor)
+            drawGauge(center, radius, 140f, -BATTERY_SWEEP, battFrac, battColor, style = SoftGaugeStyle, drawHead = false)
+            // Temps: small arcs in the gaps beside the battery gauge, growing from the bottom.
+            drawGauge(center, radius, 144f, TEMP_SWEEP, motorFrac, motorColor, style = SoftGaugeStyle, drawHead = false)
+            drawGauge(center, radius, 36f, -TEMP_SWEEP, ctrlFrac, ctrlColor, style = SoftGaugeStyle, drawHead = false)
         }
 
         Column(
@@ -96,27 +104,26 @@ private fun FrameLayout(frame: WatchFrame, muted: Boolean) {
         ) {
             // ── Top: speed + duty values, nudged down slightly ──
             Row(
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 20.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(start = 32.dp, end = 32.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                GaugeValue(Modifier.weight(1f), format(frame.speed, 0), "km/h", speedColor)
-                GaugeValue(Modifier.weight(1f), frame.duty?.let { format(it, 0) } ?: "--", "%", dutyColor)
+                LargeGaugeValue(Modifier.weight(1f), format(frame.speed, 0), "km/h", speedColor)
+                LargeGaugeValue(Modifier.weight(1f), frame.duty?.let { format(it, 0) } ?: "--", "%", dutyColor)
             }
 
-            // ── Bottom: temps centered, battery % just above the bottom gauge ──
+            // ── Bottom: temps near center like speed/duty, battery % above bottom gauge ──
             Column(
                 modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom,
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    TempChip("M", frame.motorTemp, if (muted) DimText else MotorTempColor)
-                    TempChip("C", frame.ctrlTemp, if (muted) DimText else CtrlTempColor)
+                    SmallGaugeValue(Modifier.weight(1f), temp(frame.motorTemp), "Motor", motorColor)
+                    SmallGaugeValue(Modifier.weight(1f), temp(frame.ctrlTemp), "Ctrl", ctrlColor)
                 }
-                Spacer(Modifier.height(8.dp))
                 Text(
                     text = frame.battery?.let { "${format(it, 0)}%" } ?: "--",
                     style = MaterialTheme.typography.title3,
@@ -138,23 +145,26 @@ private fun DrawScope.drawGauge(
     sweepDeg: Float,
     fraction: Float,
     color: Color,
+    style: GaugeStyle = DefaultGaugeStyle,
+    drawHead: Boolean = true,
 ) {
     val topLeft = Offset(center.x - radius, center.y - radius)
     val arcSize = Size(radius * 2f, radius * 2f)
-    val guide = Stroke(width = GUIDE_W.toPx(), cap = StrokeCap.Butt)
-    val head = Stroke(width = HEAD_W.toPx(), cap = StrokeCap.Butt)
+    val guide = Stroke(width = style.guideWidth.toPx(), cap = StrokeCap.Butt)
+    val head = Stroke(width = style.headWidth.toPx(), cap = StrokeCap.Butt)
 
     // Thin gray guide across the whole arc.
     drawArc(GuideColor, startDeg, sweepDeg, false, topLeft, arcSize, style = guide)
 
     val sweptDeg = sweepDeg * fraction
     if (fraction > 0f) {
-        // Radial gradient fill from the inside out (faint near rim).
+        // Radial gradient fill from the inside out (soft but longer glow near rim).
         val brush = Brush.radialGradient(
             0f to Color.Transparent,
-            0.6f to Color.Transparent,
-            0.95f to color.copy(alpha = 0.12f),
-            1f to color.copy(alpha = 0.32f),
+            0.5f to Color.Transparent,
+            0.8f to color.copy(alpha = 0.15f),
+            0.95f to color.copy(alpha = 0.28f),
+            1f to color.copy(alpha = 0.38f),
             center = center,
             radius = radius,
         )
@@ -164,14 +174,15 @@ private fun DrawScope.drawGauge(
         drawArc(color, startDeg, sweptDeg, false, topLeft, arcSize, style = head)
     }
 
-    // Head tick at the current value — always drawn (sits at the start when fraction is 0).
-    // Outer end reaches past the rim line's outer edge so the corner has no gap.
-    val tipRad = Math.toRadians((startDeg + sweptDeg).toDouble())
-    val inner = radius - radius * HEAD_LEN_RATIO
-    val outer = radius + HEAD_W.toPx() / 2f
-    val p1 = Offset(center.x + (inner * cos(tipRad)).toFloat(), center.y + (inner * sin(tipRad)).toFloat())
-    val p2 = Offset(center.x + (outer * cos(tipRad)).toFloat(), center.y + (outer * sin(tipRad)).toFloat())
-    drawLine(color, p1, p2, strokeWidth = HEAD_W.toPx(), cap = StrokeCap.Butt)
+    // Head tick at the current value — omitted when drawHead is false.
+    if (drawHead) {
+        val tipRad = Math.toRadians((startDeg + sweptDeg).toDouble())
+        val inner = radius - radius * style.headLenRatio
+        val outer = radius + style.headWidth.toPx() / 2f
+        val p1 = Offset(center.x + (inner * cos(tipRad)).toFloat(), center.y + (inner * sin(tipRad)).toFloat())
+        val p2 = Offset(center.x + (outer * cos(tipRad)).toFloat(), center.y + (outer * sin(tipRad)).toFloat())
+        drawLine(color, p1, p2, strokeWidth = style.headWidth.toPx(), cap = StrokeCap.Butt)
+    }
 }
 
 @Composable
@@ -211,15 +222,21 @@ private fun GaugeValue(modifier: Modifier, value: String, unit: String, color: C
     }
 }
 
+/** Larger centered hero value + unit for speed and duty. */
 @Composable
-private fun TempChip(label: String, value: Double?, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.caption3, color = color)
-        Text(
-            text = " ${temp(value)}",
-            style = MaterialTheme.typography.caption1,
-            color = PrimaryText,
-        )
+private fun LargeGaugeValue(modifier: Modifier, value: String, unit: String, color: Color) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = value, style = MaterialTheme.typography.display2, color = color)
+        Text(text = unit, style = MaterialTheme.typography.caption3, color = SecondaryText)
+    }
+}
+
+/** Smaller centered value + label for the temperature readouts. */
+@Composable
+private fun SmallGaugeValue(modifier: Modifier, value: String, unit: String, color: Color) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = value, style = MaterialTheme.typography.title3, color = color)
+        Text(text = unit, style = MaterialTheme.typography.caption3, color = SecondaryText)
     }
 }
 
@@ -242,7 +259,24 @@ private val GUIDE_W = 2.dp
 private val HEAD_W = 3.dp
 private const val HEAD_LEN_RATIO = 0.16f
 
-private const val SPEED_MAX = 60.0
+private const val SPEED_MAX = 50.0
+
+private const val TEMP_MIN = 10.0
+private const val TEMP_MAX = 80.0
+private const val TEMP_SWEEP = 32f
+
+private fun tempFraction(value: Double?): Float =
+    (((value ?: TEMP_MIN) - TEMP_MIN) / (TEMP_MAX - TEMP_MIN)).toFloat().coerceIn(0f, 1f)
+
+private data class GaugeStyle(
+    val guideWidth: Dp,
+    val headWidth: Dp,
+    val headLenRatio: Float,
+)
+
+private val DefaultGaugeStyle = GaugeStyle(GUIDE_W, HEAD_W, HEAD_LEN_RATIO)
+private val StrongGaugeStyle = GaugeStyle(2.dp, 4.dp, 0.18f)
+private val SoftGaugeStyle = GaugeStyle(1.dp, 2.dp, 0.10f)
 
 // Palette mirrors src/constants/theme.ts so the watch matches the phone app.
 private val PrimaryText = Color(0xFFF1F5F9) // slate.textPrimary
