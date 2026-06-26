@@ -14,7 +14,6 @@ import {
   MapPinIcon,
   FadersIcon,
   ChartLineUpIcon,
-  GearSixIcon,
   SpeakerHighIcon,
   GaugeIcon,
 } from 'phosphor-react-native'
@@ -28,6 +27,7 @@ import { SettingsCard } from '@/components/ui/settings/SettingsCard'
 import { SettingsRow } from '@/components/ui/settings/SettingsRow'
 import { SettingsSectionTitle } from '@/components/ui/settings/SettingsSectionTitle'
 import { IconHero } from '@/components/ui/settings/IconHero'
+import { VescapeWordmark } from '@/components/ui/base/VescapeWordmark'
 import { useSettingsDatabaseOps } from '@/hooks/useSettingsDatabaseOps'
 
 const appVersion = Constants.expoConfig?.version ?? '–'
@@ -47,10 +47,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <IconHero
-          icon={GearSixIcon}
-          description="These settings apply across the entire app and persist between rides."
-        >
+        <IconHero media={<VescapeWordmark width={200} />}>
           <View style={styles.headerStats}>
             <View style={styles.headerItem}>
               <TagIcon size={14} color={theme.palette.sky.color} weight="duotone" />

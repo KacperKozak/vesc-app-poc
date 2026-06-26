@@ -5,7 +5,8 @@ import type { ReactNode } from 'react'
 import { theme } from '@/constants/theme'
 
 type IconHeroProps = {
-  icon: Icon
+  icon?: Icon
+  media?: ReactNode
   title?: string
   description?: string
   children?: ReactNode
@@ -16,6 +17,7 @@ type IconHeroProps = {
 
 export function IconHero({
   icon: IconComponent,
+  media,
   title,
   description,
   children,
@@ -25,7 +27,10 @@ export function IconHero({
 }: IconHeroProps) {
   return (
     <View style={styles.container}>
-      <IconComponent size={iconSize} color={iconColor} weight={iconWeight} />
+      {media ??
+        (IconComponent ? (
+          <IconComponent size={iconSize} color={iconColor} weight={iconWeight} />
+        ) : null)}
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {description ? <Text style={styles.description}>{description}</Text> : null}
       {children}

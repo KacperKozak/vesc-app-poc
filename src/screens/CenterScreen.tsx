@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native'
+import { ActivityIndicator, View, StyleSheet } from 'react-native'
 
+import { VescapeWordmark } from '@/components/ui/base/VescapeWordmark'
 import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
 import type { OffscreenMapIndicatorState } from '@/screens/center/offscreenMapIndicators'
 import { CenterOverlays } from '@/screens/center/CenterOverlays'
@@ -59,8 +60,8 @@ export function CenterScreen({
     return (
       <View style={styles.container}>
         <View style={styles.empty}>
+          <VescapeWordmark width={220} />
           <ActivityIndicator size="small" color={theme.palette.sky.color} />
-          <Text style={styles.emptySubtitle}>Loading boards...</Text>
         </View>
       </View>
     )
@@ -186,11 +187,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    gap: 12,
-  },
-  emptySubtitle: {
-    color: theme.palette.slate.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
+    gap: 24,
   },
 })
