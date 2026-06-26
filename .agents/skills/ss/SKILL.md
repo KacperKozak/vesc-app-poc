@@ -23,9 +23,9 @@ Before taking a screenshot, navigate to the right screen. Use Maestro deep links
 
 ```sh
 maestro test <(cat <<EOF
-appId: com.anonymous.vescpoc
+appId: app.vescape
 ---
-- openLink: "vescpoc://<route>"
+- openLink: "vescape://<route>"
 - waitForAnimationToEnd
 EOF
 )

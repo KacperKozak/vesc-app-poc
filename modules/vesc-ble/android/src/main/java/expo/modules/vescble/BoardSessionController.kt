@@ -414,6 +414,10 @@ internal class BoardSessionController(private val service: VescForegroundService
         DiagnosticReporter.initialize(service)
         notificationController.createChannel()
         refreshSelectedBoardName()
+        // startForegroundService() requires startForeground() to be called quickly; satisfy it
+        // immediately for every service creation, even when we later decide there's no board to
+        // auto-connect. The notification will be refreshed once the idle state/selected board is ready.
+        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
     }
 
     /** Caches the selected board name so the idle notification can title it + offer Connect. */
