@@ -43,6 +43,7 @@ export function HistoryStatsBar({ session }: HistoryStatsBarProps) {
   return (
     <View style={[styles.wrap, { top: Math.max(insets.top, 8) + 46 }]} pointerEvents="box-none">
       <Pressable
+        testID="history-stats-bar"
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         accessibilityLabel={expanded ? 'Collapse ride stats' : 'Expand ride stats'}
