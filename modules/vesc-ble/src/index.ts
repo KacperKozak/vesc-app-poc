@@ -426,6 +426,67 @@ export interface HistoryRange {
   exclusions: MetricExclusion[]
 }
 
+/** Float64 lanes per sample in the columnar board payload. Must match the native encoder. */
+const SAMPLE_COLUMN_COUNT = 25
+
+/**
+ * Native `getHistoryRange` shape: board samples arrive as one columnar Float64 ArrayBuffer (25
+ * lanes/sample, row-major) plus a device dictionary, instead of an array of ~25-field objects. This
+ * replaces N×25 per-field JSI conversions with a single buffer transfer; see decodeBoardSamples.
+ */
+interface NativeHistoryRange {
+  boardColumns: ArrayBuffer
+  boardCount: number
+  boardDevices: (string | null)[]
+  boardDeviceNames: string[]
+  gpsSamples: HistoryGpsSample[]
+  markers: HistoryMarker[]
+  exclusions: MetricExclusion[]
+}
+
+const nullableLane = (value: number): number | null => (Number.isNaN(value) ? null : value)
+
+/** Rebuild TelemetrySample objects from the columnar buffer locally (no per-field bridge crossing). */
+function decodeBoardSamples(range: NativeHistoryRange): TelemetrySample[] {
+  const { boardCount, boardDevices, boardDeviceNames } = range
+  if (!boardCount || !range.boardColumns) return []
+  const lanes = new Float64Array(range.boardColumns)
+  const samples = new Array<TelemetrySample>(boardCount)
+  for (let i = 0; i < boardCount; i++) {
+    const o = i * SAMPLE_COLUMN_COUNT
+    const deviceIndex = lanes[o + 2]
+    samples[i] = {
+      id: lanes[o],
+      capturedAtMs: lanes[o + 1],
+      deviceId: boardDevices[deviceIndex] ?? null,
+      deviceName: boardDeviceNames[deviceIndex],
+      speedKmh: lanes[o + 3],
+      batteryVoltage: lanes[o + 4],
+      batteryPercent: nullableLane(lanes[o + 5]),
+      motorCurrent: lanes[o + 6],
+      batteryCurrent: lanes[o + 7],
+      dutyCycle: lanes[o + 8],
+      pitch: lanes[o + 9],
+      roll: lanes[o + 10],
+      balancePitch: lanes[o + 11],
+      balanceCurrent: lanes[o + 12],
+      erpm: lanes[o + 13],
+      state: lanes[o + 14],
+      switchState: lanes[o + 15],
+      adc1: lanes[o + 16],
+      adc2: lanes[o + 17],
+      odometer: nullableLane(lanes[o + 18]),
+      tempMosfet: nullableLane(lanes[o + 19]),
+      tempMotor: nullableLane(lanes[o + 20]),
+      hasFault: lanes[o + 21] !== 0,
+      faultCode: lanes[o + 22],
+      latitude: nullableLane(lanes[o + 23]),
+      longitude: nullableLane(lanes[o + 24]),
+    }
+  }
+  return samples
+}
+
 export interface TelemetrySummary {
   sampleCount: number
   gpsPointCount: number
@@ -656,7 +717,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
     toMs: number
     deviceId?: string
     limit?: number
-  }): Promise<HistoryRange>
+  }): Promise<NativeHistoryRange>
   getTelemetrySummary(): Promise<TelemetrySummary>
   getDiagnosticEvents(options: DiagnosticEventOptions): Promise<LocalDiagnosticEvent[]>
   clearDiagnosticEvents(): Promise<void>
@@ -920,7 +981,13 @@ export async function getHistoryRange(options: {
   deviceId?: string
   limit?: number
 }): Promise<HistoryRange> {
-  return native.getHistoryRange(options)
+  const range = await native.getHistoryRange(options)
+  return {
+    boardSamples: decodeBoardSamples(range),
+    gpsSamples: range.gpsSamples,
+    markers: range.markers,
+    exclusions: range.exclusions,
+  }
 }
 
 export async function getTelemetrySummary(): Promise<TelemetrySummary> {
