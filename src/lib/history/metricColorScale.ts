@@ -91,7 +91,7 @@ export function makeMetricColorRange(
   const min = Math.min(hotRange.start, hotRange.end)
   const max = Math.max(hotRange.start, hotRange.end)
   if (min === max) return null
-  return { min, max, baseColor, hotColor: theme.error.color }
+  return { min, max, baseColor, hotColor: theme.status.error.color }
 }
 
 function isFiniteHotRange(value: MetricHotRange | undefined): value is MetricHotRange {
@@ -146,7 +146,7 @@ export function getHistoryMetricKeyForControlId(
 }
 
 export function getMetricRampColor(value: number, range: MetricColorRange | null): string {
-  if (!range) return theme.neutral.textSecondary
+  if (!range) return theme.palette.slate.textSecondary
   const span = range.max - range.min
   if (span <= 0) return range.baseColor
   const normalized = clamp01((value - range.min) / span)

@@ -147,7 +147,7 @@ function ButtonShowcase() {
 
 function PlaceholderShowcase() {
   const [showTitle, setShowTitle] = useState(true)
-  const [color, setColor] = useState<string>(theme.neutral.textMuted)
+  const [color, setColor] = useState<string>(theme.palette.slate.textMuted)
 
   return (
     <ShowcaseCard
@@ -157,7 +157,11 @@ function PlaceholderShowcase() {
           <ToggleRow label="showTitle" value={showTitle} onToggle={setShowTitle} />
           <ChipRow
             label="iconColor"
-            options={[theme.neutral.textMuted, theme.wheel.color, theme.error.color]}
+            options={[
+              theme.palette.slate.textMuted,
+              theme.palette.sky.color,
+              theme.status.error.color,
+            ]}
             selected={color}
             onSelect={setColor}
           />
@@ -316,6 +320,6 @@ export default function BaseComponentsPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.neutral.bg },
+  container: { flex: 1, backgroundColor: theme.palette.slate.bg },
   content: { padding: 12, gap: 12, paddingBottom: 40 },
 })

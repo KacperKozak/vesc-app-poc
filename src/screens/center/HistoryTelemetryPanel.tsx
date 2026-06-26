@@ -1,10 +1,4 @@
-import {
-  CaretDownIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
-  ImagesSquareIcon,
-  CloudArrowUpIcon,
-} from 'phosphor-react-native'
+import { CaretDownIcon, ImagesSquareIcon, CloudArrowUpIcon } from 'phosphor-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -25,6 +19,7 @@ import {
   TelemetryLineChart,
   type SecondaryChartSeries,
 } from '@/components/ui/charts/TelemetryLineChart'
+import { PrevNextSelector } from '@/components/ui/controls/PrevNextSelector'
 import { InfoModal } from '@/components/ui/modals/InfoModal'
 import { telemetry } from '@/constants/telemetry'
 import { interaction, theme } from '@/constants/theme'
@@ -35,12 +30,15 @@ import {
   type HistoryMetricKey,
 } from '@/lib/history/metricColorScale'
 import { downsampleTimeSeries, findNearestSampleIndexByTime } from '@/lib/history/playback'
+import { RIDE_TRIM_PADDING_MS, rideMovingWindow } from '@/lib/history/sessions'
 import { useHistoryStore, type TelemetrySample } from '@/store/historyStore'
 import { useSettingsStore } from '@/store/settingsStore'
 
 interface HistoryTelemetryPanelProps {
   startAtMs: number | null
   endAtMs: number | null
+  movingStartAtMs: number | null
+  movingEndAtMs: number | null
   deviceName: string | null
   samples: TelemetrySample[]
   canPrevious: boolean
@@ -105,6 +103,8 @@ function formatRideMeta(
 export function HistoryTelemetryPanel({
   startAtMs,
   endAtMs,
+  movingStartAtMs,
+  movingEndAtMs,
   deviceName,
   samples,
   canPrevious,
@@ -131,16 +131,29 @@ export function HistoryTelemetryPanel({
     () => [...samples].sort((a, b) => a.capturedAtMs - b.capturedAtMs),
     [samples],
   )
+  // Trim leading/trailing idle to the Moving Window (± display padding). Falls back to the full
+  // sample range on legacy rides that have no precomputed window.
+  const visibleSamples = useMemo(() => {
+    const window = rideMovingWindow({ movingStartAtMs, movingEndAtMs })
+    if (!window) return sortedSamples
+    const lo = window.startMs - RIDE_TRIM_PADDING_MS
+    const hi = window.endMs + RIDE_TRIM_PADDING_MS
+    const trimmed = sortedSamples.filter((s) => s.capturedAtMs >= lo && s.capturedAtMs <= hi)
+    return trimmed.length > 0 ? trimmed : sortedSamples
+  }, [sortedSamples, movingStartAtMs, movingEndAtMs])
+  const rideWindow = rideMovingWindow({ movingStartAtMs, movingEndAtMs })
+  const titleStartMs = rideWindow?.startMs ?? startAtMs
+  const titleEndMs = rideWindow?.endMs ?? endAtMs
   const chartSamples = useMemo(
-    () => downsampleTimeSeries(sortedSamples, CHART_MAX_POINTS, (sample) => sample.capturedAtMs),
-    [sortedSamples],
+    () => downsampleTimeSeries(visibleSamples, CHART_MAX_POINTS, (sample) => sample.capturedAtMs),
+    [visibleSamples],
   )
 
   const headSample = useMemo(() => {
-    if (headTimeMs == null) return sortedSamples.at(-1) ?? null
-    const idx = findNearestSampleIndexByTime(sortedSamples, headTimeMs)
-    return idx >= 0 ? sortedSamples[idx] : (sortedSamples.at(-1) ?? null)
-  }, [sortedSamples, headTimeMs])
+    if (headTimeMs == null) return visibleSamples.at(-1) ?? null
+    const idx = findNearestSampleIndexByTime(visibleSamples, headTimeMs)
+    return idx >= 0 ? visibleSamples[idx] : (visibleSamples.at(-1) ?? null)
+  }, [visibleSamples, headTimeMs])
 
   const speedPoints = useMemo<TelemetryChartPoint[]>(
     () => chartSamples.map((s) => ({ date: new Date(s.capturedAtMs), value: s.speedKmh })),
@@ -348,7 +361,7 @@ export function HistoryTelemetryPanel({
     [sessionExclusions],
   )
 
-  const hasChartData = headSample != null && sortedSamples.length >= 2
+  const hasChartData = headSample != null && visibleSamples.length >= 2
 
   useEffect(
     () => () => {
@@ -412,7 +425,7 @@ export function HistoryTelemetryPanel({
                 secondary: {
                   points: batteryVoltagePoints,
                   range: batteryRange,
-                  color: theme.neutral.textMuted,
+                  color: theme.palette.slate.textMuted,
                   value: telemetry.battVoltage.formatWithUnit(headSample.batteryVoltage),
                 },
               }
@@ -510,49 +523,31 @@ export function HistoryTelemetryPanel({
             </View>
           ) : null}
         </View>
-        <View style={styles.navRow}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.navSegment,
-              !canPrevious && styles.navSegmentDisabled,
-              pressed && canPrevious && styles.navSegmentPressed,
-            ]}
-            android_ripple={interaction.ripple}
-            onPress={onPrevious}
-            disabled={!canPrevious}
-          >
-            <CaretLeftIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
-          </Pressable>
-          <View style={styles.navDivider} />
-          <Pressable
-            style={({ pressed }) => [styles.titleButton, pressed && styles.navSegmentPressed]}
-            android_ripple={interaction.ripple}
-            onPress={onOpenList}
-          >
-            <View style={styles.titleContent}>
-              <Text style={styles.titleTime} numberOfLines={1}>
-                {formatRideTitle(startAtMs, endAtMs)}
-              </Text>
-              <Text style={styles.titleMeta} numberOfLines={1}>
-                {formatRideMeta(startAtMs, endAtMs, deviceName)}
-              </Text>
-            </View>
-            <CaretDownIcon size={12} color={theme.neutral.textSecondary} weight="bold" />
-          </Pressable>
-          <View style={styles.navDivider} />
-          <Pressable
-            style={({ pressed }) => [
-              styles.navSegment,
-              !canNext && styles.navSegmentDisabled,
-              pressed && canNext && styles.navSegmentPressed,
-            ]}
-            android_ripple={interaction.ripple}
-            onPress={onNext}
-            disabled={!canNext}
-          >
-            <CaretRightIcon size={22} color={theme.neutral.textSecondary} weight="bold" />
-          </Pressable>
-        </View>
+        <PrevNextSelector
+          label={formatRideTitle(titleStartMs, titleEndMs)}
+          previousDisabled={!canPrevious}
+          nextDisabled={!canNext}
+          onPrevious={onPrevious}
+          onNext={onNext}
+          style={styles.navSelector}
+          selectControl={
+            <Pressable
+              style={({ pressed }) => [styles.titleButton, pressed && styles.titleButtonPressed]}
+              android_ripple={interaction.ripple}
+              onPress={onOpenList}
+            >
+              <View style={styles.titleContent}>
+                <Text style={styles.titleTime} numberOfLines={1}>
+                  {formatRideTitle(titleStartMs, titleEndMs)}
+                </Text>
+                <Text style={styles.titleMeta} numberOfLines={1}>
+                  {formatRideMeta(titleStartMs, titleEndMs, deviceName)}
+                </Text>
+              </View>
+              <CaretDownIcon size={12} color={theme.palette.slate.textSecondary} weight="bold" />
+            </Pressable>
+          }
+        />
         <View style={styles.navSide}>
           <IconButton icon={CloudArrowUpIcon} onPress={() => setShareInfoVisible(true)} size="lg" />
         </View>
@@ -622,7 +617,7 @@ export function HistoryTelemetryPanel({
                   <View
                     style={[
                       styles.metricTabLine,
-                      { backgroundColor: active ? cfg.color : theme.neutral.surface },
+                      { backgroundColor: active ? cfg.color : theme.palette.slate.surface },
                     ]}
                   />
                   {metric.multilineLabel ? (
@@ -658,14 +653,19 @@ export function HistoryTelemetryPanel({
           <View style={styles.metricLegend}>
             <View style={styles.metricLegendItem}>
               <View
-                style={[styles.metricLegendLine, { backgroundColor: theme.neutral.textSecondary }]}
+                style={[
+                  styles.metricLegendLine,
+                  { backgroundColor: theme.palette.slate.textSecondary },
+                ]}
               />
               <Text style={styles.metricLegendText} numberOfLines={1}>
                 Low speed
               </Text>
             </View>
             <View style={styles.metricLegendItem}>
-              <View style={[styles.metricLegendLine, { backgroundColor: theme.highlight.color }]} />
+              <View
+                style={[styles.metricLegendLine, { backgroundColor: theme.palette.yellow.color }]}
+              />
               <Text style={styles.metricLegendText} numberOfLines={1}>
                 Free spin
               </Text>
@@ -703,22 +703,13 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
   },
-  navRow: {
+  navSelector: {
     flex: 1,
     minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    maxWidth: 320,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
-    overflow: 'hidden',
   },
   mediaEnabled: {
-    borderColor: theme.target.border,
-    backgroundColor: theme.target.bg,
+    borderColor: theme.palette.purple.border,
+    backgroundColor: theme.palette.purple.bg,
   },
   mediaCountBadge: {
     position: 'absolute',
@@ -731,31 +722,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: theme.neutral.surfaceDeep,
-    backgroundColor: theme.target.color,
+    borderColor: theme.palette.slate.surfaceDeep,
+    backgroundColor: theme.palette.purple.color,
   },
   mediaCountText: {
-    color: theme.neutral.bg,
+    color: theme.palette.slate.bg,
     fontSize: 9,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
-  navSegment: {
-    width: 54,
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navSegmentDisabled: {
-    opacity: 0.35,
-  },
-  navSegmentPressed: {
+  titleButtonPressed: {
     opacity: 0.72,
-  },
-  navDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: theme.neutral.border,
   },
   titleButton: {
     flex: 1,
@@ -773,12 +750,12 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   titleTime: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '800',
   },
   titleMeta: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 9,
     fontWeight: '600',
   },
@@ -789,8 +766,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     overflow: 'hidden',
   },
   metricTab: {
@@ -798,17 +775,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 10,
   },
   metricTabDivider: {
     borderRightWidth: 1,
-    borderRightColor: theme.neutral.border,
+    borderRightColor: theme.palette.slate.border,
   },
   metricTabActive: {
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
   },
   metricTabLine: {
     width: '60%',
@@ -823,7 +800,7 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   metricTabText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 10,
     fontWeight: '700',
     width: '100%',
@@ -831,7 +808,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   metricTabTextActive: {
-    color: theme.wheel.text,
+    color: theme.palette.sky.text,
   },
   metricLegend: {
     marginTop: 2,
@@ -854,12 +831,12 @@ const styles = StyleSheet.create({
     borderRadius: 0.5,
   },
   metricLegendText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 8,
     fontWeight: '600',
   },
   empty: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',

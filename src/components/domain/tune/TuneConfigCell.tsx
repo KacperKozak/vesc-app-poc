@@ -43,16 +43,16 @@ export const TuneConfigCell = forwardRef<View, TuneConfigCellProps>(function Tun
         onPress={onPress}
       >
         <Pressable style={styles.cellInfoButton} onPress={onInfo}>
-          <InfoIcon size={13} color={theme.neutral.textDim} weight="bold" />
+          <InfoIcon size={13} color={theme.palette.slate.textDim} weight="bold" />
         </Pressable>
         {dirty ? (
           <Pressable style={styles.cellRevertButton} onPress={onRevert}>
-            <ArrowCounterClockwiseIcon size={13} color={theme.wheel.text} weight="bold" />
+            <ArrowCounterClockwiseIcon size={13} color={theme.palette.sky.text} weight="bold" />
           </Pressable>
         ) : null}
         {boardChanged && isDisplayableFieldValue(boardValue) ? (
           <Pressable style={styles.cellAcceptButton} onPress={onAcceptBoard}>
-            <CheckIcon size={13} color={theme.gps.text} weight="bold" />
+            <CheckIcon size={13} color={theme.palette.green.text} weight="bold" />
           </Pressable>
         ) : null}
         <Text style={styles.cellValue} numberOfLines={1} adjustsFontSizeToFit selectable>
@@ -96,11 +96,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   cellDirty: {
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
     borderRadius: 8,
   },
   cellBoardChanged: {
-    backgroundColor: theme.gps.bg,
+    backgroundColor: theme.palette.green.bg,
     borderRadius: 8,
   },
   cellInfoButton: {
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
   },
   cellAcceptButton: {
     position: 'absolute',
@@ -136,44 +136,44 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.gps.bg,
+    backgroundColor: theme.palette.green.bg,
   },
   cellValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     paddingRight: 26,
     fontVariant: ['tabular-nums'],
   },
   cellOldValue: {
-    color: theme.wheel.text,
+    color: theme.palette.sky.text,
     fontSize: 10,
     fontWeight: '800',
     marginTop: 1,
     paddingRight: 26,
   },
   cellProfileValue: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 10,
     fontWeight: '800',
     marginTop: 1,
     paddingRight: 26,
   },
   cellBoardValue: {
-    color: theme.gps.text,
+    color: theme.palette.green.text,
     fontSize: 10,
     fontWeight: '900',
     marginTop: 1,
     paddingRight: 26,
   },
   cellUnit: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '700',
     marginTop: 1,
   },
   cellLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '600',
     marginTop: 3,

@@ -268,7 +268,11 @@ export function AlertFormModal({
               >
                 <WaveformIcon
                   size={14}
-                  color={tab === 'single' ? theme.neutral.textPrimary : theme.neutral.textMuted}
+                  color={
+                    tab === 'single'
+                      ? theme.palette.slate.textPrimary
+                      : theme.palette.slate.textMuted
+                  }
                   weight="fill"
                 />
                 <Text style={[styles.tabText, tab === 'single' && styles.tabTextActive]}>
@@ -281,7 +285,11 @@ export function AlertFormModal({
               >
                 <RadioactiveIcon
                   size={14}
-                  color={tab === 'geiger' ? theme.neutral.textPrimary : theme.neutral.textMuted}
+                  color={
+                    tab === 'geiger'
+                      ? theme.palette.slate.textPrimary
+                      : theme.palette.slate.textMuted
+                  }
                   weight="fill"
                 />
                 <Text style={[styles.tabText, tab === 'geiger' && styles.tabTextActive]}>
@@ -294,7 +302,11 @@ export function AlertFormModal({
               >
                 <ChatTextIcon
                   size={14}
-                  color={tab === 'message' ? theme.neutral.textPrimary : theme.neutral.textMuted}
+                  color={
+                    tab === 'message'
+                      ? theme.palette.slate.textPrimary
+                      : theme.palette.slate.textMuted
+                  }
                   weight="fill"
                 />
                 <Text style={[styles.tabText, tab === 'message' && styles.tabTextActive]}>
@@ -343,7 +355,7 @@ export function AlertFormModal({
                   onChangeText={setMessageTemplate}
                   multiline
                   placeholder="e.g. Speed {value} {unit}"
-                  placeholderTextColor={theme.neutral.textDim}
+                  placeholderTextColor={theme.palette.slate.textDim}
                   style={styles.templateInput}
                 />
                 <View style={styles.placeholderRow}>
@@ -389,16 +401,16 @@ export function AlertFormModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: theme.neutral.modalBackdrop,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.6),
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   modal: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     width: '100%',
     maxWidth: 340,
     maxHeight: '90%',
@@ -408,7 +420,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   modalTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -417,7 +429,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: theme.neutral.surface,
+    borderColor: theme.palette.slate.surface,
   },
   tab: {
     flex: 1,
@@ -426,37 +438,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   tabActive: {
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
   },
   tabText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   tabTextActive: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
   },
   dialField: {
     gap: 6,
   },
   fieldLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   saveButton: {
-    backgroundColor: theme.wheel.color,
+    backgroundColor: theme.palette.sky.color,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 4,
   },
   saveButtonText: {
-    color: theme.wheel.bg,
+    color: theme.palette.sky.bg,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -473,24 +485,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   placeholderChip: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   placeholderChipText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },
   previewButton: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
   previewButtonText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },

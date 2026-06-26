@@ -25,7 +25,7 @@ export default function AddBoardScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   container: {
     flex: 1,

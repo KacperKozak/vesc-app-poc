@@ -254,6 +254,6 @@ const styles = StyleSheet.create({
   hitArea: {
     ...StyleSheet.absoluteFill,
     zIndex: 5,
-    backgroundColor: theme.neutral.touchInvisible,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0),
   },
 })

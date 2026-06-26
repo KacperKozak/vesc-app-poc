@@ -19,13 +19,13 @@ export default function AboutScreen() {
         <SettingsCard>
           <SettingsRow
             icon={CrownIcon}
-            iconColor={theme.wheel.color}
+            iconColor={theme.palette.sky.color}
             label="Kacper Kozak"
             hint="Look mom, I'm a king."
           />
           <SettingsRow
             icon={PaletteIcon}
-            iconColor={theme.highlight.color}
+            iconColor={theme.palette.yellow.color}
             label="Bartosz Kozak"
             hint="One more feature, app will hold it."
           />
@@ -38,7 +38,7 @@ export default function AboutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,

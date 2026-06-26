@@ -15,6 +15,7 @@ const ICON_SIZES = { sm: 18, md: 21, lg: 22 } as const
 interface IconButtonProps {
   icon: Icon
   onPress: () => void
+  onLongPress?: () => void
   size?: keyof typeof SIZES
   disabled?: boolean
   destructive?: boolean
@@ -25,6 +26,7 @@ interface IconButtonProps {
 export function IconButton({
   icon: Icon,
   onPress,
+  onLongPress,
   size = 'sm',
   disabled = false,
   destructive = false,
@@ -34,8 +36,8 @@ export function IconButton({
   const isDisabled = disabled || loading
   const dim = SIZES[size]
   const iconSize = ICON_SIZES[size]
-  const iconColor = destructive ? theme.error.text : theme.neutral.textSecondary
-  const borderColor = destructive ? theme.error.border : theme.neutral.border
+  const iconColor = destructive ? theme.status.error.text : theme.palette.slate.textSecondary
+  const borderColor = destructive ? theme.status.error.border : theme.palette.slate.border
 
   return (
     <Pressable
@@ -48,6 +50,7 @@ export function IconButton({
       ]}
       android_ripple={interaction.ripple}
       onPress={onPress}
+      onLongPress={onLongPress}
       disabled={isDisabled}
     >
       {loading ? (
@@ -63,7 +66,7 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderWidth: 1,
     overflow: 'hidden',
   },

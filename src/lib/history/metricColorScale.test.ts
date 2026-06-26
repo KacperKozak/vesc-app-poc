@@ -16,7 +16,7 @@ describe('metricColorScale', () => {
 
     expect(getMetricRampColor(39, range)).toBe('#000000')
     expect(getMetricRampColor(40, range)).toBe('#000000')
-    expect(getMetricRampColor(50, range)).toBe(theme.error.color)
+    expect(getMetricRampColor(50, range)).toBe(theme.status.error.color)
   })
 
   test('keeps threshold config in one editable place', () => {

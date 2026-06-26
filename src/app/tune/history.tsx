@@ -104,7 +104,11 @@ export default function TuneHistoryScreen() {
                   )}
                 </View>
                 <Pressable style={styles.restoreButton} onPress={() => handleRestore(item.id)}>
-                  <ArrowCounterClockwiseIcon size={13} color={theme.wheel.color} weight="bold" />
+                  <ArrowCounterClockwiseIcon
+                    size={13}
+                    color={theme.palette.sky.color}
+                    weight="bold"
+                  />
                   <Text style={styles.restoreText}>Restore</Text>
                 </Pressable>
               </View>
@@ -132,10 +136,10 @@ export default function TuneHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   empty: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: 24,
@@ -149,7 +153,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: theme.neutral.surface,
+    borderBottomColor: theme.palette.slate.surface,
     gap: 10,
   },
   entryInfo: {
@@ -157,12 +161,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   entryDate: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '700',
   },
   entryDetail: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -171,16 +175,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   diffLine: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
   },
   diffOld: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     fontWeight: '700',
   },
   diffNew: {
-    color: theme.gps.text,
+    color: theme.palette.green.text,
     fontWeight: '700',
   },
   restoreButton: {
@@ -190,12 +194,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
     borderWidth: 1,
-    borderColor: theme.wheel.border,
+    borderColor: theme.palette.sky.border,
   },
   restoreText: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontSize: 11,
     fontWeight: '800',
   },

@@ -186,6 +186,8 @@ export interface MapPoint {
 
 export interface TelemetryEvent {
   generation?: number
+  /** Native remote-tilt snapshot paired with this telemetry tick. */
+  remoteTilt?: RemoteTiltState | null
   location?: LocationEvent | null
   metricExclusions?: Record<string, boolean>
   metricExclusionUpdates?: LiveMetricExclusionUpdate[]
@@ -239,6 +241,20 @@ export interface LiveMetricExclusionUpdate {
 export type BoardPhase = SessionStatus
 export type GpsPhase = 'idle' | 'starting' | 'active' | 'error'
 export type ScanPhase = ScanStatus
+export type RemoteTiltPhase = 'idle' | 'holding' | 'decaying' | 'locked'
+
+export interface RemoteTiltDecay {
+  elapsedMs: number
+  totalMs: number
+}
+
+/** Native-owned active remote-tilt command. `null` represents idle. */
+export interface RemoteTiltState {
+  value: number
+  phase: Exclude<RemoteTiltPhase, 'idle'>
+  /** Present only while native is executing a release decay. */
+  decay?: RemoteTiltDecay
+}
 
 export interface LiveStateEvent {
   board: {
@@ -252,6 +268,8 @@ export interface LiveStateEvent {
     recentTelemetry: TelemetryEvent[]
     error: string | null
     autoConnect: boolean
+    /** Native-owned active remote-tilt command, or `null` when idle. */
+    remoteTilt: RemoteTiltState | null
   }
   gps: {
     phase: GpsPhase
@@ -321,6 +339,8 @@ export interface TelemetryMinuteBucket {
   batteryRegenWh: number
   firstLatitude: number | null
   firstLongitude: number | null
+  firstMovingAtMs: number | null
+  lastMovingAtMs: number | null
   boundaryBefore:
     | 'none'
     | 'connected'
@@ -404,6 +424,67 @@ export interface HistoryRange {
   gpsSamples: HistoryGpsSample[]
   markers: HistoryMarker[]
   exclusions: MetricExclusion[]
+}
+
+/** Float64 lanes per sample in the columnar board payload. Must match the native encoder. */
+const SAMPLE_COLUMN_COUNT = 25
+
+/**
+ * Native `getHistoryRange` shape: board samples arrive as one columnar Float64 ArrayBuffer (25
+ * lanes/sample, row-major) plus a device dictionary, instead of an array of ~25-field objects. This
+ * replaces N×25 per-field JSI conversions with a single buffer transfer; see decodeBoardSamples.
+ */
+interface NativeHistoryRange {
+  boardColumns: ArrayBuffer
+  boardCount: number
+  boardDevices: (string | null)[]
+  boardDeviceNames: string[]
+  gpsSamples: HistoryGpsSample[]
+  markers: HistoryMarker[]
+  exclusions: MetricExclusion[]
+}
+
+const nullableLane = (value: number): number | null => (Number.isNaN(value) ? null : value)
+
+/** Rebuild TelemetrySample objects from the columnar buffer locally (no per-field bridge crossing). */
+function decodeBoardSamples(range: NativeHistoryRange): TelemetrySample[] {
+  const { boardCount, boardDevices, boardDeviceNames } = range
+  if (!boardCount || !range.boardColumns) return []
+  const lanes = new Float64Array(range.boardColumns)
+  const samples = new Array<TelemetrySample>(boardCount)
+  for (let i = 0; i < boardCount; i++) {
+    const o = i * SAMPLE_COLUMN_COUNT
+    const deviceIndex = lanes[o + 2]
+    samples[i] = {
+      id: lanes[o],
+      capturedAtMs: lanes[o + 1],
+      deviceId: boardDevices[deviceIndex] ?? null,
+      deviceName: boardDeviceNames[deviceIndex],
+      speedKmh: lanes[o + 3],
+      batteryVoltage: lanes[o + 4],
+      batteryPercent: nullableLane(lanes[o + 5]),
+      motorCurrent: lanes[o + 6],
+      batteryCurrent: lanes[o + 7],
+      dutyCycle: lanes[o + 8],
+      pitch: lanes[o + 9],
+      roll: lanes[o + 10],
+      balancePitch: lanes[o + 11],
+      balanceCurrent: lanes[o + 12],
+      erpm: lanes[o + 13],
+      state: lanes[o + 14],
+      switchState: lanes[o + 15],
+      adc1: lanes[o + 16],
+      adc2: lanes[o + 17],
+      odometer: nullableLane(lanes[o + 18]),
+      tempMosfet: nullableLane(lanes[o + 19]),
+      tempMotor: nullableLane(lanes[o + 20]),
+      hasFault: lanes[o + 21] !== 0,
+      faultCode: lanes[o + 22],
+      latitude: nullableLane(lanes[o + 23]),
+      longitude: nullableLane(lanes[o + 24]),
+    }
+  }
+  return samples
 }
 
 export interface TelemetrySummary {
@@ -622,6 +703,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   reportDiagnosticTest(): DiagnosticStatus
   getDiagnosticStatus(): DiagnosticStatus
   getLiveState(): LiveStateEvent
+  getRemoteTiltState(): RemoteTiltState | null
   setSelectedBoard(boardId: string | null): void
   getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryMinuteBucket[]>
   getTelemetrySamples(options: {
@@ -635,7 +717,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
     toMs: number
     deviceId?: string
     limit?: number
-  }): Promise<HistoryRange>
+  }): Promise<NativeHistoryRange>
   getTelemetrySummary(): Promise<TelemetrySummary>
   getDiagnosticEvents(options: DiagnosticEventOptions): Promise<LocalDiagnosticEvent[]>
   clearDiagnosticEvents(): Promise<void>
@@ -643,6 +725,10 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   backupDatabase(): Promise<DatabaseBackupResult>
   restoreDatabase(uri: string): Promise<void>
   getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot>
+  setRemoteTilt(value: number): Promise<boolean>
+  lockRemoteTilt(value: number): Promise<boolean>
+  releaseRemoteTilt(value: number, durationMs: number): Promise<boolean>
+  stopRemoteTilt(): Promise<boolean>
   getTuneProfiles(boardId: string): Promise<TuneProfile[]>
   getTuneProfile(profileId: string): Promise<TuneProfile | null>
   createProfile(
@@ -858,6 +944,12 @@ export function getLiveState(): LiveStateEvent {
   return native.getLiveState()
 }
 
+/** Read remote tilt without reseeding native telemetry into the JS history buffer. */
+export function getRemoteTiltState(): RemoteTiltState | null {
+  if (E2E_ENABLED) return null
+  return native.getRemoteTiltState()
+}
+
 /** Persist native auto-connect target. Native can use this while JS is frozen. */
 export function setSelectedBoard(boardId: string | null): void {
   if (E2E_ENABLED) {
@@ -889,7 +981,13 @@ export async function getHistoryRange(options: {
   deviceId?: string
   limit?: number
 }): Promise<HistoryRange> {
-  return native.getHistoryRange(options)
+  const range = await native.getHistoryRange(options)
+  return {
+    boardSamples: decodeBoardSamples(range),
+    gpsSamples: range.gpsSamples,
+    markers: range.markers,
+    exclusions: range.exclusions,
+  }
 }
 
 export async function getTelemetrySummary(): Promise<TelemetrySummary> {
@@ -920,6 +1018,36 @@ export async function restoreDatabase(uri: string): Promise<void> {
 
 export async function getRefloatConfigSnapshot(): Promise<RefloatConfigSnapshot> {
   return native.getRefloatConfigSnapshot()
+}
+
+/**
+ * Stream Floaty's temporary remote-tilt input. `value` is the 0..255 slider
+ * (128 = neutral). Requires `inputtilt_remote_type` = UART in the board config.
+ */
+export async function setRemoteTilt(value: number): Promise<boolean> {
+  if (E2E_ENABLED) return true
+  return native.setRemoteTilt(value)
+}
+
+/** Lock the held tilt indefinitely (lock band) until cancelled. */
+export async function lockRemoteTilt(value: number): Promise<boolean> {
+  if (E2E_ENABLED) return true
+  return native.lockRemoteTilt(value)
+}
+
+/**
+ * Release the pad: ease `value` (0..255) linearly back to neutral over
+ * `durationMs`, then stop. A zero duration snaps straight to neutral.
+ */
+export async function releaseRemoteTilt(value: number, durationMs: number): Promise<boolean> {
+  if (E2E_ENABLED) return true
+  return native.releaseRemoteTilt(value, durationMs)
+}
+
+/** Stop streaming tilt and snap the board back to neutral. */
+export async function stopRemoteTilt(): Promise<boolean> {
+  if (E2E_ENABLED) return true
+  return native.stopRemoteTilt()
 }
 
 export async function getTuneProfiles(boardId: string): Promise<TuneProfile[]> {

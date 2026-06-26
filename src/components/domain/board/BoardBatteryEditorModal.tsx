@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: theme.neutral.modalBackdrop,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.6),
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -145,15 +145,15 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 20,
     gap: 12,
   },
   title: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },

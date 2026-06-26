@@ -4,8 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   BatteryChargingVerticalIcon,
   BatteryPlusVerticalIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
   ClockCountdownIcon,
   GaugeIcon,
   PathIcon,
@@ -31,6 +29,7 @@ import {
   getAdjacentMonths,
   selectInitialMonth,
 } from '@/lib/profile/profileStats'
+import { PrevNextSelector } from '@/components/ui/controls/PrevNextSelector'
 import { Select, type SelectOption } from '@/components/ui/forms/Select'
 import { theme } from '@/constants/theme'
 
@@ -134,36 +133,31 @@ export default function ProfileScreen() {
 
         <View style={styles.monthHeader}>
           <Text style={styles.sectionTitle}>Monthly</Text>
-          {monthLoading ? <ActivityIndicator size="small" color={theme.wheel.color} /> : null}
+          {monthLoading ? <ActivityIndicator size="small" color={theme.palette.sky.color} /> : null}
         </View>
-        <View style={styles.monthNav}>
-          <Pressable
-            style={[styles.navButton, !adjacent.previous && styles.navDisabled]}
-            onPress={() => adjacent.previous && void loadMonth(adjacent.previous)}
-            disabled={!adjacent.previous}
-          >
-            <CaretLeftIcon size={16} color={theme.neutral.textSecondary} weight="bold" />
-          </Pressable>
-          <Select
-            options={monthOptions}
-            value={selectedMonthValue}
-            onChange={handleMonthSelect}
-            placeholder="Select month"
-            style={styles.monthSelect}
-          />
-          <Pressable
-            style={[styles.navButton, !adjacent.next && styles.navDisabled]}
-            onPress={() => adjacent.next && void loadMonth(adjacent.next)}
-            disabled={!adjacent.next}
-          >
-            <CaretRightIcon size={16} color={theme.neutral.textSecondary} weight="bold" />
-          </Pressable>
-        </View>
+        <PrevNextSelector
+          label={formatMonthLabel(selectedMonth)}
+          previousDisabled={!adjacent.previous}
+          nextDisabled={!adjacent.next}
+          onPrevious={() => adjacent.previous && void loadMonth(adjacent.previous)}
+          onNext={() => adjacent.next && void loadMonth(adjacent.next)}
+          accessibilityLabel="Select profile month"
+          style={styles.monthNav}
+          selectControl={
+            <Select
+              options={monthOptions}
+              value={selectedMonthValue}
+              onChange={handleMonthSelect}
+              placeholder="Select month"
+              style={styles.monthSelect}
+            />
+          }
+        />
         <StatsGrid items={monthItems} />
 
         {loading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="small" color={theme.wheel.color} />
+            <ActivityIndicator size="small" color={theme.palette.sky.color} />
           </View>
         ) : null}
 
@@ -186,56 +180,56 @@ function statsToItems(stats: ProfileStats): StatItem[] {
       label: 'Distance',
       value: formatDistance(stats.distanceM),
       icon: RoadHorizonIcon,
-      accent: theme.wheel.color,
+      accent: theme.palette.sky.color,
     },
     {
       key: 'rides',
       label: 'Rides',
       value: String(stats.rideCount),
       icon: PathIcon,
-      accent: theme.bran.color,
+      accent: theme.palette.cyan.color,
     },
     {
       key: 'rideTime',
       label: 'Ride time',
       value: formatDuration(stats.rideTimeMs),
       icon: ClockCountdownIcon,
-      accent: theme.target.color,
+      accent: theme.palette.purple.color,
     },
     {
       key: 'topSpeed',
       label: 'Top speed',
       value: formatSpeed(stats.topSpeedKmh),
       icon: GaugeIcon,
-      accent: theme.warning.color,
+      accent: theme.status.warning.color,
     },
     {
       key: 'avgSpeed',
       label: 'Avg speed',
       value: formatSpeed(stats.avgSpeedKmh),
       icon: RepeatIcon,
-      accent: theme.teal.color,
+      accent: theme.palette.cyan.color,
     },
     {
       key: 'longestRide',
       label: 'Longest ride',
       value: formatDistance(stats.longestRideM),
       icon: TrophyIcon,
-      accent: theme.highlight.color,
+      accent: theme.palette.yellow.color,
     },
     {
       key: 'used',
       label: 'Battery used',
       value: formatEnergy(stats.batteryUsedWh),
       icon: BatteryChargingVerticalIcon,
-      accent: theme.wheel.color,
+      accent: theme.palette.sky.color,
     },
     {
       key: 'regen',
       label: 'Regen',
       value: formatEnergy(stats.batteryRegenWh),
       icon: BatteryPlusVerticalIcon,
-      accent: theme.gps.text,
+      accent: theme.palette.green.text,
     },
   ]
 }
@@ -264,14 +258,14 @@ function StatsGrid({ items }: StatsGridProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
     gap: 12,
   },
   sectionTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -289,13 +283,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   cellValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     marginTop: 4,
   },
   cellLabel: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -306,50 +300,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  navButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.neutral.surface,
-    borderWidth: 1,
-    borderColor: theme.neutral.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navDisabled: {
-    opacity: 0.35,
+    maxWidth: '100%',
+    width: '100%',
   },
   monthSelect: {
     flex: 1,
-    borderRadius: 20,
+    height: 54,
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0),
   },
   loadingWrap: {
     padding: 18,
     alignItems: 'center',
   },
   errorCard: {
-    backgroundColor: theme.error.bg,
-    borderColor: theme.error.border,
+    backgroundColor: theme.status.error.bg,
+    borderColor: theme.status.error.border,
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     gap: 4,
   },
   errorTitle: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     fontSize: 14,
     fontWeight: '700',
   },
   errorText: {
-    color: theme.error.color,
+    color: theme.status.error.color,
     fontSize: 12,
   },
   retryText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 12,
     fontWeight: '700',
     marginTop: 4,

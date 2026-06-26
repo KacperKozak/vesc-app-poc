@@ -5,7 +5,8 @@ import type { ReactNode } from 'react'
 import { theme } from '@/constants/theme'
 
 type IconHeroProps = {
-  icon: Icon
+  icon?: Icon
+  media?: ReactNode
   title?: string
   description?: string
   children?: ReactNode
@@ -16,16 +17,20 @@ type IconHeroProps = {
 
 export function IconHero({
   icon: IconComponent,
+  media,
   title,
   description,
   children,
   iconSize = 64,
-  iconColor = theme.neutral.textMuted,
+  iconColor = theme.palette.slate.textMuted,
   iconWeight = 'thin',
 }: IconHeroProps) {
   return (
     <View style={styles.container}>
-      <IconComponent size={iconSize} color={iconColor} weight={iconWeight} />
+      {media ??
+        (IconComponent ? (
+          <IconComponent size={iconSize} color={iconColor} weight={iconWeight} />
+        ) : null)}
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {description ? <Text style={styles.description}>{description}</Text> : null}
       {children}
@@ -43,13 +48,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
   },
   description: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 14,
     fontWeight: '400',
     textAlign: 'center',

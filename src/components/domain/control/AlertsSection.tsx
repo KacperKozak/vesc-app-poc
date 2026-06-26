@@ -98,7 +98,7 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
             <View style={styles.ruleTypeIcon}>
               <TypeIcon
                 size={18}
-                color={rule.enabled ? theme.highlight.color : theme.neutral.textDim}
+                color={rule.enabled ? theme.palette.yellow.color : theme.palette.slate.textDim}
                 weight="duotone"
               />
             </View>
@@ -128,9 +128,9 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
               style={styles.ruleAction}
             >
               {rule.enabled ? (
-                <SpeakerHighIcon size={16} color={theme.highlight.color} />
+                <SpeakerHighIcon size={16} color={theme.palette.yellow.color} />
               ) : (
-                <SpeakerSlashIcon size={16} color="#475569" />
+                <SpeakerSlashIcon size={16} color={theme.palette.slate.textDim} />
               )}
             </TouchableOpacity>
 
@@ -142,7 +142,7 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
               hitSlop={8}
               style={styles.ruleAction}
             >
-              <TrashIcon size={15} color={theme.error.color} />
+              <TrashIcon size={15} color={theme.status.error.color} />
             </TouchableOpacity>
           </TouchableOpacity>
         )
@@ -191,7 +191,7 @@ export function AlertsSection({ controlId, unit }: AlertsSectionProps) {
 
 const styles = StyleSheet.create({
   stateNote: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 14,
   },
   ruleRow: {
@@ -206,24 +206,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
   },
   ruleContent: {
     flex: 1,
   },
   ruleThreshold: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontWeight: '500',
   },
   ruleTtsTemplate: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '400',
     marginTop: 1,
   },
   ruleTextDisabled: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
   },
   ruleAction: {
     padding: 6,
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   emptyHintText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '400',
   },

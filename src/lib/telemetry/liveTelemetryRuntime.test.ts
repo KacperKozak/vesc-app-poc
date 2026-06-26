@@ -46,6 +46,7 @@ function liveState(samples: TelemetryEvent[]): LiveStateEvent {
       recentTelemetry: samples,
       error: null,
       autoConnect: true,
+      remoteTilt: null,
     },
     gps: {
       phase: 'active',
@@ -93,6 +94,8 @@ describe('live telemetry runtime', () => {
     expect(runtime.values.speedKmh.value).toBe(8)
     expect(runtime.values.dutyPercent.value).toBe(50)
     expect(runtime.values.pitch.value).toBe(1)
+    expect(runtime.values.roll.value).toBe(2)
+    expect(runtime.values.balancePitch.value).toBe(3)
     const telemetryBuf = runtime.getTelemetry()
     expect(telemetryBuf.map((t) => ({ ts: t.lastPacketAt, speed: Math.abs(t.speed!) }))).toEqual([
       { ts: 9_000, speed: 3 },
@@ -121,6 +124,10 @@ describe('live telemetry runtime', () => {
     expect(runtime.values.dutyPercent.value).toBe(25)
     expect(runtime.values.pitch.value).toBe(37.5)
     expect(runtime.values.avgLatencyMs.value).toBe(11)
+
+    runtime.ingestTick(telemetry({ roll: -12.25, balancePitch: 4.5 }))
+    expect(runtime.values.roll.value).toBe(-12.25)
+    expect(runtime.values.balancePitch.value).toBe(4.5)
 
     runtime.ingestHistoryBatch([telemetry({ speed: -22, dutyCycle: 0.25, avgLatency: 11 })])
     expect(runtime.consumePendingSnapshot()?.liveStatus.boardAvgLatencyMs).toBe(11)
@@ -257,5 +264,21 @@ describe('live telemetry runtime', () => {
       gpsPrecise: false,
       gpsAccuracyM: null,
     })
+  })
+
+  test('clears board telemetry while retaining phone GPS state', () => {
+    const runtime = createLiveTelemetryRuntime({ windowMs: () => 60_000 })
+    runtime.seedFromLiveState(liveState([telemetry({ speed: 22 })]))
+    runtime.ingestLocation(location({ timestamp: 12_000 }))
+    runtime.consumePendingSnapshot()
+
+    const snapshot = runtime.clearBoardTelemetry()
+
+    expect(runtime.values.speedKmh.value).toBe(null)
+    expect(runtime.values.motorCurrent.value).toBe(null)
+    expect(runtime.getTelemetry()).toEqual([])
+    expect(snapshot.liveLocationHistory).toEqual([location({ timestamp: 12_000 })])
+    expect(snapshot.liveStatus.boardSampleCount).toBe(0)
+    expect(snapshot.liveStatus.gpsSampleCount).toBe(1)
   })
 })

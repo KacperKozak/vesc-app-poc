@@ -53,7 +53,9 @@ export function SparklineMaxBadge({
     >
       <Text style={styles.maxBadge} numberOfLines={1}>
         <Text style={styles.maxLabel}>max </Text>
-        <Text style={{ color: maxValue == null ? theme.neutral.textDim : color }}>{value}</Text>
+        <Text style={{ color: maxValue == null ? theme.palette.slate.textDim : color }}>
+          {value}
+        </Text>
       </Text>
     </View>
   )
@@ -100,5 +102,5 @@ const styles = StyleSheet.create({
   wrap: { width: '100%' },
   badgeRow: { height: BADGE_ROW_HEIGHT, flexDirection: 'row', alignItems: 'center' },
   maxBadge: { fontSize: 9, fontVariant: ['tabular-nums'] },
-  maxLabel: { color: theme.neutral.textMuted, fontWeight: '400' },
+  maxLabel: { color: theme.palette.slate.textMuted, fontWeight: '400' },
 })

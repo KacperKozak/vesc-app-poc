@@ -9,6 +9,41 @@ import org.junit.Test
 
 class VescProtocolTest {
   @Test
+  fun buildsRemoteTiltChuckCommand() {
+    // Neutral slider (128) inverts to a centered chuck Y byte (127).
+    assertArrayEquals(
+      byteArrayOf(COMM_SET_CHUCK_DATA.toByte(), 0, 127),
+      buildRemoteTiltCommand(BoardTransport.Direct, value = 128),
+    )
+  }
+
+  @Test
+  fun framesRemoteTiltChuckForCan() {
+    // Full slider (255) inverts to chuck Y 0, wrapped in a CAN forward frame.
+    assertArrayEquals(
+      byteArrayOf(COMM_FORWARD_CAN.toByte(), 7, COMM_SET_CHUCK_DATA.toByte(), 0, 0),
+      buildRemoteTiltCommand(BoardTransport.Can(7), value = 255),
+    )
+  }
+
+  @Test
+  fun parsesFirmwareVersionPayloads() {
+    assertNull(parseFwVersion(byteArrayOf(COMM_FW_VERSION.toByte(), 6)))
+    assertEquals("FW 6.05", parseFwVersion(byteArrayOf(COMM_FW_VERSION.toByte(), 6, 5)))
+    assertEquals(
+      "FW 6.05 · VESC Express · Refloat, Float Package",
+      parseFwVersion(fwVersionPayload("VESC Express", "Refloat", "Float Package")),
+    )
+  }
+
+  @Test
+  fun toleratesTruncatedFirmwareCustomConfigTail() {
+    val payload = fwVersionPayload("VESC", "Refloat").copyOfRange(0, 3 + 4 + 1 + 15 + 1 + 4)
+
+    assertEquals("FW 6.05 · VESC · Refl", parseFwVersion(payload))
+  }
+
+  @Test
   fun codecRoundTripsSplitFrameThroughReassembler() {
     val payload = byteArrayOf(COMM_CUSTOM_APP_DATA.toByte(), REFLOAT_MAGIC.toByte(), REFLOAT_GET_ALLDATA.toByte(), 2)
     val frame = VescPacketCodec.encode(payload)
@@ -154,6 +189,22 @@ class VescProtocolTest {
   private fun putInt16(bytes: ByteArray, offset: Int, value: Int) {
     bytes[offset] = ((value shr 8) and 0xff).toByte()
     bytes[offset + 1] = (value and 0xff).toByte()
+  }
+
+  private fun fwVersionPayload(hardwareName: String, vararg customConfigs: String): ByteArray {
+    val bytes = ArrayList<Byte>()
+    bytes += COMM_FW_VERSION.toByte()
+    bytes += 6
+    bytes += 5
+    hardwareName.encodeToByteArray().forEach { bytes += it }
+    bytes += 0
+    repeat(15) { bytes += 0 }
+    bytes += customConfigs.size.toByte()
+    for (config in customConfigs) {
+      config.encodeToByteArray().forEach { bytes += it }
+      bytes += 0
+    }
+    return bytes.toByteArray()
   }
 
   private fun putInt32(bytes: ByteArray, offset: Int, value: Int) {

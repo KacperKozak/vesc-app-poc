@@ -22,7 +22,13 @@ import { MAP_DEFAULTS } from '@/constants/mapStyles'
 import { ONE_DARK_MAP_STYLE } from '@/constants/oneDarkMapStyle'
 import { BriefcaseIcon, HouseIcon, PencilSimpleIcon, TrashIcon } from 'phosphor-react-native'
 import type { Icon } from 'phosphor-react-native'
-import { HPill, HPillAdd, HPillDot, HPillMenuItem, HPills } from '@/components/ui/menus/HPills'
+import {
+  PillSelectorItem,
+  PillSelectorAdd,
+  PillSelectorDot,
+  PillSelectorMenuItem,
+  PillSelector,
+} from '@/components/ui/controls/PillSelector'
 import { generateZoneId, usePrivacyZoneStore, type PrivacyZone } from '@/store/privacyZoneStore'
 import { liveTelemetryRuntime } from '@/lib/telemetry/liveTelemetryRuntime'
 
@@ -370,30 +376,30 @@ export default function PrivacyZonesScreen() {
       </View>
 
       <View style={[styles.pillsFloating, { top: pillsTop }]}>
-        <HPills activeId={selectedId}>
+        <PillSelector activeId={selectedId}>
           {pills.map((pill) => (
-            <HPill
+            <PillSelectorItem
               key={pill.id}
               id={pill.id}
               label={pill.name}
               icon={pill.icon}
               badge={
-                <HPillDot
+                <PillSelectorDot
                   status={!pill.isSaved ? 'draft' : pill.enabled ? 'enabled' : 'disabled'}
                 />
               }
-              color={theme.gps}
+              color={theme.palette.green}
               onPress={() => handleSelectPill(pill.id)}
             >
               {!pill.isBuiltIn ? (
-                <HPillMenuItem
+                <PillSelectorMenuItem
                   icon={PencilSimpleIcon}
                   label="Rename"
                   onPress={() => handleRenamePress(pill.id, pill.name)}
                 />
               ) : null}
               {pill.isSaved ? (
-                <HPillMenuItem
+                <PillSelectorMenuItem
                   icon={TrashIcon}
                   label="Delete"
                   onPress={() => handleDeletePress(pill.id)}
@@ -401,10 +407,10 @@ export default function PrivacyZonesScreen() {
                   separator={!pill.isBuiltIn}
                 />
               ) : null}
-            </HPill>
+            </PillSelectorItem>
           ))}
-          <HPillAdd onPress={handleAddPress} />
-        </HPills>
+          <PillSelectorAdd onPress={handleAddPress} />
+        </PillSelector>
       </View>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
@@ -451,7 +457,7 @@ export default function PrivacyZonesScreen() {
 
       {!loaded ? (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator color={theme.gps.color} />
+          <ActivityIndicator color={theme.palette.green.color} />
         </View>
       ) : null}
 
@@ -469,7 +475,7 @@ export default function PrivacyZonesScreen() {
               value={addNameText}
               onChangeText={setAddNameText}
               placeholder="e.g. Gym, Work 2"
-              placeholderTextColor={theme.neutral.textDim}
+              placeholderTextColor={theme.palette.slate.textDim}
               autoFocus
               maxLength={32}
               onSubmitEditing={handleAddConfirm}
@@ -507,7 +513,7 @@ export default function PrivacyZonesScreen() {
               value={renameText}
               onChangeText={setRenameText}
               placeholder="Zone name"
-              placeholderTextColor={theme.neutral.textDim}
+              placeholderTextColor={theme.palette.slate.textDim}
               autoFocus
               maxLength={32}
               onSubmitEditing={() => void handleRenameConfirm()}
@@ -547,7 +553,7 @@ export default function PrivacyZonesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   pillsFloating: {
     position: 'absolute',
@@ -578,10 +584,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   zoneLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontWeight: '700',
-    textShadowColor: theme.neutral.textShadow,
+    textShadowColor: theme.alpha(theme.palette.mono.black, 0.85),
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
@@ -589,7 +595,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.loadingOverlay,
+    backgroundColor: theme.alpha(theme.palette.slate.bg, 0.6),
   },
   bottomBar: {
     position: 'absolute',
@@ -608,22 +614,22 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: theme.neutral.modalBackdrop,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.6),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   modalCard: {
     width: '100%',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 20,
     gap: 16,
   },
   modalTitle: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 16,
     fontWeight: '700',
   },

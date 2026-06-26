@@ -78,8 +78,8 @@ const R = 80
 const STROKE = 1
 const MARKER_INSET = 10
 
-const BG_ARC_COLOR = '#334155'
-const GAUGE_HOT_COLOR = theme.error.color
+const BG_ARC_COLOR = theme.palette.slate.border
+const GAUGE_HOT_COLOR = theme.status.error.color
 
 // Left arc center: (100, 100). Right arc center: (10, 100).
 const LEFT_CX = 100
@@ -97,15 +97,6 @@ const VB_CROP_RIGHT_X = RIGHT_CX - CROP_PAD
 const SPARKLINE_HEIGHT = 28
 const SPARKLINE_TOP = 12
 const SPARKLINE_GAP = 32
-
-/** Bake a 0–1 alpha into a 6-digit hex color → 8-digit #RRGGBBAA. */
-function alpha(hex: string, a: number) {
-  'worklet'
-  const clamped = Math.min(1, Math.max(0, a))
-  return `${hex}${Math.round(clamped * 255)
-    .toString(16)
-    .padStart(2, '0')}`
-}
 
 function clamp01(f: number) {
   'worklet'
@@ -232,7 +223,7 @@ function AlertTick({ side, fraction }: AlertTickProps) {
   return (
     <Path
       path={path}
-      color={theme.highlight.color}
+      color={theme.palette.yellow.color}
       style="stroke"
       strokeWidth={TICK_WIDTH}
       strokeCap="butt"
@@ -288,20 +279,26 @@ interface GlowGradientProps {
 }
 
 function GlowGradient({ color, cx, cy, r, stops, opacities }: GlowGradientProps) {
-  const colors = useMemo(() => opacities.map((o) => alpha(color, o)), [color, opacities])
+  const colors = useMemo(
+    () => opacities.map((o) => theme.alpha(color, o as 0 | 0.12 | 0.3 | 0.6 | 0.85)),
+    [color, opacities],
+  )
   return <RadialGradient c={vec(cx, cy)} r={r} colors={colors} positions={stops} />
 }
 
 const ALERT_STOPS = [0, 0.82, 0.965, 0.99, 1]
-const ALERT_OPACITIES = [0, 0, 0.05, 0.1, 0]
+const ALERT_OPACITIES: (0 | 0.12 | 0.3 | 0.6 | 0.85)[] = [0, 0, 0.12, 0.12, 0]
 
 function AlertRangeGradient({ cx, cy, r }: { cx: number; cy: number; r: number }) {
-  const colors = useMemo(() => ALERT_OPACITIES.map((o) => alpha(theme.highlight.color, o)), [])
+  const colors = useMemo(
+    () => ALERT_OPACITIES.map((o) => theme.alpha(theme.palette.yellow.color, o)),
+    [],
+  )
   return <RadialGradient c={vec(cx, cy)} r={r} colors={colors} positions={ALERT_STOPS} />
 }
 
 const QUARTER_GLOW_STOPS = [0, 0.6, 0.95, 1]
-const QUARTER_GLOW_OPACITIES = [0, 0, 0.18, 0.35]
+const QUARTER_GLOW_OPACITIES: (0 | 0.12 | 0.3 | 0.6 | 0.85)[] = [0, 0, 0.12, 0.3]
 
 // ── HalfArc sub-component ───────────────────────────────────────────────────
 
@@ -311,9 +308,9 @@ const HALF_R = 88
 const HALF_VB_W = 200
 const HALF_VB_H = 112
 const HALF_GLOW_STOPS = [0, 0.58, 0.94, 1]
-const HALF_GLOW_OPACITIES = [0, 0, 0.2, 0.38]
+const HALF_GLOW_OPACITIES: (0 | 0.12 | 0.3 | 0.6 | 0.85)[] = [0, 0, 0.12, 0.3]
 const HALF_ALERT_STOPS = [0, 0.82, 0.965, 0.99, 1]
-const HALF_ALERT_OPACITIES = [0, 0, 0.06, 0.12, 0]
+const HALF_ALERT_OPACITIES: (0 | 0.12 | 0.3 | 0.6 | 0.85)[] = [0, 0, 0.12, 0.12, 0]
 
 function normalizeFraction(value: number, min: number, max: number) {
   'worklet'
@@ -370,7 +367,7 @@ function HalfAlertTick({ fraction }: HalfAlertTickProps) {
   return (
     <Path
       path={path}
-      color={theme.highlight.color}
+      color={theme.palette.yellow.color}
       style="stroke"
       strokeWidth={TICK_WIDTH}
       strokeCap="butt"
@@ -401,7 +398,7 @@ function HalfAlertMarker({ alert, min, max }: HalfAlertMarkerProps) {
           <RadialGradient
             c={vec(HALF_CX, HALF_CY)}
             r={HALF_R}
-            colors={HALF_ALERT_OPACITIES.map((o) => alpha(theme.highlight.color, o))}
+            colors={HALF_ALERT_OPACITIES.map((o) => theme.alpha(theme.palette.yellow.color, o))}
             positions={HALF_ALERT_STOPS}
           />
         </Path>
@@ -916,7 +913,7 @@ export function DualGauge({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 16,
     padding: 12,
     marginHorizontal: 4,
@@ -1001,7 +998,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   value: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 36,
     fontFamily: 'monospace',
     fontWeight: '700',
@@ -1010,13 +1007,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   unit: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     textAlign: 'center',
     marginTop: 2,
   },
   singleWrap: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 10,
     paddingHorizontal: 18,
     paddingTop: 14,
@@ -1024,7 +1021,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   singleLabel: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -1040,7 +1037,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   halfValue: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 52,
     fontFamily: 'monospace',
     fontWeight: '700',
@@ -1049,7 +1046,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   halfUnit: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 2,

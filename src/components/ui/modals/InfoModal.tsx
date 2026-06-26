@@ -53,11 +53,11 @@ export function InfoModal({
         <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
           <View style={styles.header}>
             <View style={styles.titleWrap}>
-              <InfoIcon size={16} color={theme.wheel.color} weight="bold" />
+              <InfoIcon size={16} color={theme.palette.sky.color} weight="bold" />
               <Text style={styles.title}>{title}</Text>
             </View>
             <Pressable style={styles.closeButton} onPress={onDismiss}>
-              <XIcon size={15} color={theme.neutral.textSecondary} weight="bold" />
+              <XIcon size={15} color={theme.palette.slate.textSecondary} weight="bold" />
             </Pressable>
           </View>
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
@@ -77,7 +77,7 @@ export function InfoModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: theme.neutral.modalBackdrop,
+    backgroundColor: theme.alpha(theme.palette.mono.black, 0.6),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
@@ -89,10 +89,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
     maxHeight: '78%',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 18,
     gap: 14,
   },
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
   },
   body: {
     maxHeight: 280,
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
   message: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     fontWeight: '500',
     lineHeight: 19,
@@ -139,10 +139,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.wheel.border,
+    backgroundColor: theme.palette.sky.border,
   },
   dismissText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '800',
   },

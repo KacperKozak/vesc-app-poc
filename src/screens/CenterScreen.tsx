@@ -1,11 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native'
+import { ActivityIndicator, View, StyleSheet } from 'react-native'
 
-import {
-  CenterMap,
-  type CenterMapHandle,
-  type OffscreenMapIndicatorState,
-} from '@/screens/center/CenterMap'
+import { VescapeWordmark } from '@/components/ui/base/VescapeWordmark'
+import { CenterMap, type CenterMapHandle } from '@/screens/center/CenterMap'
+import type { OffscreenMapIndicatorState } from '@/screens/center/offscreenMapIndicators'
 import { CenterOverlays } from '@/screens/center/CenterOverlays'
 import { useCenterScreenController } from '@/screens/center/useCenterScreenController'
 import type { Board } from '@/store/boardStore'
@@ -62,8 +60,8 @@ export function CenterScreen({
     return (
       <View style={styles.container}>
         <View style={styles.empty}>
-          <ActivityIndicator size="small" color={theme.wheel.color} />
-          <Text style={styles.emptySubtitle}>Loading boards...</Text>
+          <VescapeWordmark width={220} />
+          <ActivityIndicator size="small" color={theme.palette.sky.color} />
         </View>
       </View>
     )
@@ -182,18 +180,13 @@ export function CenterScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    gap: 12,
-  },
-  emptySubtitle: {
-    color: theme.neutral.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
+    gap: 24,
   },
 })

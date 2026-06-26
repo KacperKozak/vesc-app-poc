@@ -13,40 +13,29 @@ interface BannerProps {
 
 const config = {
   info: {
-    bg: theme.banner.info.bg,
-    border: theme.banner.info.border,
-    titleColor: theme.banner.info.title,
-    messageColor: theme.banner.info.message,
+    accent: theme.banner.info.icon,
     Icon: InfoIcon,
-    iconColor: theme.banner.info.icon,
   },
   warning: {
-    bg: theme.banner.warning.bg,
-    border: theme.banner.warning.border,
-    titleColor: theme.banner.warning.title,
-    messageColor: theme.banner.warning.message,
+    accent: theme.banner.warning.icon,
     Icon: WarningIcon,
-    iconColor: theme.banner.warning.icon,
   },
   error: {
-    bg: theme.banner.error.bg,
-    border: theme.banner.error.border,
-    titleColor: theme.banner.error.title,
-    messageColor: theme.banner.error.message,
+    accent: theme.banner.error.icon,
     Icon: WarningCircleIcon,
-    iconColor: theme.banner.error.icon,
   },
 } satisfies Record<Variant, object>
 
 export function Banner({ variant = 'info', title, message }: BannerProps) {
-  const { bg, border, titleColor, messageColor, Icon, iconColor } = config[variant]
+  const { accent, Icon } = config[variant]
 
   return (
-    <View style={[styles.container, { backgroundColor: bg, borderColor: border }]}>
-      <Icon size={16} color={iconColor} weight="fill" style={styles.icon} />
+    <View style={styles.container}>
+      <View style={[styles.accent, { backgroundColor: accent }]} />
+      <Icon size={18} color={accent} weight="duotone" style={styles.icon} />
       <View style={styles.body}>
-        {title ? <Text style={[styles.title, { color: titleColor }]}>{title}</Text> : null}
-        <Text style={[styles.message, { color: messageColor }]}>{message}</Text>
+        {title ? <Text style={styles.title}>{title}</Text> : null}
+        <Text style={styles.message}>{message}</Text>
       </View>
     </View>
   )
@@ -57,24 +46,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     alignItems: 'flex-start',
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12,
+    paddingLeft: 14,
+  },
+  accent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    borderRadius: 1,
   },
   icon: {
     marginTop: 1,
   },
   body: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   title: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+    color: theme.palette.slate.textPrimary,
   },
   message: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '400',
-    lineHeight: 17,
+    lineHeight: 19,
+    color: theme.palette.slate.textSecondary,
   },
 })

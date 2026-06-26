@@ -11,7 +11,11 @@ interface Props {
 
 export const DeviceRow = React.memo(function DeviceRow({ id, name, rssi, onPress }: Props) {
   const signalColor =
-    rssi > -60 ? theme.gps.text : rssi > -75 ? theme.highlight.color : theme.error.text
+    rssi > -60
+      ? theme.palette.green.text
+      : rssi > -75
+        ? theme.palette.yellow.color
+        : theme.status.error.text
 
   return (
     <Pressable
@@ -37,7 +41,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 10,
     marginBottom: 8,
   },
@@ -46,7 +50,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   name: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -55,12 +59,12 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   id: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontFamily: 'monospace',
   },
   chevron: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 22,
     fontWeight: '300',
   },

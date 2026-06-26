@@ -23,15 +23,15 @@ export function SettingsCard({ children }: SettingsCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     overflow: 'hidden',
   },
   separator: {
     height: 1,
-    backgroundColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.border,
     marginLeft: 58,
   },
 })

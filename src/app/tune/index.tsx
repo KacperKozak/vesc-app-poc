@@ -21,7 +21,12 @@ import { InfoModal } from '@/components/ui/modals/InfoModal'
 import { Placeholder } from '@/components/ui/base/Placeholder'
 import { BasicSliderCell } from '@/components/ui/tune/BasicSliderCell'
 import { FieldEditorPopover } from '@/components/domain/tune/FieldEditorPopover'
-import { HPill, HPillAdd, HPillMenuItem, HPills } from '@/components/ui/menus/HPills'
+import {
+  PillSelectorItem,
+  PillSelectorAdd,
+  PillSelectorMenuItem,
+  PillSelector,
+} from '@/components/ui/controls/PillSelector'
 import { TuneConfigCell } from '@/components/domain/tune/TuneConfigCell'
 import { TuneGroupGrid } from '@/components/ui/tune/TuneGroupGrid'
 import { TuneSyncBar } from '@/components/ui/tune/TuneSyncBar'
@@ -123,7 +128,7 @@ export default function TuneScreen() {
 
       {profileState.phase === 'loading' && !hasTuneView && selectedBoardId ? (
         <View style={styles.centerState}>
-          <ActivityIndicator color={theme.wheel.color} />
+          <ActivityIndicator color={theme.palette.sky.color} />
           <Text style={styles.stateText}>Loading saved tune profile...</Text>
         </View>
       ) : null}
@@ -138,7 +143,7 @@ export default function TuneScreen() {
 
       {profileState.phase === 'error' && !hasTuneView ? (
         <View style={styles.centerState}>
-          <WarningCircleIcon size={28} color={theme.error.text} />
+          <WarningCircleIcon size={28} color={theme.status.error.text} />
           <Text style={styles.errorText}>{profileState.error}</Text>
           <Pressable
             style={styles.retryButton}
@@ -162,7 +167,7 @@ export default function TuneScreen() {
 
           {profileError ? (
             <View style={styles.errorBanner}>
-              <WarningCircleIcon size={16} color={theme.error.color} />
+              <WarningCircleIcon size={16} color={theme.status.error.color} />
               <Text style={styles.errorBannerText}>{profileError}</Text>
             </View>
           ) : null}
@@ -185,7 +190,7 @@ export default function TuneScreen() {
                 )
               }
             >
-              <WarningCircleIcon size={16} color={theme.highlight.color} weight="fill" />
+              <WarningCircleIcon size={16} color={theme.palette.yellow.color} weight="fill" />
               <View style={styles.schemaMismatchTextWrap}>
                 <Text style={styles.schemaMismatchTitle}>Schema mismatch</Text>
                 <Text style={styles.schemaMismatchText}>
@@ -205,29 +210,29 @@ export default function TuneScreen() {
           ) : null}
 
           {profiles.length > 0 ? (
-            <HPills activeId={activeProfile?.id ?? ''}>
+            <PillSelector activeId={activeProfile?.id ?? ''}>
               {profiles.map((profile) => (
-                <HPill
+                <PillSelectorItem
                   key={profile.id}
                   id={profile.id}
                   label={profile.name}
-                  color={theme.wheel}
+                  color={theme.palette.sky}
                   onPress={() => setActiveProfile(profile.id)}
                 >
-                  <HPillMenuItem
+                  <PillSelectorMenuItem
                     icon={PencilSimpleIcon}
                     label="Rename"
                     onPress={() => modals.setRenameModalProfile(profile)}
                   />
                   {modals.otherBoards.length > 0 ? (
-                    <HPillMenuItem
+                    <PillSelectorMenuItem
                       icon={CopyIcon}
                       label="Copy to board"
                       onPress={() => modals.setCopySourceProfile(profile)}
                     />
                   ) : null}
                   {profiles.length > 1 ? (
-                    <HPillMenuItem
+                    <PillSelectorMenuItem
                       icon={TrashIcon}
                       label="Delete"
                       onPress={() => modals.setDeleteConfirmProfile(profile)}
@@ -235,10 +240,10 @@ export default function TuneScreen() {
                       separator
                     />
                   ) : null}
-                </HPill>
+                </PillSelectorItem>
               ))}
-              <HPillAdd onPress={() => modals.handleCreateProfile(activeProfile?.id)} />
-            </HPills>
+              <PillSelectorAdd onPress={() => modals.handleCreateProfile(activeProfile?.id)} />
+            </PillSelector>
           ) : null}
 
           {boardSnapshot ? (
@@ -522,7 +527,7 @@ function RenameProfileModal({ profile, onRename, onDismiss }: RenameProfileModal
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   headerActions: {
     flexDirection: 'row',
@@ -540,36 +545,36 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   stateText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 15,
   },
   errorText: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     fontSize: 15,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: theme.wheel.color,
+    backgroundColor: theme.palette.sky.color,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 8,
   },
   retryText: {
-    color: theme.neutral.surfaceDeep,
+    color: theme.palette.slate.surfaceDeep,
     fontWeight: '700',
   },
   errorBanner: {
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
-    backgroundColor: theme.error.bg,
-    borderColor: theme.error.border,
+    backgroundColor: theme.status.error.bg,
+    borderColor: theme.status.error.border,
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
   },
   errorBannerText: {
-    color: theme.error.text,
+    color: theme.status.error.text,
     flex: 1,
   },
   schemaMismatchBar: {
@@ -578,8 +583,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: theme.highlight.border,
-    backgroundColor: theme.highlight.bg,
+    borderColor: theme.palette.yellow.border,
+    backgroundColor: theme.palette.yellow.bg,
     padding: 12,
   },
   schemaMismatchTextWrap: {
@@ -587,12 +592,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   schemaMismatchTitle: {
-    color: theme.highlight.text,
+    color: theme.palette.yellow.text,
     fontSize: 13,
     fontWeight: '900',
   },
   schemaMismatchText: {
-    color: theme.highlight.color,
+    color: theme.palette.yellow.color,
     fontSize: 11,
     fontWeight: '700',
   },

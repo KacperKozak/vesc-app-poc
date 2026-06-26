@@ -129,7 +129,7 @@ export function BoardLinkTimeline({
               >
                 <View style={[styles.radio, isSelected && styles.radioOn]}>
                   {isSelected ? (
-                    <CheckIcon size={16} color={theme.wheel.color} weight="bold" />
+                    <CheckIcon size={16} color={theme.palette.sky.color} weight="bold" />
                   ) : null}
                 </View>
                 <Text style={styles.pickerLabel}>{formatBoardTransport(candidate.transport)}</Text>
@@ -229,7 +229,7 @@ function row(key: StepKey, state: StepState, caption: string): TimelineStep {
 function BmsChip() {
   return (
     <View style={styles.bmsChip}>
-      <LightningIcon size={12} color={theme.gps.color} weight="duotone" />
+      <LightningIcon size={12} color={theme.palette.green.color} weight="duotone" />
       <Text style={styles.bmsChipText}>BMS</Text>
     </View>
   )
@@ -240,10 +240,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pickerCard: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
   },
   pickerRow: {
     flexDirection: 'row',
@@ -254,23 +254,23 @@ const styles = StyleSheet.create({
   },
   pickerRowDivider: {
     borderTopWidth: 1,
-    borderTopColor: theme.neutral.border,
+    borderTopColor: theme.palette.slate.border,
   },
   radio: {
     width: 26,
     height: 26,
     borderRadius: 13,
     borderWidth: 1.5,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioOn: {
-    borderColor: theme.wheel.color,
+    borderColor: theme.palette.sky.color,
   },
   pickerLabel: {
     flex: 1,
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -278,19 +278,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: theme.gps.bg,
+    backgroundColor: theme.palette.green.bg,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
   bmsChipText: {
-    color: theme.gps.text,
+    color: theme.palette.green.text,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   failureNote: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },

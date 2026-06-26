@@ -344,8 +344,8 @@ export const ONE_DARK_MAP_STYLE = JSON.stringify({
         'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 13],
       },
       paint: {
-        'text-color': theme.wheel.color,
-        'text-halo-color': theme.wheel.bg,
+        'text-color': theme.palette.sky.color,
+        'text-halo-color': theme.palette.sky.bg,
         'text-halo-width': 1,
       },
     },

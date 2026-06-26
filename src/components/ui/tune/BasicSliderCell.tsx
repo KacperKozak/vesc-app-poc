@@ -32,7 +32,7 @@ export const BasicSliderCell = forwardRef<View, BasicSliderCellProps>(function B
         onPress={editable ? onPress : undefined}
       >
         <Pressable style={styles.infoBtn} onPress={onInfo}>
-          <InfoIcon size={13} color={theme.neutral.textDim} weight="bold" />
+          <InfoIcon size={13} color={theme.palette.slate.textDim} weight="bold" />
         </Pressable>
 
         <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
@@ -46,7 +46,7 @@ export const BasicSliderCell = forwardRef<View, BasicSliderCellProps>(function B
         <View style={styles.labelRow}>
           {item.modifiedManually ? (
             <Pressable onPress={onResetFormula} hitSlop={8}>
-              <WarningIcon size={10} color={theme.highlight.color} weight="fill" />
+              <WarningIcon size={10} color={theme.palette.yellow.color} weight="fill" />
             </Pressable>
           ) : null}
           <Text style={styles.label} numberOfLines={1}>
@@ -71,14 +71,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingLeft: 11,
     borderLeftWidth: 3,
-    borderLeftColor: theme.wheel.color,
+    borderLeftColor: theme.palette.sky.color,
   },
   cellMissing: {
     opacity: 0.58,
-    borderLeftColor: theme.neutral.border,
+    borderLeftColor: theme.palette.slate.border,
   },
   cellReadOnly: {
-    borderLeftColor: theme.neutral.border,
+    borderLeftColor: theme.palette.slate.border,
   },
   infoBtn: {
     position: 'absolute',
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   value: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 18,
     fontWeight: '800',
     paddingRight: 26,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   miniTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     marginTop: 6,
     marginRight: 26,
     overflow: 'hidden',
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     borderRadius: 3,
-    backgroundColor: theme.wheel.color,
+    backgroundColor: theme.palette.sky.color,
   },
   labelRow: {
     flexDirection: 'row',
@@ -121,13 +121,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   label: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
     flex: 1,
   },
   source: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 10,
     fontWeight: '600',
     marginTop: 1,

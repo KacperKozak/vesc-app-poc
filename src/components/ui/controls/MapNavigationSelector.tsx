@@ -7,11 +7,11 @@ import {
 import { type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 
-import { MapOptionSelector } from '@/components/ui/menus/MapOptionSelector'
+import { MapOptionSelector } from '@/components/ui/controls/MapOptionSelector'
 import { MAP_NAVIGATION_MODES, type MapNavigationMode } from '@/constants/mapStyles'
 import { theme } from '@/constants/theme'
 
-const COLLAPSED_ICON_COLOR = theme.neutral.textPrimary
+const COLLAPSED_ICON_COLOR = theme.palette.slate.textPrimary
 
 interface MapNavigationSelectorProps {
   activeMode: MapNavigationMode
@@ -56,8 +56,8 @@ export function MapNavigationSelector({
     <MapOptionSelector
       activeKey={activeMode}
       activeIcon={activeIcon}
-      activeColor={theme.gps.text}
-      activeBackground={`${theme.gps.color}1f`}
+      activeColor={theme.palette.green.text}
+      activeBackground={`${theme.palette.green.color}1f`}
       collapsedAccessibilityLabel={`Navigation: ${activeMode === 'northUp' ? 'North up' : activeMode === 'gpsHeading' ? 'GPS heading' : activeMode === 'phoneHeading' ? 'Compass' : 'Free rotate'}`}
       expanded={expanded}
       options={options}
@@ -68,7 +68,7 @@ export function MapNavigationSelector({
 }
 
 function getNavigationIcon(mode: MapNavigationMode, activeMode: MapNavigationMode) {
-  const color = activeMode === mode ? theme.gps.text : theme.neutral.textSecondary
+  const color = activeMode === mode ? theme.palette.green.text : theme.palette.slate.textSecondary
   if (mode === 'northUp') {
     return <ArrowUpIcon size={20} color={color} weight="bold" />
   }
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: theme.error.color,
+    backgroundColor: theme.status.error.color,
   },
   northDotCompact: {
     top: 1,

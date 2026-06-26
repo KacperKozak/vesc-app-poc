@@ -25,7 +25,7 @@ export default function OtherSettingsScreen() {
             <View style={styles.controlGroup}>
               <View style={styles.controlHeader}>
                 <View style={styles.rowIcon}>
-                  <VibrateIcon size={20} color={theme.wheel.color} weight="duotone" />
+                  <VibrateIcon size={20} color={theme.palette.sky.color} weight="duotone" />
                 </View>
                 <View style={styles.rowBody}>
                   <Text style={styles.rowLabel}>Android haptics</Text>
@@ -62,14 +62,14 @@ export default function OtherSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
     gap: 8,
   },
   sectionTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -79,10 +79,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     overflow: 'hidden',
   },
   row: {
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -105,12 +105,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   rowLabel: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '600',
   },
   rowHint: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
   },
   controlGroup: {
@@ -128,15 +128,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hapticButton: {
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   hapticButtonText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
   },

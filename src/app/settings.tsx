@@ -14,7 +14,6 @@ import {
   MapPinIcon,
   FadersIcon,
   ChartLineUpIcon,
-  GearSixIcon,
   SpeakerHighIcon,
   GaugeIcon,
 } from 'phosphor-react-native'
@@ -28,6 +27,7 @@ import { SettingsCard } from '@/components/ui/settings/SettingsCard'
 import { SettingsRow } from '@/components/ui/settings/SettingsRow'
 import { SettingsSectionTitle } from '@/components/ui/settings/SettingsSectionTitle'
 import { IconHero } from '@/components/ui/settings/IconHero'
+import { VescapeWordmark } from '@/components/ui/base/VescapeWordmark'
 import { useSettingsDatabaseOps } from '@/hooks/useSettingsDatabaseOps'
 
 const appVersion = Constants.expoConfig?.version ?? '–'
@@ -47,27 +47,24 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <IconHero
-          icon={GearSixIcon}
-          description="These settings apply across the entire app and persist between rides."
-        >
+        <IconHero media={<VescapeWordmark width={200} />}>
           <View style={styles.headerStats}>
             <View style={styles.headerItem}>
-              <TagIcon size={14} color={theme.wheel.color} weight="duotone" />
+              <TagIcon size={14} color={theme.palette.sky.color} weight="duotone" />
               <Text style={styles.headerValue}>v{appVersion}</Text>
             </View>
             <View style={styles.headerItem}>
               {Platform.OS === 'ios' ? (
-                <AppleLogoIcon size={14} color={theme.target.color} weight="duotone" />
+                <AppleLogoIcon size={14} color={theme.palette.purple.color} weight="duotone" />
               ) : (
-                <AndroidLogoIcon size={14} color={theme.gps.color} weight="duotone" />
+                <AndroidLogoIcon size={14} color={theme.palette.green.color} weight="duotone" />
               )}
               <Text style={styles.headerValue}>
                 {Platform.OS === 'ios' ? 'iOS' : 'Android'} {Platform.Version}
               </Text>
             </View>
             <View style={styles.headerItem}>
-              <DatabaseIcon size={14} color={theme.warning.color} weight="duotone" />
+              <DatabaseIcon size={14} color={theme.status.warning.color} weight="duotone" />
               <Text style={styles.headerValue}>
                 {db.dbSize != null ? formatBytes(db.dbSize) : '–'}
               </Text>
@@ -80,50 +77,52 @@ export default function SettingsScreen() {
         <SettingsCard>
           <SettingsRow
             icon={BluetoothConnectedIcon}
-            iconColor={theme.bran.color}
+            iconColor={theme.palette.cyan.color}
             label="Auto connect"
             hint="Connect to board on app start"
             right={
               <Switch
                 value={autoConnect}
                 onValueChange={(v) => void set('autoConnect', v)}
-                trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
-                thumbColor={autoConnect ? theme.wheel.color : theme.neutral.textMuted}
+                trackColor={{ false: theme.palette.slate.border, true: theme.palette.sky.border }}
+                thumbColor={autoConnect ? theme.palette.sky.color : theme.palette.slate.textMuted}
               />
             }
           />
           <SettingsRow
             icon={RecordIcon}
             iconWeight="fill"
-            iconColor={theme.error.color}
+            iconColor={theme.status.error.color}
             label="Auto recording"
             hint="Start recording when board connects"
             right={
               <Switch
                 value={autoRecording}
                 onValueChange={(v) => void set('autoRecording', v)}
-                trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
-                thumbColor={autoRecording ? theme.wheel.color : theme.neutral.textMuted}
+                trackColor={{ false: theme.palette.slate.border, true: theme.palette.sky.border }}
+                thumbColor={autoRecording ? theme.palette.sky.color : theme.palette.slate.textMuted}
               />
             }
           />
           <SettingsRow
             icon={SpeakerHighIcon}
-            iconColor={theme.teal.color}
+            iconColor={theme.palette.cyan.color}
             label="Connection sounds"
             hint="Play on/off sounds on connect and dropout"
             right={
               <Switch
                 value={connectionSoundsEnabled}
                 onValueChange={(v) => void set('connectionSoundsEnabled', v)}
-                trackColor={{ false: theme.neutral.border, true: theme.wheel.border }}
-                thumbColor={connectionSoundsEnabled ? theme.wheel.color : theme.neutral.textMuted}
+                trackColor={{ false: theme.palette.slate.border, true: theme.palette.sky.border }}
+                thumbColor={
+                  connectionSoundsEnabled ? theme.palette.sky.color : theme.palette.slate.textMuted
+                }
               />
             }
           />
           <SettingsRow
             icon={GaugeIcon}
-            iconColor={theme.gps.color}
+            iconColor={theme.palette.green.color}
             label="Live telemetry"
             hint="Graphs, update rate, and battery smoothing"
             onPress={() => router.push(routes.settingsLiveTelemetry)}
@@ -135,21 +134,21 @@ export default function SettingsScreen() {
         <SettingsCard>
           <SettingsRow
             icon={MapPinIcon}
-            iconColor={theme.gps.color}
+            iconColor={theme.palette.green.color}
             label="Privacy zones"
             hint="Skip recording near saved places"
             onPress={() => router.push(routes.settingsPrivacyZones)}
           />
           <SettingsRow
             icon={FadersIcon}
-            iconColor={theme.target.color}
+            iconColor={theme.palette.purple.color}
             label="Filters"
             hint="Ride data filtering and free-spin detection"
             onPress={() => router.push(routes.settingsFilters)}
           />
           <SettingsRow
             icon={ChartLineUpIcon}
-            iconColor={theme.teal.color}
+            iconColor={theme.palette.cyan.color}
             label="Graphs"
             hint="Hot gradients and color ramps"
             onPress={() => router.push(routes.settingsGraphs)}
@@ -161,21 +160,21 @@ export default function SettingsScreen() {
         <SettingsCard>
           <SettingsRow
             icon={CodeIcon}
-            iconColor={theme.highlight.color}
+            iconColor={theme.palette.yellow.color}
             label="Dev tools"
             hint="Diagnostics and local verification"
             onPress={() => router.push(routes.settingsDev)}
           />
           <SettingsRow
             icon={DatabaseIcon}
-            iconColor={theme.warning.color}
+            iconColor={theme.status.warning.color}
             label="Database"
             hint="Back up, restore, and rebuild history"
             onPress={() => router.push(routes.settingsDatabase)}
           />
           <SettingsRow
             icon={InfoIcon}
-            iconColor={theme.teal.color}
+            iconColor={theme.palette.cyan.color}
             label="About us"
             hint="The people who built this app"
             onPress={() => router.push(routes.settingsAbout)}
@@ -189,7 +188,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.neutral.bg,
+    backgroundColor: theme.palette.slate.bg,
   },
   content: {
     padding: 16,
@@ -205,7 +204,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   headerValue: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },

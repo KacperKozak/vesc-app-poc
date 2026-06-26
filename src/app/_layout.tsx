@@ -19,13 +19,13 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Stack
           screenOptions={{
-            headerStyle: { backgroundColor: theme.neutral.bg },
-            headerTintColor: theme.neutral.textPrimary,
+            headerStyle: { backgroundColor: theme.palette.slate.bg },
+            headerTintColor: theme.palette.slate.textPrimary,
             headerTitleStyle: { fontWeight: '600', fontSize: 14 },
             headerTitleAlign: 'center',
             headerShadowVisible: false,
             headerLeft: () => <HeaderBackButton />,
-            contentStyle: { backgroundColor: theme.neutral.bg },
+            contentStyle: { backgroundColor: theme.palette.slate.bg },
           }}
         >
           <Stack.Screen name={stackScreens.home} options={{ headerShown: false }} />

@@ -79,26 +79,26 @@ export function Button({
 
 const variantStyles = {
   primary: {
-    button: { backgroundColor: theme.bran.border },
-    text: { color: theme.neutral.textPrimary },
-    iconColor: theme.neutral.textPrimary,
-    indicatorColor: theme.neutral.textPrimary,
+    button: { backgroundColor: theme.palette.cyan.border },
+    text: { color: theme.palette.slate.textPrimary },
+    iconColor: theme.palette.slate.textPrimary,
+    indicatorColor: theme.palette.slate.textPrimary,
   },
   secondary: {
     button: {
-      backgroundColor: theme.neutral.surface,
+      backgroundColor: theme.palette.slate.surface,
       borderWidth: 1,
-      borderColor: theme.neutral.border,
+      borderColor: theme.palette.slate.border,
     },
-    text: { color: theme.neutral.textSecondary },
-    iconColor: theme.neutral.textSecondary,
-    indicatorColor: theme.neutral.textSecondary,
+    text: { color: theme.palette.slate.textSecondary },
+    iconColor: theme.palette.slate.textSecondary,
+    indicatorColor: theme.palette.slate.textSecondary,
   },
   destructive: {
-    button: { backgroundColor: theme.error.border },
-    text: { color: theme.error.text },
-    iconColor: theme.error.text,
-    indicatorColor: theme.error.text,
+    button: { backgroundColor: theme.status.error.border },
+    text: { color: theme.status.error.text },
+    iconColor: theme.status.error.text,
+    indicatorColor: theme.status.error.text,
   },
 } as const
 

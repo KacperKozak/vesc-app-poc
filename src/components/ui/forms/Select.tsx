@@ -47,7 +47,7 @@ export function Select<T extends string = string>({
         <Text style={[styles.triggerText, !selectedOption && styles.placeholderText]}>
           {selectedOption?.label ?? placeholder}
         </Text>
-        <CaretDownIcon size={14} color={theme.neutral.textMuted} weight="bold" />
+        <CaretDownIcon size={14} color={theme.palette.slate.textMuted} weight="bold" />
       </Pressable>
 
       <Dropdown
@@ -73,7 +73,9 @@ export function Select<T extends string = string>({
                 <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
                   {option.label}
                 </Text>
-                {selected ? <CheckIcon size={14} color={theme.wheel.color} weight="bold" /> : null}
+                {selected ? (
+                  <CheckIcon size={14} color={theme.palette.sky.color} weight="bold" />
+                ) : null}
               </Pressable>
             )
           })}
@@ -94,13 +96,13 @@ const styles = StyleSheet.create({
     height: 42,
   },
   triggerText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 15,
     fontWeight: '600',
     flex: 1,
   },
   placeholderText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
   },
   option: {
     flexDirection: 'row',
@@ -111,21 +113,21 @@ const styles = StyleSheet.create({
   },
   optionBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.neutral.border,
+    borderBottomColor: theme.palette.slate.border,
   },
   optionSelected: {
-    backgroundColor: theme.wheel.bg,
+    backgroundColor: theme.palette.sky.bg,
   },
   optionPressed: {
     backgroundColor: interaction.pressedBg,
   },
   optionText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 14,
     fontWeight: '500',
   },
   optionTextSelected: {
-    color: theme.wheel.color,
+    color: theme.palette.sky.color,
     fontWeight: '600',
   },
 })

@@ -31,14 +31,14 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   groupTitle: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   groupCount: {
-    color: theme.neutral.textDim,
+    color: theme.palette.slate.textDim,
     fontSize: 11,
     fontWeight: '700',
   },

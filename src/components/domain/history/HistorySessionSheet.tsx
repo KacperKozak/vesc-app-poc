@@ -10,12 +10,13 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native'
-import { CaretRightIcon, WarningCircleIcon } from 'phosphor-react-native'
+import { CaretRightIcon } from 'phosphor-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import Svg, { Circle, Polyline } from 'react-native-svg'
+import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia'
 
 import { interaction, theme } from '@/constants/theme'
 import { telemetry } from '@/constants/telemetry'
+import { rideDurationMs } from '@/lib/history/sessions'
 import type { HistorySession, TelemetryMinuteBucket } from '@/store/historyStore'
 
 interface HistorySessionSheetProps {
@@ -120,19 +121,13 @@ export function HistorySessionSheet({
                       {session.deviceName}
                     </Text>
                     <Text style={styles.rowMeta}>
-                      {formatDuration(session.endAtMs - session.startAtMs)} ·{' '}
+                      {formatDuration(rideDurationMs(session))} ·{' '}
                       {formatDistance(session.distanceM)} ·{' '}
                       {telemetry.speed.formatWithUnit(session.maxSpeedKmh)} · GPS{' '}
                       {session.gpsPointCount}
                     </Text>
-                    {session.faultCount > 0 && (
-                      <View style={styles.faultRow}>
-                        <WarningCircleIcon size={12} color={theme.error.color} weight="fill" />
-                        <Text style={styles.faultText}>{session.faultCount} faults</Text>
-                      </View>
-                    )}
                   </View>
-                  <CaretRightIcon size={16} color={theme.neutral.textDim} weight="bold" />
+                  <CaretRightIcon size={16} color={theme.palette.slate.textDim} weight="bold" />
                 </Pressable>
               )
             })
@@ -144,7 +139,7 @@ export function HistorySessionSheet({
               onPress={onLoadMore}
             >
               {loadingMore ? (
-                <ActivityIndicator size="small" color={theme.wheel.color} />
+                <ActivityIndicator size="small" color={theme.palette.sky.color} />
               ) : (
                 <Text style={styles.loadingText}>Load older rides</Text>
               )}
@@ -179,26 +174,26 @@ function getSessionRoutePreviewPoints(
 }
 
 function RoutePreview({ points, selected }: { points: RoutePoint[]; selected: boolean }) {
-  const path = formatPreviewPath(points)
+  const path = useMemo(() => buildPreviewPath(points), [points])
   const start = points.length > 0 ? formatPreviewPoint(points, 0) : null
   const end = points.length > 1 ? formatPreviewPoint(points, points.length - 1) : null
-  const strokeColor = selected ? theme.wheel.color : theme.target.color
+  const strokeColor = selected ? theme.palette.sky.color : theme.palette.purple.color
 
   return (
     <View style={styles.routePreview}>
       {path ? (
-        <Svg width="100%" height="100%" viewBox="0 0 74 52">
-          <Polyline
-            points={path}
-            fill="none"
-            stroke={strokeColor}
+        <Canvas style={styles.routeCanvas}>
+          <Path
+            path={path}
+            style="stroke"
+            color={strokeColor}
             strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            strokeCap="round"
+            strokeJoin="round"
           />
-          {start && <Circle cx={start.x} cy={start.y} r={3} fill={theme.gps.color} />}
-          {end && <Circle cx={end.x} cy={end.y} r={3} fill={theme.error.color} />}
-        </Svg>
+          {start && <Circle cx={start.x} cy={start.y} r={3} color={theme.palette.green.color} />}
+          {end && <Circle cx={end.x} cy={end.y} r={3} color={theme.status.error.color} />}
+        </Canvas>
       ) : (
         <View style={styles.routeEmpty}>
           <View style={styles.routeEmptyLine} />
@@ -208,17 +203,23 @@ function RoutePreview({ points, selected }: { points: RoutePoint[]; selected: bo
   )
 }
 
-function formatPreviewPath(points: RoutePoint[]): string | null {
+function buildPreviewPath(points: RoutePoint[]) {
   if (points.length < 2) return null
-  return points
-    .map((_, index) => formatPreviewPoint(points, index))
-    .map(({ x, y }) => `${x},${y}`)
-    .join(' ')
+  const first = formatPreviewPoint(points, 0)
+  const builder = Skia.PathBuilder.Make().moveTo(first.x, first.y)
+  for (let index = 1; index < points.length; index += 1) {
+    const { x, y } = formatPreviewPoint(points, index)
+    builder.lineTo(x, y)
+  }
+  return builder.detach()
 }
 
+const PREVIEW_WIDTH = 74
+const PREVIEW_HEIGHT = 52
+
 function formatPreviewPoint(points: RoutePoint[], index: number): { x: number; y: number } {
-  const width = 74
-  const height = 52
+  const width = PREVIEW_WIDTH
+  const height = PREVIEW_HEIGHT
   const padding = 8
   const minLatitude = Math.min(...points.map((point) => point.latitude))
   const maxLatitude = Math.max(...points.map((point) => point.latitude))
@@ -255,12 +256,12 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 25,
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: theme.palette.mono.black,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.45,
     shadowRadius: 20,
@@ -275,15 +276,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     textAlign: 'center',
     paddingVertical: 20,
   },
   row: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     paddingVertical: 10,
     paddingHorizontal: 12,
     flexDirection: 'row',
@@ -291,7 +292,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   rowSelected: {
-    borderColor: theme.wheel.color,
+    borderColor: theme.palette.sky.color,
   },
   rowPressed: {
     backgroundColor: interaction.pressedBg,
@@ -302,23 +303,27 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   rowDate: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '700',
   },
   rowName: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
   },
   rowMeta: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
   },
   routePreview: {
-    width: 74,
-    height: 52,
+    width: PREVIEW_WIDTH,
+    height: PREVIEW_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  routeCanvas: {
+    width: PREVIEW_WIDTH,
+    height: PREVIEW_HEIGHT,
   },
   routeEmpty: {
     width: '100%',
@@ -330,18 +335,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 2,
     borderRadius: 1,
-    backgroundColor: theme.neutral.border,
-  },
-  faultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 1,
-  },
-  faultText: {
-    color: theme.error.color,
-    fontSize: 11,
-    fontWeight: '700',
+    backgroundColor: theme.palette.slate.border,
   },
   loadingRow: {
     minHeight: 34,
@@ -349,14 +343,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   loadingPressed: {
     backgroundColor: interaction.pressedBg,
   },
   loadingText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 11,
     fontWeight: '700',
   },

@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   CaretDownIcon,
-  DropIcon,
   GearSixIcon,
   PencilSimpleIcon,
   PowerIcon,
@@ -13,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BoardSelectorSheet } from '@/components/domain/board/BoardSelectorSheet'
 import { IconButton } from '@/components/ui/base/IconButton'
-import { WeatherIcon } from '@/components/ui/weather/WeatherIcon'
+import { WeatherStat } from '@/components/ui/weather/WeatherStat'
 import { isNightAtTime } from '@/lib/weather'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
@@ -63,10 +62,10 @@ export function TopBar({
   const name = activeBoard?.name ?? 'No board'
   const statusColor =
     bleStatus === 'connected'
-      ? theme.gps.color
+      ? theme.palette.green.color
       : bleStatus === 'error'
-        ? theme.error.color
-        : theme.neutral.textSecondary
+        ? theme.status.error.color
+        : theme.palette.slate.textSecondary
 
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) }]} pointerEvents="box-none">
@@ -87,7 +86,7 @@ export function TopBar({
             <Text style={styles.boardText} numberOfLines={1}>
               {name}
             </Text>
-            <CaretDownIcon size={12} color={theme.neutral.textSecondary} weight="bold" />
+            <CaretDownIcon size={12} color={theme.palette.slate.textSecondary} weight="bold" />
           </Pressable>
           <View style={styles.divider} />
           <Pressable
@@ -101,7 +100,7 @@ export function TopBar({
           >
             <PencilSimpleIcon
               size={14}
-              color={activeBoard ? theme.neutral.textPrimary : theme.neutral.textMuted}
+              color={activeBoard ? theme.palette.slate.textPrimary : theme.palette.slate.textMuted}
               weight="bold"
             />
           </Pressable>
@@ -112,33 +111,27 @@ export function TopBar({
               onPress={onDisconnect}
               testID="board-disconnect-button"
             >
-              <PowerIcon size={15} color={theme.error.color} weight="bold" />
+              <PowerIcon size={15} color={theme.status.error.color} weight="bold" />
             </Pressable>
           )}
         </View>
         <IconButton
           icon={GearSixIcon}
           onPress={() => router.push(routes.settings)}
+          onLongPress={() => router.push(routes.settingsComponents)}
           style={styles.iconRight}
         />
       </View>
       {hasWeather && (
         <Pressable style={styles.weatherRow} onPress={onWeatherPress}>
-          <WeatherIcon
-            code={weatherCode}
+          <WeatherStat
+            code={weatherCode!}
+            temperature={weatherTemp!}
             hour={now.getHours()}
             isNight={isNight}
-            size={13}
-            color={theme.neutral.textSecondary}
-            weight="duotone"
+            precipProbability={weatherPrecip}
+            size="sm"
           />
-          <Text style={styles.weatherText}>{weatherTemp}°</Text>
-          {weatherPrecip != null && weatherPrecip > 0 && (
-            <>
-              <DropIcon size={11} color={theme.wheel.color} weight="duotone" />
-              <Text style={styles.weatherPrecip}>{weatherPrecip}%</Text>
-            </>
-          )}
         </Pressable>
       )}
 
@@ -192,8 +185,8 @@ const styles = StyleSheet.create({
     minHeight: 38,
     borderRadius: 19,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     overflow: 'hidden',
   },
   boardButton: {
@@ -210,7 +203,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   boardText: {
-    color: theme.neutral.textPrimary,
+    color: theme.palette.slate.textPrimary,
     fontSize: 13,
     fontWeight: '800',
     maxWidth: 120,
@@ -219,7 +212,7 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 20,
-    backgroundColor: theme.neutral.border,
+    backgroundColor: theme.palette.slate.border,
   },
   plugButton: {
     width: 38,
@@ -231,17 +224,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     marginTop: 4,
-  },
-  weatherText: {
-    color: theme.neutral.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  weatherPrecip: {
-    color: theme.wheel.color,
-    fontSize: 11,
-    fontWeight: '600',
   },
 })

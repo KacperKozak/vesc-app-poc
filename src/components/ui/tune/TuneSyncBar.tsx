@@ -85,30 +85,34 @@ export function TuneSyncBar({
     switch (s.variant) {
       case 'loading_config':
         return {
-          borderColor: theme.wheel.border,
-          textColor: theme.wheel.text,
-          accentColor: theme.wheel.color,
-          accentTextColor: theme.neutral.surfaceDeep,
+          borderColor: theme.palette.sky.border,
+          textColor: theme.palette.sky.text,
+          accentColor: theme.palette.sky.color,
+          accentTextColor: theme.palette.slate.surfaceDeep,
           text: 'Reading board config...',
           detail: null,
-          icon: <ActivityIndicator size="small" color={theme.wheel.color} />,
+          icon: <ActivityIndicator size="small" color={theme.palette.sky.color} />,
           actions: [],
         }
       case 'config_error':
         return {
-          borderColor: theme.warning.border,
-          textColor: theme.warning.text,
-          accentColor: theme.warning.color,
-          accentTextColor: theme.neutral.surfaceDeep,
+          borderColor: theme.status.warning.border,
+          textColor: theme.status.warning.text,
+          accentColor: theme.status.warning.color,
+          accentTextColor: theme.palette.slate.surfaceDeep,
           text: 'Board config not read',
           detail: s.configError,
-          icon: <WarningCircleIcon size={16} color={theme.warning.color} weight="bold" />,
+          icon: <WarningCircleIcon size={16} color={theme.status.warning.color} weight="bold" />,
           actions: [
             {
               label: 'Retry',
               primary: true,
               icon: (
-                <ArrowsClockwiseIcon size={12} color={theme.neutral.surfaceDeep} weight="bold" />
+                <ArrowsClockwiseIcon
+                  size={12}
+                  color={theme.palette.slate.surfaceDeep}
+                  weight="bold"
+                />
               ),
               onPress: onRetryConfig,
             },
@@ -116,35 +120,35 @@ export function TuneSyncBar({
         }
       case 'up_to_date':
         return {
-          borderColor: theme.neutral.border,
-          textColor: theme.neutral.textMuted,
-          accentColor: theme.gps.color,
-          accentTextColor: theme.gps.bg,
+          borderColor: theme.palette.slate.border,
+          textColor: theme.palette.slate.textMuted,
+          accentColor: theme.palette.green.color,
+          accentTextColor: theme.palette.green.bg,
           text: 'Your board is up to date',
           detail: null,
-          icon: <CheckCircleIcon size={16} color={theme.gps.color} weight="fill" />,
+          icon: <CheckCircleIcon size={16} color={theme.palette.green.color} weight="fill" />,
           actions: [],
         }
       case 'connect_to_sync':
         return {
-          borderColor: theme.warning.border,
-          textColor: theme.warning.text,
-          accentColor: theme.warning.color,
-          accentTextColor: theme.neutral.surfaceDeep,
+          borderColor: theme.status.warning.border,
+          textColor: theme.status.warning.text,
+          accentColor: theme.status.warning.color,
+          accentTextColor: theme.palette.slate.surfaceDeep,
           text: 'Connect to board to sync',
           detail: null,
-          icon: <BluetoothSlashIcon size={16} color={theme.warning.color} weight="bold" />,
+          icon: <BluetoothSlashIcon size={16} color={theme.status.warning.color} weight="bold" />,
           actions: [],
         }
       case 'save_later':
         return {
-          borderColor: theme.wheel.border,
-          textColor: theme.neutral.textPrimary,
-          accentColor: theme.wheel.color,
-          accentTextColor: theme.neutral.surfaceDeep,
+          borderColor: theme.palette.sky.border,
+          textColor: theme.palette.slate.textPrimary,
+          accentColor: theme.palette.sky.color,
+          accentTextColor: theme.palette.slate.surfaceDeep,
           text: `${s.dirtyCount} unsaved field${s.dirtyCount === 1 ? '' : 's'}`,
           detail: s.configError ? `Board config not read: ${s.configError}` : null,
-          icon: <CloudArrowUpIcon size={16} color={theme.wheel.color} weight="bold" />,
+          icon: <CloudArrowUpIcon size={16} color={theme.palette.sky.color} weight="bold" />,
           actions: s.configError
             ? [
                 {
@@ -153,7 +157,7 @@ export function TuneSyncBar({
                   icon: (
                     <ArrowsClockwiseIcon
                       size={12}
-                      color={theme.neutral.textSecondary}
+                      color={theme.palette.slate.textSecondary}
                       weight="bold"
                     />
                   ),
@@ -162,7 +166,9 @@ export function TuneSyncBar({
                 {
                   label: 'Save',
                   primary: true,
-                  icon: <CheckIcon size={12} color={theme.neutral.surfaceDeep} weight="bold" />,
+                  icon: (
+                    <CheckIcon size={12} color={theme.palette.slate.surfaceDeep} weight="bold" />
+                  ),
                   onPress: onSave,
                 },
               ]
@@ -173,7 +179,7 @@ export function TuneSyncBar({
                   icon: (
                     <ArrowCounterClockwiseIcon
                       size={12}
-                      color={theme.neutral.textSecondary}
+                      color={theme.palette.slate.textSecondary}
                       weight="bold"
                     />
                   ),
@@ -182,73 +188,81 @@ export function TuneSyncBar({
                 {
                   label: 'Save',
                   primary: true,
-                  icon: <CheckIcon size={12} color="#020617" weight="bold" />,
+                  icon: (
+                    <CheckIcon size={12} color={theme.palette.slate.surfaceDeep} weight="bold" />
+                  ),
                   onPress: onSave,
                 },
               ],
         }
       case 'save_and_sync':
         return {
-          borderColor: theme.wheel.border,
-          textColor: theme.neutral.textPrimary,
-          accentColor: theme.wheel.color,
-          accentTextColor: theme.neutral.surfaceDeep,
+          borderColor: theme.palette.sky.border,
+          textColor: theme.palette.slate.textPrimary,
+          accentColor: theme.palette.sky.color,
+          accentTextColor: theme.palette.slate.surfaceDeep,
           text: `${s.dirtyCount} unsaved field${s.dirtyCount === 1 ? '' : 's'}`,
           detail: null,
-          icon: <ArrowsClockwiseIcon size={16} color={theme.wheel.color} weight="bold" />,
+          icon: <ArrowsClockwiseIcon size={16} color={theme.palette.sky.color} weight="bold" />,
           actions: [
             {
               label: 'Discard',
               primary: false,
-              icon: <ArrowCounterClockwiseIcon size={12} color="#cbd5e1" weight="bold" />,
+              icon: (
+                <ArrowCounterClockwiseIcon
+                  size={12}
+                  color={theme.palette.slate.text}
+                  weight="bold"
+                />
+              ),
               onPress: onDiscard,
             },
             {
               label: 'Save & sync',
               primary: true,
-              icon: <CheckIcon size={12} color="#020617" weight="bold" />,
+              icon: <CheckIcon size={12} color={theme.palette.slate.surfaceDeep} weight="bold" />,
               onPress: onSaveAndSync,
             },
           ],
         }
       case 'sync_with_board':
         return {
-          borderColor: theme.gps.border,
-          textColor: theme.gps.text,
-          accentColor: theme.gps.text,
-          accentTextColor: theme.gps.bg,
+          borderColor: theme.palette.green.border,
+          textColor: theme.palette.green.text,
+          accentColor: theme.palette.green.text,
+          accentTextColor: theme.palette.green.bg,
           text: `${s.diffCount} field${s.diffCount === 1 ? '' : 's'} differ from board`,
           detail: null,
-          icon: <ArrowsClockwiseIcon size={16} color={theme.gps.color} weight="bold" />,
+          icon: <ArrowsClockwiseIcon size={16} color={theme.palette.green.color} weight="bold" />,
           actions: [
             {
               label: 'Sync',
               primary: true,
-              icon: <CheckIcon size={12} color={theme.gps.bg} weight="bold" />,
+              icon: <CheckIcon size={12} color={theme.palette.green.bg} weight="bold" />,
               onPress: onSync,
             },
           ],
         }
       case 'saving':
         return {
-          borderColor: theme.wheel.border,
-          textColor: theme.wheel.text,
-          accentColor: theme.wheel.color,
-          accentTextColor: theme.neutral.surfaceDeep,
+          borderColor: theme.palette.sky.border,
+          textColor: theme.palette.sky.text,
+          accentColor: theme.palette.sky.color,
+          accentTextColor: theme.palette.slate.surfaceDeep,
           text: 'Saving...',
           detail: null,
-          icon: <ActivityIndicator size="small" color={theme.wheel.color} />,
+          icon: <ActivityIndicator size="small" color={theme.palette.sky.color} />,
           actions: [],
         }
       case 'syncing':
         return {
-          borderColor: theme.gps.border,
-          textColor: theme.gps.text,
-          accentColor: theme.gps.color,
-          accentTextColor: theme.gps.bg,
+          borderColor: theme.palette.green.border,
+          textColor: theme.palette.green.text,
+          accentColor: theme.palette.green.color,
+          accentTextColor: theme.palette.green.bg,
           text: 'Syncing to board...',
           detail: null,
-          icon: <ActivityIndicator size="small" color={theme.gps.color} />,
+          icon: <ActivityIndicator size="small" color={theme.palette.green.color} />,
           actions: [],
         }
     }
@@ -274,8 +288,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     gap: 8,
-    backgroundColor: theme.neutral.surfaceDeep,
-    shadowColor: '#000',
+    backgroundColor: theme.palette.slate.surfaceDeep,
+    shadowColor: theme.palette.mono.black,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -297,7 +311,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   detailText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -318,11 +332,11 @@ const styles = StyleSheet.create({
   },
   actionBtnSecondary: {
     borderWidth: 1,
-    borderColor: theme.neutral.border,
-    backgroundColor: theme.neutral.surfaceDeep,
+    borderColor: theme.palette.slate.border,
+    backgroundColor: theme.palette.slate.surfaceDeep,
   },
   actionText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '800',
   },

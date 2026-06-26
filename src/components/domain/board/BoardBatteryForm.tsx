@@ -194,7 +194,7 @@ export function BoardBatteryForm({
             value={manualMinVoltage}
             onChangeText={onChangeManualMinVoltage}
             placeholder="Min (0%)"
-            placeholderTextColor={theme.neutral.textDim}
+            placeholderTextColor={theme.palette.slate.textDim}
             keyboardType="decimal-pad"
             testID={testIDPrefix ? `${testIDPrefix}-manual-min-input` : undefined}
           />
@@ -203,7 +203,7 @@ export function BoardBatteryForm({
             value={manualMaxVoltage}
             onChangeText={onChangeManualMaxVoltage}
             placeholder="Max (100%)"
-            placeholderTextColor={theme.neutral.textDim}
+            placeholderTextColor={theme.palette.slate.textDim}
             keyboardType="decimal-pad"
             testID={testIDPrefix ? `${testIDPrefix}-manual-max-input` : undefined}
           />
@@ -225,10 +225,10 @@ const styles = StyleSheet.create({
   },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: theme.neutral.surfaceDeep,
+    backgroundColor: theme.palette.slate.surfaceDeep,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
     padding: 3,
   },
   segment: {
@@ -238,15 +238,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   segmentActive: {
-    backgroundColor: theme.bran.bg,
+    backgroundColor: theme.palette.cyan.bg,
   },
   segmentText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 13,
     fontWeight: '700',
   },
   segmentTextActive: {
-    color: theme.bran.text,
+    color: theme.palette.cyan.text,
   },
   selectGrid: {
     flexDirection: 'row',
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   warning: {
-    color: theme.warning.text,
+    color: theme.status.warning.text,
     fontSize: 12,
     fontWeight: '600',
   },

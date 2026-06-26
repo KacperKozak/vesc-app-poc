@@ -13,7 +13,7 @@ import { Canvas, LinearGradient, Rect, RoundedRect, vec } from '@shopify/react-n
 import { type DualGaugeAlert } from '@/components/ui/charts/DualGauge'
 import { interaction, theme } from '@/constants/theme'
 
-const TRACK_COLOR = theme.neutral.border
+const TRACK_COLOR = theme.palette.slate.border
 const LINE_THICK = 2
 // Sizes mirror the gauge, expressed against the line thickness (gauge STROKE):
 // alert tick 0.35× wide / 2× long, marker 1.5× wide. Marker length tracks bar height.
@@ -24,14 +24,6 @@ const MARKER_RATIO = 0.5
 const VALUE_GAP = 6
 const BAR_H = 40
 const BAR_H_COMPACT = 32
-
-/** Bake a 0–1 alpha into a 6-digit hex color → 8-digit #RRGGBBAA. */
-function alpha(hex: string, a: number) {
-  const clamped = Math.min(1, Math.max(0, a))
-  return `${hex}${Math.round(clamped * 255)
-    .toString(16)
-    .padStart(2, '0')}`
-}
 
 function clamp01(f: number) {
   return Math.min(1, Math.max(0, f))
@@ -77,7 +69,12 @@ function GaugeBar({ width, height, fraction, color, alerts, min, max }: GaugeBar
           <LinearGradient
             start={vec(0, 0)}
             end={vec(0, height)}
-            colors={[alpha(color, 0), alpha(color, 0.03), alpha(color, 0.1), alpha(color, 0.24)]}
+            colors={[
+              theme.alpha(color, 0),
+              theme.alpha(color, 0.12),
+              theme.alpha(color, 0.12),
+              theme.alpha(color, 0.3),
+            ]}
             positions={[0, 0.35, 0.75, 1]}
           />
         </Rect>
@@ -106,7 +103,7 @@ function GaugeBar({ width, height, fraction, color, alerts, min, max }: GaugeBar
             y={lineY - bandH}
             width={to - from}
             height={bandH + LINE_THICK}
-            color={alpha(theme.highlight.color, 0.1)}
+            color={theme.alpha(theme.palette.yellow.color, 0.12)}
           />
         )
       })}
@@ -133,7 +130,7 @@ function GaugeBar({ width, height, fraction, color, alerts, min, max }: GaugeBar
             y={lineY - TICK_LEN}
             width={TICK_W}
             height={TICK_LEN}
-            color={theme.highlight.color}
+            color={theme.palette.yellow.color}
           />
         ))
       })}
@@ -262,7 +259,7 @@ export function LinearGauge({
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -313,7 +310,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   auxText: {
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     fontFamily: 'monospace',
     fontWeight: '600',
@@ -325,7 +322,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: LINE_THICK,
     textAlignVertical: 'center',
-    color: theme.neutral.textMuted,
+    color: theme.palette.slate.textMuted,
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',

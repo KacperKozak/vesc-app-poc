@@ -16,7 +16,7 @@ export function InfoBadge({ label, danger = false, onPress }: InfoBadgeProps) {
       </Text>
       <InfoIcon
         size={12}
-        color={danger ? theme.error.text : theme.neutral.textMuted}
+        color={danger ? theme.status.error.text : theme.palette.slate.textMuted}
         weight="bold"
       />
     </Pressable>
@@ -32,20 +32,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: theme.neutral.surface,
+    backgroundColor: theme.palette.slate.surface,
     borderWidth: 1,
-    borderColor: theme.neutral.border,
+    borderColor: theme.palette.slate.border,
   },
   metaBadgeDanger: {
-    backgroundColor: theme.error.bg,
-    borderColor: theme.error.border,
+    backgroundColor: theme.status.error.bg,
+    borderColor: theme.status.error.border,
   },
   metaText: {
-    color: theme.neutral.textSecondary,
+    color: theme.palette.slate.textSecondary,
     fontSize: 12,
     fontWeight: '700',
   },
   metaTextDanger: {
-    color: theme.error.text,
+    color: theme.status.error.text,
   },
 })

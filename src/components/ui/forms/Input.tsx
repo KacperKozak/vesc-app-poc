@@ -3,13 +3,13 @@ import { StyleSheet, TextInput, type TextInputProps } from 'react-native'
 import { theme } from '@/constants/theme'
 
 export const inputBase = {
-  backgroundColor: theme.neutral.surfaceDeep,
+  backgroundColor: theme.palette.slate.surfaceDeep,
   borderWidth: 1,
-  borderColor: theme.neutral.border,
+  borderColor: theme.palette.slate.border,
   borderRadius: 8,
   paddingHorizontal: 14,
   paddingVertical: 12,
-  color: theme.neutral.textPrimary,
+  color: theme.palette.slate.textPrimary,
   fontSize: 15,
   fontWeight: '600' as const,
 }

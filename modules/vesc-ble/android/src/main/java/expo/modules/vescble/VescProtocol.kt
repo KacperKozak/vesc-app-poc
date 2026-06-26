@@ -13,9 +13,58 @@ internal const val COMM_GET_CUSTOM_CONFIG_XML = 92
 internal const val COMM_GET_CUSTOM_CONFIG = 93
 internal const val COMM_SET_CUSTOM_CONFIG = 95
 internal const val COMM_PING_CAN = 62
+internal const val COMM_SET_CHUCK_DATA = 35
 internal const val REFLOAT_MAGIC = 101
 internal const val REFLOAT_GET_ALLDATA = 10
 private const val REFLOAT_FAULT_MODE = 69
+
+/** Neutral position of the remote-tilt slider (0..255). */
+internal const val REMOTE_TILT_CENTER = 128
+
+/**
+ * Builds Floaty's temporary remote-tilt input. It emulates a Nunchuk/remote
+ * throttle on the chuck Y axis, which Refloat reads as Remote Tilt input when
+ * `inputtilt_remote_type` is UART. `value` is the 0..255 slider (128 = neutral);
+ * the wire byte is inverted to `255 - value`. Runtime only; never writes config.
+ */
+internal fun buildRemoteTiltCommand(transport: BoardTransport, value: Int): ByteArray {
+    require(value in 0..255) { "Remote tilt value must be between 0 and 255" }
+    return transport.frame(
+        byteArrayOf(
+            COMM_SET_CHUCK_DATA.toByte(),
+            0,
+            (255 - value).toByte(),
+        ),
+    )
+}
+
+/** Decodes the human-readable portion of a COMM_FW_VERSION response. */
+internal fun parseFwVersion(payload: ByteArray): String? {
+    if (payload.size < 3) return null
+    val major = payload[1].toInt() and 0xff
+    val minor = payload[2].toInt() and 0xff
+    var hwNameEnd = 3
+    while (hwNameEnd < payload.size && payload[hwNameEnd] != 0.toByte()) hwNameEnd++
+    val hwName = if (hwNameEnd > 3) String(payload, 3, hwNameEnd - 3, Charsets.UTF_8) else null
+    // After HW name null: 12 UUID + 1 paired + 1 test version + 1 hw type = 15 bytes.
+    var offset = hwNameEnd + 1 + 15
+    val customConfigs = mutableListOf<String>()
+    if (offset < payload.size) {
+        val count = payload[offset].toInt() and 0xff
+        offset++
+        for (i in 0 until count) {
+            val start = offset
+            while (offset < payload.size && payload[offset] != 0.toByte()) offset++
+            if (offset > start) customConfigs.add(String(payload, start, offset - start, Charsets.UTF_8))
+            offset++
+        }
+    }
+    return buildList {
+        add("FW $major.${"%02d".format(minor)}")
+        hwName?.let(::add)
+        if (customConfigs.isNotEmpty()) add(customConfigs.joinToString(", "))
+    }.joinToString(" · ")
+}
 
 internal object VescPacketCodec {
     fun encode(payload: ByteArray): ByteArray {
