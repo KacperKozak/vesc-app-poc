@@ -26,6 +26,7 @@ internal class WatchMirrorPresence(
     private val scope: CoroutineScope,
 ) {
     private val capabilityClient by lazy { Wearable.getCapabilityClient(context) }
+    private val nodeClient by lazy { Wearable.getNodeClient(context) }
 
     @Volatile
     var present: Boolean = false
@@ -39,17 +40,27 @@ internal class WatchMirrorPresence(
     fun start() {
         capabilityClient.addListener(listener, WATCH_MIRROR_CAPABILITY)
         scope.launch(Dispatchers.IO) {
-            present = runCatching {
+            val capabilityPresent = runCatching {
                 Tasks.await(
                     capabilityClient.getCapability(WATCH_MIRROR_CAPABILITY, CapabilityClient.FILTER_REACHABLE),
                 )
             }.getOrNull()?.nodes?.isNotEmpty() ?: false
-            Log.d(VESC_SESSION_TAG, "Watch mirror presence initial: $present")
+            present = capabilityPresent || debugReachableWearNode()
+            Log.d(VESC_SESSION_TAG, "Watch mirror presence initial: $present capability=$capabilityPresent")
         }
     }
 
     fun stop() {
         runCatching { capabilityClient.removeListener(listener, WATCH_MIRROR_CAPABILITY) }
         present = false
+    }
+
+    private fun debugReachableWearNode(): Boolean {
+        if (!BuildConfig.DEBUG) return false
+
+        val nodes = runCatching { Tasks.await(nodeClient.connectedNodes) }.getOrNull().orEmpty()
+        val fallback = nodes.isNotEmpty()
+        Log.d(VESC_SESSION_TAG, "Watch mirror debug node fallback: $fallback nodes=${nodes.size}")
+        return fallback
     }
 }
