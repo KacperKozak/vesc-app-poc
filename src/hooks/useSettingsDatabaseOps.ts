@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { DevSettings } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import * as Sharing from 'expo-sharing'
+import * as Updates from 'expo-updates'
 import {
   addTelemetryRebuildProgressListener,
   backupDatabase,
@@ -9,11 +11,19 @@ import {
   restoreDatabase,
 } from 'vesc-ble'
 
-import { useSettingsStore } from '@/store/settingsStore'
-import { useHistoryStore } from '@/store/historyStore'
 import { formatBytes } from '@/helpers/format'
 
 type OpState = 'idle' | 'running' | 'done' | 'error'
+
+// Restore hot-swaps the native DB; reloading the JS runtime forces every store
+// to re-init from the fresh database. No-ops in Expo Go fall back to DevSettings.
+async function reloadRuntime() {
+  try {
+    await Updates.reloadAsync()
+  } catch {
+    DevSettings.reload()
+  }
+}
 
 export function useSettingsDatabaseOps() {
   const [dbSize, setDbSize] = useState<number | null>(null)
@@ -97,13 +107,9 @@ export function useSettingsDatabaseOps() {
       const uri = result.assets[0]?.uri
       if (!uri) throw new Error('No backup file selected')
       await restoreDatabase(uri)
-      await Promise.all([
-        useSettingsStore.getState().load(),
-        useHistoryStore.getState().loadInitial(),
-      ])
       setRestoreState('done')
       setRestoreResult('Database restored')
-      refreshDatabaseSize()
+      await reloadRuntime()
     } catch (e: any) {
       setRestoreState('error')
       setRestoreResult(e?.message ?? 'Restore failed')
