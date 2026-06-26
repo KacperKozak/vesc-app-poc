@@ -113,7 +113,7 @@ async function copyApk(apkLabel: string) {
     Bun.env.RELEASE_APK_DIR ??
     join(homedir(), 'Library/CloudStorage/GoogleDrive-dexted.xt@gmail.com/My Drive/Apps')
   await $`mkdir -p ${driveDir}`
-  const apkDest = join(driveDir, `vibe-wheel-${apkLabel}.apk`)
+  const apkDest = join(driveDir, `vescape-${apkLabel}.apk`)
   await Bun.write(apkDest, Bun.file(apkSrc))
   console.log(`✓ Copied APK → ${apkDest}`)
 }
