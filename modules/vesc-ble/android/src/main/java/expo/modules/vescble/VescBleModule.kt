@@ -42,6 +42,9 @@ class VescBleModule : Module() {
   private val observedEvents = mutableSetOf<String>()
   private val mainHandler = Handler(Looper.getMainLooper())
   private var previewAlertFeedback: VescAlertFeedback? = null
+  private val companionPresence by lazy {
+    VescCompanionPresence(context.applicationContext, activityProvider = { appContext.currentActivity })
+  }
 
   private val context: Context get() = appContext.reactContext
     ?: throw IllegalStateException("No React context")
@@ -103,6 +106,9 @@ class VescBleModule : Module() {
     OnActivityEntersBackground {
       frontendActive = false
     }
+    OnActivityResult { _, result ->
+      companionPresence.onActivityResult(result.requestCode, result.resultCode)
+    }
     OnDestroy {
       frontendActive = false
       observedEvents.clear()
@@ -144,6 +150,7 @@ class VescBleModule : Module() {
     }
     Function("setSelectedBoard") { boardId: String? ->
       runBlocking { AppDataRepository.get(context.applicationContext).setSelectedBoardId(boardId) }
+      companionPresence.refreshForSelectedBoard()
     }
     Function("setDebugRecordingEnabled") { enabled: Boolean ->
       requestedDebugRecordingEnabled = enabled
@@ -195,6 +202,9 @@ class VescBleModule : Module() {
 
     AsyncFunction("selectBoard") Coroutine { boardId: String ->
       selectBoard(boardId)
+    }
+    AsyncFunction("setCompanionPresenceEnabled") { enabled: Boolean, promise: Promise ->
+      companionPresence.setEnabled(enabled, promise)
     }
     AsyncFunction("stopBoard") { promise: Promise ->
       stopBoardSession(promise)
@@ -538,6 +548,7 @@ class VescBleModule : Module() {
   private suspend fun selectBoard(boardId: String) {
     val appCtx = context.applicationContext
     AppDataRepository.get(appCtx).setSelectedBoardId(boardId)
+    companionPresence.refreshForSelectedBoard()
     val config = buildSessionConfig(appCtx, boardId, requestedDebugRecordingEnabled)
     VescForegroundService.startBoardSession(
       appCtx,

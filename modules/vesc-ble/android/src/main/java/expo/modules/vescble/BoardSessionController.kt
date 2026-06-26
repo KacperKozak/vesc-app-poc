@@ -5,7 +5,9 @@ import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.location.Location
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -405,14 +407,72 @@ internal class BoardSessionController(private val service: VescForegroundService
 
     /** Connect to the selected board from the notification Connect action (native-initiated). */
     fun connectSelectedBoardFromNotification() {
+        connectSelectedBoard(recordingEnabled = false)
+    }
+
+    fun autoConnectSelectedBoard() {
+        VescForegroundService.appDataScope.launch {
+            val settings = AppDataRepository.get(service.applicationContext).getTypedSettings()
+            if (!settings.autoConnect || settings.selectedBoardId == null) {
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            scheduler.post { connectSelectedBoard(recordingEnabled = false) }
+        }
+    }
+
+    fun connectCompanionDevice(address: String) {
+        if (boardConfig != null) return
+        isStoppingService = false
+        startBoardForeground()
+        VescForegroundService.appDataScope.launch {
+            val appCtx = service.applicationContext
+            val boardId = selectedCompanionBoardId(AppDataRepository.get(appCtx), address)
+            if (boardId == null) {
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            val config = try {
+                buildSessionConfig(appCtx, boardId, recordingEnabled = false)
+            } catch (e: Exception) {
+                Log.w(VESC_SESSION_TAG, "Companion connect config failed: ${e.message}")
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            scheduler.post {
+                if (boardConfig == null) {
+                    beginSession(
+                        PendingStart(
+                            config,
+                            onSuccess = {},
+                            onError = { _, message -> Log.w(VESC_SESSION_TAG, "Companion connect failed: $message") },
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun selectedCompanionBoardId(repo: AppDataRepository, address: String): String? {
+        val settings = repo.getTypedSettings()
+        if (!settings.companionPresenceEnabled) return null
+        val selectedBoardId = settings.selectedBoardId ?: return null
+        val board = repo.getBoard(selectedBoardId) ?: return null
+        val link = board["link"] as? Map<*, *> ?: return null
+        val bleId = link["bleId"] as? String ?: return null
+        return selectedBoardId.takeIf { bleId.equals(address, ignoreCase = true) }
+    }
+
+    private fun connectSelectedBoard(recordingEnabled: Boolean) {
         if (boardConfig != null) return
         VescForegroundService.appDataScope.launch {
             val appCtx = service.applicationContext
             val boardId = AppDataRepository.get(appCtx).getTypedSettings().selectedBoardId ?: return@launch
             val config = try {
-                buildSessionConfig(appCtx, boardId, recordingEnabled = false)
+                buildSessionConfig(appCtx, boardId, recordingEnabled = recordingEnabled)
             } catch (e: Exception) {
                 Log.w(VESC_SESSION_TAG, "Notification connect failed: ${e.message}")
+                scheduler.post { stopIfIdle() }
                 return@launch
             }
             scheduler.post {
@@ -502,7 +562,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         startLocationUpdates()
         emitState()
         if (boardConfig == null) {
-            service.startForeground(NOTIFICATION_ID, presenter.build(reportedBoardPhase()))
+            startGpsForeground()
         } else {
             presenter.show(reportedBoardPhase())
         }
@@ -557,9 +617,26 @@ internal class BoardSessionController(private val service: VescForegroundService
         recordingCoordinator.beginBoardSession(start.boardConfig)
         startLocationUpdates()
         setStatus(BoardPhase.Connecting)
-        service.startForeground(NOTIFICATION_ID, presenter.build(reportedBoardPhase()))
+        startBoardForeground()
 
         startBleSession(start)
+    }
+
+    private fun startBoardForeground() {
+        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+    }
+
+    private fun startGpsForeground() {
+        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+    }
+
+    private fun startForeground(type: Int) {
+        val notification = presenter.build(reportedBoardPhase())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            service.startForeground(NOTIFICATION_ID, notification, type)
+        } else {
+            service.startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun startBleSession(start: PendingStart) {
