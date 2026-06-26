@@ -27,7 +27,14 @@ private const val FLUSH_DELAY_MS = 5_000L
 private const val MAX_PENDING_FRAMES = 1_000
 private const val DEFAULT_HISTORY_LIMIT = 100
 private const val DEFAULT_SAMPLE_LIMIT = 2_000
-private const val MAX_SAMPLE_LIMIT = 100_000
+// Read cap: hard ceiling on samples materialized per range read. Bounds heap +
+// bridge cost so a long/garbage session can't OOM the app. At 2 Hz persistence
+// this covers ~2 h 46 min of riding before a read truncates. See recordTelemetry.
+private const val MAX_SAMPLE_LIMIT = 20_000
+// Write gate: minimum spacing between persisted frames (2 Hz). Live display and the
+// live series stream are separate paths and stay full-rate; this only thins what
+// lands in telemetry_frames + minute buckets, shrinking DB growth ~8x.
+private const val MIN_PERSIST_INTERVAL_MS = 500L
 
 /** Float64 lanes per sample in the columnar history payload. Must match the JS decoder. */
 private const val SAMPLE_COLUMN_COUNT = 25
@@ -177,6 +184,15 @@ class TelemetryRepository private constructor(context: Context) {
         gap ||
         lastKeyframeAtMs == null ||
         capture.capturedAtMs - (lastKeyframeAtMs ?: 0L) >= KEYFRAME_INTERVAL_MS
+
+      // 2 Hz persistence gate. Drop frames arriving faster than MIN_PERSIST_INTERVAL_MS,
+      // but never drop keyframes (delta-chain anchors / gaps) or fault frames. Dropped
+      // frames leave lastState/lastHistoryAtMs untouched so the next persisted delta still
+      // chains against the last persisted state.
+      val sinceKept = lastHistoryAtMs?.let { capture.capturedAtMs - it }
+      if (!keyframe && !capture.hasFault && sinceKept != null && sinceKept < MIN_PERSIST_INTERVAL_MS) {
+        return
+      }
 
       frame = current.toFrame(previous, keyframe)
       gapMarker = if (gap) {
