@@ -93,20 +93,20 @@ private fun FrameLayout(frame: WatchFrame, muted: Boolean) {
             modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // ── Top: speed + duty values, sat lower so they clear the rim ──
+            // ── Top: speed + duty values, nudged down slightly ──
             Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 20.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
                 GaugeValue(Modifier.weight(1f), format(frame.speed, 0), "km/h", speedColor)
                 GaugeValue(Modifier.weight(1f), frame.duty?.let { format(it, 0) } ?: "--", "%", dutyColor)
             }
 
-            // ── Bottom: temps over battery % (battery arc is on the rim behind) ──
+            // ── Bottom: temps centered, battery % just above the bottom gauge ──
             Column(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.Bottom,
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -115,7 +115,7 @@ private fun FrameLayout(frame: WatchFrame, muted: Boolean) {
                     TempChip("M", frame.motorTemp, if (muted) DimText else MotorTempColor)
                     TempChip("C", frame.ctrlTemp, if (muted) DimText else CtrlTempColor)
                 }
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = frame.battery?.let { "${format(it, 0)}%" } ?: "--",
                     style = MaterialTheme.typography.title3,
