@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
             MirrorScreen(
                 isAmbient = isAmbient.value,
                 onKeepScreenAwakeChanged = ::setKeepScreenAwake,
+                onRequestClose = { finishAndRemoveTask() },
             )
         }
         startOngoingActivityWhenAllowed()
