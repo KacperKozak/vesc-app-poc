@@ -1,6 +1,6 @@
 {
   "name": "vibe-wheel",
-  "version": "0.62.0",
+  "version": "0.63.0",
   "private": true,
   "license": "GPL-3.0-or-later",
   "author": "Kacper Kozak",
@@ -56,6 +56,7 @@
     "expo-splash-screen": "~56.0.9",
     "expo-status-bar": "~56.0.4",
     "expo-system-ui": "~56.0.5",
+    "expo-updates": "^56.0.19",
     "expo-video": "^56.1.2",
     "phosphor-react-native": "^3.0.6",
     "react": "19.2.3",
