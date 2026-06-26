@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import kotlinx.coroutines.delay
@@ -185,23 +186,19 @@ private fun AmbientLayout(frame: WatchFrame) {
 
 @Composable
 private fun DisconnectedLayout(isAmbient: Boolean) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+    if (isAmbient) {
         Text(
             text = "--",
             style = MaterialTheme.typography.display1,
-            color = if (isAmbient) AmbientText else DimText,
+            color = AmbientText,
+            textAlign = TextAlign.Center,
         )
-        if (!isAmbient) {
-            Text(
-                text = "NO LINK",
-                style = MaterialTheme.typography.caption2,
-                color = DimText,
-                textAlign = TextAlign.Center,
-            )
-        }
+    } else {
+        CircularProgressIndicator(
+            indicatorColor = SpeedColor,
+            trackColor = GuideColor,
+            strokeWidth = 3.dp,
+        )
     }
 }
 
