@@ -1374,6 +1374,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         socWindow.windowMs = settings.socEstimateWindowSeconds * 1000L
         connectionSoundsEnabled = settings.connectionSoundsEnabled
         pollingLoop.setPollIntervalMs(pollIntervalMsForHz(settings.telemetryPollRateHz))
+        watchTick.setIntervalMs(settings.wearMirrorIntervalMs.toLong())
     }
 
     private fun applyTelemetryPipelineSettings(settings: AppSettings) {
