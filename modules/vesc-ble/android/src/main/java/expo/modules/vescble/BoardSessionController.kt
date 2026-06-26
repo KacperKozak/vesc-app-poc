@@ -33,6 +33,7 @@ import expo.modules.vescble.runtime.postDelayedForSession
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
 import expo.modules.vescble.telemetry.BatterySocEstimator
+import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
 import expo.modules.vescble.telemetry.SocMedianWindow
 import expo.modules.vescble.telemetry.TelemetryPipeline
 import expo.modules.vescble.telemetry.TelemetryRepository
@@ -43,6 +44,7 @@ private const val NOTIFICATION_ID = 1001
 private const val HISTORY_FLUSH_INTERVAL_MS = 300L
 private const val LIVE_SERIES_INTERVAL_MS = 1_000L
 private const val LIVE_SERIES_BUCKETS = 64
+private const val WATCH_FRAME_INTERVAL_MS = 500L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
 
@@ -141,6 +143,17 @@ internal class BoardSessionController(private val service: VescForegroundService
     }
     private val watchPusher by lazy {
         WatchTelemetryPusher(service.applicationContext, VescForegroundService.appDataScope)
+    }
+    private val watchTick by lazy {
+        WatchTick(
+            scheduler = scheduler,
+            session = { boardSession },
+            isCurrentSession = ::isCurrentBoardSession,
+            snapshot = ::watchSnapshot,
+            isStale = { isTelemetryStale() },
+            push = watchPusher::pushFrame,
+            intervalMs = WATCH_FRAME_INTERVAL_MS,
+        )
     }
     private val locationTracker by lazy {
         LocationTracker(
@@ -372,6 +385,9 @@ internal class BoardSessionController(private val service: VescForegroundService
     private var boardStatus: BoardPhase = BoardPhase.Idle
     private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
+    // Latest cold-path values the watch tick reads alongside [telemetry]; reset when telemetry clears.
+    private var latestBatterySoc: Double? = null
+    private var latestDutyExcluded = false
     private var canId: Int? = null
     private var directConnection = false
     private var fwVersionString: String? = null
@@ -608,6 +624,8 @@ internal class BoardSessionController(private val service: VescForegroundService
         }
         boardError = null
         telemetry = null
+        latestBatterySoc = null
+        latestDutyExcluded = false
         loadBatteryConfig(start.boardConfig.appBoardId)
         socWindow.reset()
         telemetryPipeline.beginSession(session, start.boardConfig)
@@ -842,8 +860,6 @@ internal class BoardSessionController(private val service: VescForegroundService
                 val processed = telemetryPipeline.process(parsed, sessionToken) ?: return
                 markBoardReady()
                 telemetry = parsed
-                // Native cold-path push to the Wear OS Mirror; survives JS being backgrounded (ADR-0019).
-                watchPusher.pushSpeed(kotlin.math.abs(parsed.speed))
                 val batteryPct = BatterySocEstimator.estimateBatteryPercent(
                     parsed.batteryVoltage,
                     batteryConfigCache,
@@ -853,6 +869,10 @@ internal class BoardSessionController(private val service: VescForegroundService
                 val batteryEstimate = batteryPct?.let { socWindow.median(it, now) }
                 val firedAlerts = evaluateAlerts(parsed, batteryEstimate)
                 val eventMap = processed.eventMap
+                // Latest cold-path values for the dedicated watch tick (ADR-0019); the tick pushes them
+                // on its own cadence, so the wrist sees the same SoC Estimate + duty nulling as the phone.
+                latestBatterySoc = batteryEstimate
+                latestDutyExcluded = (eventMap["metricExclusions"] as? Map<*, *>)?.get(METRIC_MAX_DUTY) == true
                 if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
                 eventMap["generation"] = currentSessionId
                 eventMap["batteryPercent"] = batteryEstimate
@@ -924,6 +944,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         )
         pollingLoop.start(session, sessionToken, transport)
         liveSeriesEmitter.start()
+        watchTick.start()
     }
 
     private fun currentBoardTransport(): BoardTransport? = boardTransport(canId, directConnection)
@@ -932,7 +953,24 @@ internal class BoardSessionController(private val service: VescForegroundService
         pollingLoop.stop()
         telemetryPipeline.cancelStaleWatchdog()
         liveSeriesEmitter.stop()
+        watchTick.stop()
     }
+
+    /** Latest cold-path snapshot the watch tick pushes; null until the first sample / after a reset. */
+    private fun watchSnapshot(): WatchSnapshot? {
+        val current = telemetry ?: return null
+        return WatchSnapshot(
+            speed = current.speed,
+            dutyCycle = current.dutyCycle,
+            dutyExcluded = latestDutyExcluded,
+            batterySoc = latestBatterySoc,
+            motorTemp = current.tempMotor,
+            ctrlTemp = current.tempMosfet,
+        )
+    }
+
+    private fun isTelemetryStale(now: Long = System.currentTimeMillis()): Boolean =
+        now - telemetryPipeline.lastTelemetryAt >= TELEMETRY_STALE_MS
 
     private fun buildLiveTick(
         parsed: RefloatTelemetry,
