@@ -3,16 +3,16 @@ import pkg from './package.json'
 import { androidVersionCode } from './src/helpers/version.ts'
 
 const config: ExpoConfig = {
-  name: 'vibe-wheel',
+  name: 'vescape',
   slug: 'vibe-wheel',
   version: pkg.version,
   orientation: 'portrait',
   icon: './assets/images/icon.png',
-  scheme: 'vescpoc',
+  scheme: 'vescape',
   userInterfaceStyle: 'automatic',
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.anonymous.vescpoc',
+    bundleIdentifier: 'app.vescape',
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     },
@@ -26,7 +26,7 @@ const config: ExpoConfig = {
       monochromeImage: './assets/images/androidIconMonochrome.png',
     },
     predictiveBackGestureEnabled: false,
-    package: 'com.anonymous.vescpoc',
+    package: 'app.vescape',
   },
   web: {
     output: 'static',
@@ -71,7 +71,7 @@ const config: ExpoConfig = {
       'expo-media-library',
       {
         photosPermission:
-          'Allow Vibe Wheel to show local photos and videos captured during selected rides.',
+          'Allow Vescape to show local photos and videos captured during selected rides.',
         granularPermissions: ['photo', 'video'],
       },
     ],
