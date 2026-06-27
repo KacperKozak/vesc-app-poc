@@ -150,6 +150,7 @@ export function useCameraControls({
   const cameraRef = useRef<CameraRef>(null)
   const previewPanBaseRef = useRef<CameraSnapshot | null>(null)
   const previewZoomBaseRef = useRef<CameraSnapshot | null>(null)
+  const previewPanActiveRef = useRef(false)
   const currentCameraRef = useRef<CameraSnapshot | null>(null)
   const historyPreviewTargetRef = useRef<HistoryPreviewTarget | null>(null)
   const lastFollowKeyRef = useRef<string | null>(null)
@@ -217,6 +218,16 @@ export function useCameraControls({
     lastFollowKeyRef.current = null
   }, [])
 
+  const stopCameraAnimation = useCallback(() => {
+    setFollowGps(false)
+    const current = currentCameraRef.current
+    if (!current) return
+    cameraRef.current?.setCamera({
+      ...current,
+      animationDuration: 0,
+    })
+  }, [setFollowGps])
+
   const gpsCamera = useMemo(() => {
     if (!cameraFix) {
       return {
@@ -242,7 +253,7 @@ export function useCameraControls({
     const manualFollowZoom = followZoomLevelRef.current != null
     const effectiveNavigationMode =
       mapNavigationMode === 'phoneHeading' && !phoneHeadingReady ? 'freeRotate' : mapNavigationMode
-    const effect = dispatchCameraIntent({
+    const effect = reduceMapCameraIntent(controllerStateRef.current, {
       type: 'FollowLive',
       gpsCamera: { ...gpsCamera, zoomLevel: baseZoomLevel },
       followHeadingDeg,
@@ -251,7 +262,7 @@ export function useCameraControls({
       viewportHeight,
       preserveHeading: resetHeadingOnRecenter ? undefined : currentCameraRef.current?.heading,
       enforceMinimums: !manualFollowZoom,
-    })
+    }).effect
     const followCamera = effect?.camera as CameraSnapshot
     if (resetHeadingOnRecenter) return followCamera
     return {
@@ -261,7 +272,6 @@ export function useCameraControls({
   }, [
     followHeadingDeg,
     gpsCamera,
-    dispatchCameraIntent,
     mapNavigationMode,
     perspectiveEnabled,
     phoneHeadingReady,
@@ -441,6 +451,7 @@ export function useCameraControls({
   )
 
   const restorePreviewPan = useCallback(() => {
+    previewPanActiveRef.current = false
     enterCameraMode({ kind: 'liveFollow' })
     const restoreCamera = previewPanBaseRef.current ?? getLiveFollowCamera()
     previewPanBaseRef.current = null
@@ -483,6 +494,7 @@ export function useCameraControls({
       recenterLive,
       previewHistorySession,
       beginPreviewPan() {
+        previewPanActiveRef.current = true
         const baseCamera =
           followGps && !historyActive
             ? getLiveFollowCamera()
@@ -516,6 +528,10 @@ export function useCameraControls({
           animationMode: 'linearTo',
           animationDuration,
         })
+      },
+      endPreviewPan() {
+        previewPanActiveRef.current = false
+        previewPanBaseRef.current = null
       },
       beginPreviewZoom() {
         previewZoomBaseRef.current =
@@ -640,7 +656,15 @@ export function useCameraControls({
   )
 
   useEffect(() => {
-    if (!cameraFix || !followGps || historyActive || !liveFollowUpdatesEnabled) return
+    if (
+      !cameraFix ||
+      !followGps ||
+      historyActive ||
+      !liveFollowUpdatesEnabled ||
+      previewPanActiveRef.current ||
+      controllerStateRef.current.mode.kind !== 'liveFollow'
+    )
+      return
     historyPreviewTargetRef.current = null
     const followCamera = getLiveFollowCamera()
     const nextFollowKey = liveFollowKey(cameraFix.timestamp, followCamera)
@@ -675,7 +699,9 @@ export function useCameraControls({
     }
 
     if (!actualGpsHeadingMode) return
-    const frame = requestAnimationFrame(() => recenterLiveRef.current?.({ resetPadding: true }))
+    const frame = requestAnimationFrame(() =>
+      recenterLiveRef.current?.({ resetPadding: true, animationDuration: 0 }),
+    )
     return () => cancelAnimationFrame(frame)
   }, [gpsHeadingMode, historyActive, phoneHeadingMode])
 
@@ -740,6 +766,7 @@ export function useCameraControls({
     gpsCamera,
     followGps,
     setFollowGps,
+    stopCameraAnimation,
     setFollowZoomLevel,
     recenterLive,
     getLiveFollowCamera,

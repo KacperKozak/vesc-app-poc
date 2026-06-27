@@ -80,6 +80,7 @@ export interface CenterMapHandle {
     animationDuration?: number,
     revealProgress?: number,
   ) => void
+  endPreviewPan: () => void
   beginPreviewZoom: () => void
   previewZoomBy: (scale: number) => void
   endPreviewZoom: () => void
@@ -321,9 +322,22 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const smoothingFrameRef = useRef<number | null>(null)
   const smoothingTimestampRef = useRef<number | null>(null)
   const smoothingHeadingRef = useRef(targetFollowHeadingDeg)
+  const previousMapNavigationModeRef = useRef(mapNavigationMode)
   const followHeadingDeg = headingFollowMode ? smoothedFollowHeadingDeg : targetFollowHeadingDeg
 
   useEffect(() => {
+    const mapNavigationModeChanged = previousMapNavigationModeRef.current !== mapNavigationMode
+    previousMapNavigationModeRef.current = mapNavigationMode
+
+    if (mapNavigationModeChanged) {
+      if (smoothingFrameRef.current != null) cancelAnimationFrame(smoothingFrameRef.current)
+      smoothingFrameRef.current = null
+      smoothingTimestampRef.current = null
+      smoothingHeadingRef.current = targetFollowHeadingDeg
+      setSmoothedFollowHeadingDeg(targetFollowHeadingDeg)
+      return
+    }
+
     if (!headingFollowMode || historyActive) {
       smoothingHeadingRef.current = targetFollowHeadingDeg
       const frame = requestAnimationFrame(() => setSmoothedFollowHeadingDeg(targetFollowHeadingDeg))
@@ -355,7 +369,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       smoothingFrameRef.current = null
       smoothingTimestampRef.current = null
     }
-  }, [headingFollowMode, historyActive, targetFollowHeadingDeg])
+  }, [headingFollowMode, historyActive, mapNavigationMode, targetFollowHeadingDeg])
 
   const rideRoute = useMemo(
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
@@ -382,6 +396,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     gpsCamera,
     followGps,
     setFollowGps,
+    stopCameraAnimation,
     setFollowZoomLevel,
     recenterLive,
     getLiveFollowCamera,
@@ -708,6 +723,11 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     }, 250)
   }, [])
 
+  const handleTouchStart = useCallback(() => {
+    onMapInteraction()
+    stopCameraAnimation()
+  }, [onMapInteraction, stopCameraAnimation])
+
   const handleMapPress = useCallback(() => {
     if (suppressNextMapPressRef.current) {
       suppressNextMapPressRef.current = false
@@ -846,7 +866,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     <Animated.View
       style={[styles.mapContainer, { opacity: mapOpacity }]}
       onLayout={handleMapLayout}
-      onTouchStart={onMapInteraction}
+      onTouchStart={handleTouchStart}
     >
       <Mapbox.MapView
         ref={mapViewRef}
