@@ -3,6 +3,9 @@ package expo.modules.vescble.telemetry
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
+import expo.modules.kotlin.jni.NativeArrayBuffer
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +27,18 @@ private const val FLUSH_DELAY_MS = 5_000L
 private const val MAX_PENDING_FRAMES = 1_000
 private const val DEFAULT_HISTORY_LIMIT = 100
 private const val DEFAULT_SAMPLE_LIMIT = 2_000
-private const val MAX_SAMPLE_LIMIT = 100_000
+// Read cap: hard ceiling on samples materialized per range read. Bounds heap +
+// bridge cost so a long/garbage session can't OOM the app. At 2 Hz persistence
+// this covers ~2 h 46 min of riding before a read truncates. See recordTelemetry.
+private const val MAX_SAMPLE_LIMIT = 20_000
+// Write gate: minimum spacing between persisted detail frames (2 Hz), shrinking DB
+// growth ~8x. Minute buckets are aggregated from the full-rate stream separately
+// (see pendingBucketStates), so avg/energy/peaks stay exact; live display and the
+// live series stream are also separate full-rate paths.
+private const val MIN_PERSIST_INTERVAL_MS = 500L
+
+/** Float64 lanes per sample in the columnar history payload. Must match the JS decoder. */
+private const val SAMPLE_COLUMN_COUNT = 25
 
 data class TelemetryLocationCapture(
   val latitude: Double,
@@ -73,6 +87,10 @@ class TelemetryRepository private constructor(context: Context) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val lock = Any()
   private val pending = ArrayDeque<PendingFrame>()
+  // Full-rate states for bucket aggregation (exact avg / energy / peaks), decoupled
+  // from the 2 Hz `pending` detail trace. Every received frame lands here; only a
+  // 2 Hz subset is persisted as frames. Flushed and cleared together with `pending`.
+  private val pendingBucketStates = ArrayDeque<FullTelemetryState>()
   private val pendingMarkers = ArrayDeque<TelemetryMarkerEntity>()
 
   private var flushScheduled = false
@@ -160,8 +178,6 @@ class TelemetryRepository private constructor(context: Context) {
 
   fun recordTelemetry(capture: TelemetryCapture) {
     val current = FullTelemetryState.from(capture)
-    val frame: TelemetryFrameEntity
-    val gapMarker: TelemetryMarkerEntity?
     synchronized(lock) {
       val previous = lastState
       val gapMs = lastHistoryAtMs?.let { capture.capturedAtMs - it }
@@ -172,36 +188,47 @@ class TelemetryRepository private constructor(context: Context) {
         lastKeyframeAtMs == null ||
         capture.capturedAtMs - (lastKeyframeAtMs ?: 0L) >= KEYFRAME_INTERVAL_MS
 
-      frame = current.toFrame(previous, keyframe)
-      gapMarker = if (gap) {
-        TelemetryMarkerEntity(
-          occurredAtMs = capture.capturedAtMs,
-          elapsedRealtimeMs = capture.elapsedRealtimeMs,
-          type = "gap",
-          deviceId = capture.deviceId,
-          deviceName = capture.deviceName,
-          message = null,
-          gapMs = gapMs,
-        )
-      } else {
-        null
+      // Every frame feeds bucket aggregation at full rate — avg, energy and peak
+      // max(current/duty/speed/temp) stay exact regardless of the persisted rate.
+      pendingBucketStates.addLast(current)
+      while (pendingBucketStates.size > MAX_PENDING_FRAMES) pendingBucketStates.removeFirst()
+
+      // 2 Hz persistence gate for the stored detail trace only. Keep keyframes
+      // (delta-chain anchors / gaps) and fault frames; otherwise keep one frame per
+      // MIN_PERSIST_INTERVAL_MS. Gated frames leave lastState/lastHistoryAtMs untouched
+      // so the next persisted delta chains against the last persisted state.
+      val sinceKept = lastHistoryAtMs?.let { capture.capturedAtMs - it }
+      val persist = keyframe || capture.hasFault || sinceKept == null || sinceKept >= MIN_PERSIST_INTERVAL_MS
+      if (persist) {
+        pending.addLast(PendingFrame(current.toFrame(previous, keyframe), current))
+        if (gap) {
+          pendingMarkers.addLast(
+            TelemetryMarkerEntity(
+              occurredAtMs = capture.capturedAtMs,
+              elapsedRealtimeMs = capture.elapsedRealtimeMs,
+              type = "gap",
+              deviceId = capture.deviceId,
+              deviceName = capture.deviceName,
+              message = null,
+              gapMs = gapMs,
+            ),
+          )
+        }
+        while (pending.size > MAX_PENDING_FRAMES) {
+          pending.removeFirst()
+          droppedPendingFrames++
+          forceNextKeyframe = true
+        }
+        lastState = current
+        lastFrameAtMs = capture.capturedAtMs
+        lastHistoryAtMs = capture.capturedAtMs
+        if (keyframe) {
+          lastKeyframeAtMs = capture.capturedAtMs
+          forceNextKeyframe = false
+        }
       }
 
-      pending.addLast(PendingFrame(frame, current))
-      if (gapMarker != null) pendingMarkers.addLast(gapMarker)
-      while (pending.size > MAX_PENDING_FRAMES) {
-        pending.removeFirst()
-        droppedPendingFrames++
-        forceNextKeyframe = true
-      }
-      lastState = current
-      lastFrameAtMs = capture.capturedAtMs
-      lastHistoryAtMs = capture.capturedAtMs
-      if (keyframe) {
-        lastKeyframeAtMs = capture.capturedAtMs
-        forceNextKeyframe = false
-      }
-      if (pending.size >= FLUSH_FRAME_COUNT) {
+      if (pending.size >= FLUSH_FRAME_COUNT || pendingBucketStates.size >= FLUSH_FRAME_COUNT) {
         flushScheduled = false
         scope.launch { flushNow() }
       } else {
@@ -230,6 +257,7 @@ class TelemetryRepository private constructor(context: Context) {
     scope.cancel()
     synchronized(lock) {
       pending.clear()
+      pendingBucketStates.clear()
       pendingMarkers.clear()
       flushScheduled = false
       lastState = null
@@ -339,6 +367,70 @@ class TelemetryRepository private constructor(context: Context) {
     }
   }
 
+  /**
+   * Columnar binary encoding of [smoothedSampleMaps] for the history read path. Each sample is 25
+   * little-endian Float64 lanes packed row-major into one direct ByteBuffer, returned as a JSI
+   * ArrayBuffer. This replaces ~25 per-field JSI conversions × N samples (the dominant history-load
+   * cost) with a single buffer transfer; JS rebuilds TelemetrySample objects locally. Nullable
+   * numeric lanes use NaN as the null sentinel; deviceId/deviceName are dictionary-encoded.
+   */
+  private suspend fun smoothedSampleColumns(
+    samples: List<HistoryTelemetryState>,
+    configs: Map<String, Map<String, Any?>>,
+  ): Map<String, Any?> {
+    val windowMs = AppDataRepository.get(appContext).getTypedSettings().socEstimateWindowSeconds * 1000L
+    val windows = HashMap<String?, SocMedianWindow>()
+    val deviceIds = ArrayList<String?>()
+    val deviceNames = ArrayList<String>()
+    val deviceIndex = HashMap<String?, Int>()
+    val buffer = ByteBuffer
+      .allocateDirect(samples.size * SAMPLE_COLUMN_COUNT * 8)
+      .order(ByteOrder.LITTLE_ENDIAN)
+    for (sample in samples) {
+      val s = sample.state
+      val estimate = deriveBatteryPercent(s, configs)?.let {
+        windows.getOrPut(s.deviceId) { SocMedianWindow(windowMs) }.median(it, s.capturedAtMs)
+      }
+      val di = deviceIndex.getOrPut(s.deviceId) {
+        deviceIds.add(s.deviceId)
+        deviceNames.add(s.deviceName ?: UNKNOWN_TELEMETRY_DEVICE_NAME)
+        deviceIds.size - 1
+      }
+      buffer
+        .putDouble(sample.id.toDouble())
+        .putDouble(s.capturedAtMs.toDouble())
+        .putDouble(di.toDouble())
+        .putDouble(s.speedCentiKmh / 100.0)
+        .putDouble(s.batteryVoltageMv / 1000.0)
+        .putDouble(estimate ?: Double.NaN)
+        .putDouble(s.motorCurrentMa / 1000.0)
+        .putDouble(s.batteryCurrentMa / 1000.0)
+        .putDouble(s.dutyPermille / 1000.0)
+        .putDouble(s.pitchCentiDeg / 100.0)
+        .putDouble(s.rollCentiDeg / 100.0)
+        .putDouble(s.balancePitchCentiDeg / 100.0)
+        .putDouble(s.balanceCurrentMa / 1000.0)
+        .putDouble(s.erpm.toDouble())
+        .putDouble(s.state.toDouble())
+        .putDouble(s.switchState.toDouble())
+        .putDouble(s.adc1Milli / 1000.0)
+        .putDouble(s.adc2Milli / 1000.0)
+        .putDouble(s.odometerCm?.let { it / 100.0 } ?: Double.NaN)
+        .putDouble(s.tempMosfetDeciC?.let { it / 10.0 } ?: Double.NaN)
+        .putDouble(s.tempMotorDeciC?.let { it / 10.0 } ?: Double.NaN)
+        .putDouble(if (s.hasFault) 1.0 else 0.0)
+        .putDouble(s.faultCode.toDouble())
+        .putDouble(s.location?.latitudeE7?.let { it / 10_000_000.0 } ?: Double.NaN)
+        .putDouble(s.location?.longitudeE7?.let { it / 10_000_000.0 } ?: Double.NaN)
+    }
+    return mapOf(
+      "boardColumns" to NativeArrayBuffer.wrap(buffer),
+      "boardCount" to samples.size,
+      "boardDevices" to deviceIds,
+      "boardDeviceNames" to deviceNames,
+    )
+  }
+
   /** bleId (telemetry deviceId) -> the board's normalized battery config. */
   private suspend fun batteryConfigByDevice(): Map<String, Map<String, Any?>> {
     BatterySocEstimator.ensureInitialized(appContext)
@@ -392,8 +484,7 @@ class TelemetryRepository private constructor(context: Context) {
     val query = SampleQueryOptions.from(options)
     val samples = getSampleStates(query.fromMs, query.toMs, query.deviceId, query.limit)
     val configs = batteryConfigByDevice()
-    mapOf(
-      "boardSamples" to smoothedSampleMaps(samples, configs),
+    smoothedSampleColumns(samples, configs) + mapOf(
       "gpsSamples" to samples.toGpsSampleMaps(),
       "markers" to dao.getMarkers(query.fromMs, query.toMs, query.deviceId).map { it.toMap() },
       "exclusions" to dao.getExclusions(query.fromMs, query.toMs, query.deviceId).map { it.toMap() },
@@ -497,28 +588,37 @@ class TelemetryRepository private constructor(context: Context) {
 
   private suspend fun flushNow() {
     val frames: List<PendingFrame>
+    val bucketStates: List<FullTelemetryState>
     val markers: List<TelemetryMarkerEntity>
     synchronized(lock) {
-      if (pending.isEmpty() && pendingMarkers.isEmpty()) {
+      if (pending.isEmpty() && pendingBucketStates.isEmpty() && pendingMarkers.isEmpty()) {
         flushScheduled = false
         return
       }
       frames = pending.toList()
+      bucketStates = pendingBucketStates.toList()
       markers = pendingMarkers.toList()
       pending.clear()
+      pendingBucketStates.clear()
       pendingMarkers.clear()
       flushScheduled = false
     }
 
     try {
       val zones = enabledPrivacyZones
-      val filtered = if (zones.isEmpty()) frames else frames.filter { pending ->
+      // Persisted detail trace (2 Hz).
+      val filteredFrames = if (zones.isEmpty()) frames else frames.filter { pending ->
         val loc = pending.state.location ?: return@filter true
         !isInsideAnyPrivacyZone(loc.latitudeE7, loc.longitudeE7, zones)
       }
-      if (filtered.isEmpty() && markers.isEmpty()) return
+      // Bucket source (full rate) — aggregates stay exact.
+      val filteredStates = if (zones.isEmpty()) bucketStates else bucketStates.filter { state ->
+        val loc = state.location ?: return@filter true
+        !isInsideAnyPrivacyZone(loc.latitudeE7, loc.longitudeE7, zones)
+      }
+      if (filteredFrames.isEmpty() && filteredStates.isEmpty() && markers.isEmpty()) return
 
-      val telemetryPoints = filtered.map { it.state.toBucketPoint() }
+      val telemetryPoints = filteredStates.map { it.toBucketPoint() }
       val sanitization = sanitizeTelemetrySamples(telemetryPoints, metricSanitizerConfig)
       val sanitizedPoints = telemetryPoints.mapIndexed { index, point ->
         point.copy(
@@ -528,10 +628,10 @@ class TelemetryRepository private constructor(context: Context) {
         )
       }
       dao.insertBatch(
-        frames = filtered.map { it.frame },
+        frames = filteredFrames.map { it.frame },
         buckets = buildTelemetryBuckets(
           telemetryPoints = sanitizedPoints,
-          locationPoints = filtered.map { HistoryTelemetryState(it.frame.id, it.state) }.toBucketLocationPoints(),
+          locationPoints = filteredStates.map { HistoryTelemetryState(0L, it) }.toBucketLocationPoints(),
         ),
         markers = markers,
         exclusions = sanitization.exclusions,

@@ -21,6 +21,7 @@ interface IconButtonProps {
   destructive?: boolean
   loading?: boolean
   style?: StyleProp<ViewStyle>
+  testID?: string
 }
 
 export function IconButton({
@@ -32,6 +33,7 @@ export function IconButton({
   destructive = false,
   loading = false,
   style,
+  testID,
 }: IconButtonProps) {
   const isDisabled = disabled || loading
   const dim = SIZES[size]
@@ -41,6 +43,7 @@ export function IconButton({
 
   return (
     <Pressable
+      testID={testID}
       style={({ pressed }) => [
         styles.base,
         { width: dim, height: dim, borderRadius: dim / 2, borderColor },

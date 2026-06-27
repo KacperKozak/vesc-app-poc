@@ -5,11 +5,14 @@ import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.location.Location
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import java.io.File
+import kotlinx.coroutines.launch
 import expo.modules.vescble.config.ConfigRWEvent
 import expo.modules.vescble.connection.ConnectPhaseTimeout
 import expo.modules.vescble.connection.ConnectionCoordinator
@@ -30,6 +33,7 @@ import expo.modules.vescble.runtime.postDelayedForSession
 import expo.modules.vescble.telemetry.AppDataRepository
 import expo.modules.vescble.telemetry.AppSettings
 import expo.modules.vescble.telemetry.BatterySocEstimator
+import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
 import expo.modules.vescble.telemetry.SocMedianWindow
 import expo.modules.vescble.telemetry.TelemetryPipeline
 import expo.modules.vescble.telemetry.TelemetryRepository
@@ -40,6 +44,7 @@ private const val NOTIFICATION_ID = 1001
 private const val HISTORY_FLUSH_INTERVAL_MS = 300L
 private const val LIVE_SERIES_INTERVAL_MS = 1_000L
 private const val LIVE_SERIES_BUCKETS = 64
+private const val WATCH_FRAME_INTERVAL_MS = 500L
 private const val GATT_CONNECT_TIMEOUT_MS = 6_000L
 private const val GATT_READY_TIMEOUT_MS = 6_000L
 
@@ -76,13 +81,16 @@ internal class BoardSessionController(private val service: VescForegroundService
             channelId = CHANNEL_ID,
             notificationId = NOTIFICATION_ID,
             stopAction = ACTION_EXIT_FROM_NOTIFICATION,
+            connectAction = ACTION_CONNECT_FROM_NOTIFICATION,
+            disconnectAction = ACTION_DISCONNECT_FROM_NOTIFICATION,
         )
     }
     private val presenter by lazy {
         NotificationPresenter(
             controller = notificationController,
-            deviceName = { boardConfig?.deviceName },
-            appInForeground = { VescForegroundService.appInForeground },
+            deviceName = { boardConfig?.deviceName ?: selectedBoardName },
+            sessionActive = { boardConfig != null },
+            canConnect = { boardConfig == null && selectedBoardName != null },
         )
     }
     private val alertFeedback by lazy { VescAlertFeedback(service, mainHandler) }
@@ -131,6 +139,24 @@ internal class BoardSessionController(private val service: VescForegroundService
             historyFlushIntervalMs = HISTORY_FLUSH_INTERVAL_MS,
             liveSeriesIntervalMs = LIVE_SERIES_INTERVAL_MS,
             liveSeriesBuckets = LIVE_SERIES_BUCKETS,
+        )
+    }
+    private val watchPusher by lazy {
+        WatchTelemetryPusher(service.applicationContext, VescForegroundService.appDataScope)
+    }
+    private val watchMirrorPresence by lazy {
+        WatchMirrorPresence(service.applicationContext, VescForegroundService.appDataScope)
+    }
+    private val watchTick by lazy {
+        WatchTick(
+            scheduler = scheduler,
+            session = { boardSession },
+            isCurrentSession = ::isCurrentBoardSession,
+            snapshot = ::watchSnapshot,
+            isStale = { isTelemetryStale() },
+            canPush = { watchMirrorPresence.present },
+            push = watchPusher::pushFrame,
+            intervalMs = WATCH_FRAME_INTERVAL_MS,
         )
     }
     private val locationTracker by lazy {
@@ -353,6 +379,9 @@ internal class BoardSessionController(private val service: VescForegroundService
     )
 
     private var boardConfig: SessionConfig? = null
+    /** Name of the currently selected board, shown in the idle notification + gating its Connect action. */
+    @Volatile
+    private var selectedBoardName: String? = null
     @Volatile
     private var batteryConfigCache: Map<String, Any?>? = null
     /** Median window producing the Battery SoC Estimate for display + alerts (ADR-0016). */
@@ -360,6 +389,9 @@ internal class BoardSessionController(private val service: VescForegroundService
     private var boardStatus: BoardPhase = BoardPhase.Idle
     private var boardError: String? = null
     private var telemetry: RefloatTelemetry? = null
+    // Latest cold-path values the watch tick reads alongside [telemetry]; reset when telemetry clears.
+    private var latestBatterySoc: Double? = null
+    private var latestDutyExcluded = false
     private var canId: Int? = null
     private var directConnection = false
     private var fwVersionString: String? = null
@@ -381,6 +413,108 @@ internal class BoardSessionController(private val service: VescForegroundService
         BatterySocEstimator.init(service)
         DiagnosticReporter.initialize(service)
         notificationController.createChannel()
+        refreshSelectedBoardName()
+        // startForegroundService() requires startForeground() to be called quickly; satisfy it
+        // immediately for every service creation, even when we later decide there's no board to
+        // auto-connect. The notification will be refreshed once the idle state/selected board is ready.
+        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+    }
+
+    /** Caches the selected board name so the idle notification can title it + offer Connect. */
+    private fun refreshSelectedBoardName() {
+        VescForegroundService.appDataScope.launch {
+            val repo = AppDataRepository.get(service.applicationContext)
+            val id = repo.getTypedSettings().selectedBoardId
+            selectedBoardName = id?.let { repo.getBoard(it)?.get("name") as? String }
+            if (boardConfig == null && !isStoppingService) {
+                scheduler.post { if (boardConfig == null && !isStoppingService) presenter.show(reportedBoardPhase()) }
+            }
+        }
+    }
+
+    /** Connect to the selected board from the notification Connect action (native-initiated). */
+    fun connectSelectedBoardFromNotification() {
+        connectSelectedBoard(recordingEnabled = false)
+    }
+
+    fun autoConnectSelectedBoard() {
+        VescForegroundService.appDataScope.launch {
+            val settings = AppDataRepository.get(service.applicationContext).getTypedSettings()
+            if (!settings.autoConnect || settings.selectedBoardId == null) {
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            scheduler.post { connectSelectedBoard(recordingEnabled = false) }
+        }
+    }
+
+    fun connectCompanionDevice(address: String) {
+        if (boardConfig != null) return
+        isStoppingService = false
+        startBoardForeground()
+        VescForegroundService.appDataScope.launch {
+            val appCtx = service.applicationContext
+            val boardId = selectedCompanionBoardId(AppDataRepository.get(appCtx), address)
+            if (boardId == null) {
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            val config = try {
+                buildSessionConfig(appCtx, boardId, recordingEnabled = false)
+            } catch (e: Exception) {
+                Log.w(VESC_SESSION_TAG, "Companion connect config failed: ${e.message}")
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            scheduler.post {
+                if (boardConfig == null) {
+                    beginSession(
+                        PendingStart(
+                            config,
+                            onSuccess = {},
+                            onError = { _, message -> Log.w(VESC_SESSION_TAG, "Companion connect failed: $message") },
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun selectedCompanionBoardId(repo: AppDataRepository, address: String): String? {
+        val settings = repo.getTypedSettings()
+        if (!settings.companionPresenceEnabled) return null
+        val selectedBoardId = settings.selectedBoardId ?: return null
+        val board = repo.getBoard(selectedBoardId) ?: return null
+        val link = board["link"] as? Map<*, *> ?: return null
+        val bleId = link["bleId"] as? String ?: return null
+        return selectedBoardId.takeIf { bleId.equals(address, ignoreCase = true) }
+    }
+
+    private fun connectSelectedBoard(recordingEnabled: Boolean) {
+        if (boardConfig != null) return
+        VescForegroundService.appDataScope.launch {
+            val appCtx = service.applicationContext
+            val boardId = AppDataRepository.get(appCtx).getTypedSettings().selectedBoardId ?: return@launch
+            val config = try {
+                buildSessionConfig(appCtx, boardId, recordingEnabled = recordingEnabled)
+            } catch (e: Exception) {
+                Log.w(VESC_SESSION_TAG, "Notification connect failed: ${e.message}")
+                scheduler.post { stopIfIdle() }
+                return@launch
+            }
+            scheduler.post {
+                if (boardConfig == null) beginSession(PendingStart(config, onSuccess = {}, onError = { _, _ -> }))
+            }
+        }
+    }
+
+    /** Disconnect the active session from the notification Disconnect action (native-initiated). */
+    fun disconnectFromNotification() {
+        if (boardConfig == null) return
+        setStatus(BoardPhase.Disconnecting)
+        // Always refresh: the notification stays visible after disconnect (idle + Connect), so it must
+        // reflect the idle phase even while GPS keeps the service foregrounded.
+        stopCurrentBoardSession(emitDisconnected = true, updateNotification = true)
     }
 
     fun onServiceDestroy() {
@@ -400,14 +534,12 @@ internal class BoardSessionController(private val service: VescForegroundService
     }
 
     fun consumePendingStart() {
-        val start = VescForegroundService.pendingStart ?: return
-        VescForegroundService.pendingStart = null
+        val start = VescForegroundService.claimPendingStart() ?: return
         beginSession(start)
     }
 
     fun consumePendingStop() {
-        val stop = VescForegroundService.pendingStop ?: return
-        VescForegroundService.pendingStop = null
+        val stop = VescForegroundService.claimPendingStop() ?: return
         if (boardConfig != null) {
             setStatus(BoardPhase.Disconnecting)
             stopCurrentBoardSession(
@@ -437,8 +569,7 @@ internal class BoardSessionController(private val service: VescForegroundService
     }
 
     fun consumePendingGpsStart() {
-        if (!VescForegroundService.pendingGpsStart) return
-        VescForegroundService.pendingGpsStart = false
+        if (!VescForegroundService.claimPendingGpsStart()) return
         startGpsMonitoring()
     }
 
@@ -458,7 +589,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         startLocationUpdates()
         emitState()
         if (boardConfig == null) {
-            service.startForeground(NOTIFICATION_ID, presenter.build(reportedBoardPhase()))
+            startGpsForeground()
         } else {
             presenter.show(reportedBoardPhase())
         }
@@ -481,6 +612,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         refreshLiveHistoryLimit()
         VescForegroundService.reloadAlertRules(service.applicationContext)
         boardConfig = start.boardConfig
+        selectedBoardName = start.boardConfig.deviceName
         sessionSequence += 1
         val session = BoardSession(id = sessionSequence)
         boardSession = session
@@ -500,6 +632,8 @@ internal class BoardSessionController(private val service: VescForegroundService
         }
         boardError = null
         telemetry = null
+        latestBatterySoc = null
+        latestDutyExcluded = false
         loadBatteryConfig(start.boardConfig.appBoardId)
         socWindow.reset()
         telemetryPipeline.beginSession(session, start.boardConfig)
@@ -512,9 +646,26 @@ internal class BoardSessionController(private val service: VescForegroundService
         recordingCoordinator.beginBoardSession(start.boardConfig)
         startLocationUpdates()
         setStatus(BoardPhase.Connecting)
-        service.startForeground(NOTIFICATION_ID, presenter.build(reportedBoardPhase()))
+        startBoardForeground()
 
         startBleSession(start)
+    }
+
+    private fun startBoardForeground() {
+        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+    }
+
+    private fun startGpsForeground() {
+        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+    }
+
+    private fun startForeground(type: Int) {
+        val notification = presenter.build(reportedBoardPhase())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            service.startForeground(NOTIFICATION_ID, notification, type)
+        } else {
+            service.startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun startBleSession(start: PendingStart) {
@@ -726,6 +877,10 @@ internal class BoardSessionController(private val service: VescForegroundService
                 val batteryEstimate = batteryPct?.let { socWindow.median(it, now) }
                 val firedAlerts = evaluateAlerts(parsed, batteryEstimate)
                 val eventMap = processed.eventMap
+                // Latest cold-path values for the dedicated watch tick (ADR-0019); the tick pushes them
+                // on its own cadence, so the wrist sees the same SoC Estimate + duty nulling as the phone.
+                latestBatterySoc = batteryEstimate
+                latestDutyExcluded = (eventMap["metricExclusions"] as? Map<*, *>)?.get(METRIC_MAX_DUTY) == true
                 if (firedAlerts.isNotEmpty()) eventMap["firedAlerts"] = firedAlerts
                 eventMap["generation"] = currentSessionId
                 eventMap["batteryPercent"] = batteryEstimate
@@ -797,6 +952,8 @@ internal class BoardSessionController(private val service: VescForegroundService
         )
         pollingLoop.start(session, sessionToken, transport)
         liveSeriesEmitter.start()
+        watchMirrorPresence.start()
+        watchTick.start()
     }
 
     private fun currentBoardTransport(): BoardTransport? = boardTransport(canId, directConnection)
@@ -805,7 +962,25 @@ internal class BoardSessionController(private val service: VescForegroundService
         pollingLoop.stop()
         telemetryPipeline.cancelStaleWatchdog()
         liveSeriesEmitter.stop()
+        watchTick.stop()
+        watchMirrorPresence.stop()
     }
+
+    /** Latest cold-path snapshot the watch tick pushes; null until the first sample / after a reset. */
+    private fun watchSnapshot(): WatchSnapshot? {
+        val current = telemetry ?: return null
+        return WatchSnapshot(
+            speed = current.speed,
+            dutyCycle = current.dutyCycle,
+            dutyExcluded = latestDutyExcluded,
+            batterySoc = latestBatterySoc,
+            motorTemp = current.tempMotor,
+            ctrlTemp = current.tempMosfet,
+        )
+    }
+
+    private fun isTelemetryStale(now: Long = System.currentTimeMillis()): Boolean =
+        now - telemetryPipeline.lastTelemetryAt >= TELEMETRY_STALE_MS
 
     private fun buildLiveTick(
         parsed: RefloatTelemetry,
@@ -1203,6 +1378,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         socWindow.windowMs = settings.socEstimateWindowSeconds * 1000L
         connectionSoundsEnabled = settings.connectionSoundsEnabled
         pollingLoop.setPollIntervalMs(pollIntervalMsForHz(settings.telemetryPollRateHz))
+        watchTick.setIntervalMs(settings.wearMirrorIntervalMs.toLong())
     }
 
     private fun applyTelemetryPipelineSettings(settings: AppSettings) {

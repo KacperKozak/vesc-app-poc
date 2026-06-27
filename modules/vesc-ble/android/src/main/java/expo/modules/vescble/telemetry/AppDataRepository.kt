@@ -33,6 +33,12 @@ internal fun validTelemetryPollRateHz(value: Any?): Int? =
     ?.toInt()
     ?.coerceIn(0, 100)
 
+/** Watch Mirror push interval in ms; floored at 50ms (20Hz), capped at 10s. */
+internal fun validWearMirrorIntervalMs(value: Any?): Int? =
+  (value as? Number)
+    ?.toInt()
+    ?.coerceIn(50, 10_000)
+
 val DEFAULT_HISTORY_METRIC_HOT_RANGES: Map<String, Map<String, Double>> = mapOf(
   "speed" to mapOf("start" to 30.0, "end" to 40.0),
   "duty" to mapOf("start" to 60.0, "end" to 80.0),
@@ -169,6 +175,8 @@ class AppDataRepository private constructor(private val context: Context) {
       socEstimateWindowSeconds = req("socEstimateWindowSeconds", 20, ::validSocEstimateWindowSeconds),
       connectionSoundsEnabled = req("connectionSoundsEnabled", true) { it as? Boolean },
       telemetryPollRateHz = req("telemetryPollRateHz", 20, ::validTelemetryPollRateHz),
+      wearMirrorIntervalMs = req("wearMirrorIntervalMs", 500, ::validWearMirrorIntervalMs),
+      companionPresenceEnabled = req("companionPresenceEnabled", false) { it as? Boolean },
     )
 
     if (badKeys.isNotEmpty()) {
@@ -177,6 +185,17 @@ class AppDataRepository private constructor(private val context: Context) {
         "app_setting_corrupt",
         mapOf("keys" to badKeys.joinToString(",")),
       )
+    }
+
+    if (settings.companionPresenceEnabled && !settings.autoConnect) {
+      dao.upsertAppSetting(
+        AppSettingEntity(
+          key = "autoConnect",
+          valueJson = encodeSettingJson(true),
+          updatedAt = System.currentTimeMillis(),
+        ),
+      )
+      return@withContext settings.copy(autoConnect = true)
     }
 
     settings
@@ -206,11 +225,17 @@ class AppDataRepository private constructor(private val context: Context) {
       "connectionSoundsEnabled" -> value as? Boolean ?: return@withContext
       "telemetryPollRateHz" ->
         validTelemetryPollRateHz(value) ?: return@withContext
+      "wearMirrorIntervalMs" ->
+        validWearMirrorIntervalMs(value) ?: return@withContext
+      "companionPresenceEnabled" -> value as? Boolean ?: return@withContext
       else -> return@withContext
     }
     val normalizedKey = when (key) {
       "avgSpeedCutoffKmh", "movingAvgSpeedThresholdKmh" -> "movingSpeedThresholdKmh"
       else -> key
+    }
+    if (normalizedKey == "autoConnect" && coerced == false && getTypedSettings().companionPresenceEnabled) {
+      return@withContext
     }
     val default: Any? = AppSettings().let { d ->
       when (normalizedKey) {
@@ -230,6 +255,8 @@ class AppDataRepository private constructor(private val context: Context) {
         "socEstimateWindowSeconds" -> d.socEstimateWindowSeconds
         "connectionSoundsEnabled" -> d.connectionSoundsEnabled
         "telemetryPollRateHz" -> d.telemetryPollRateHz
+        "wearMirrorIntervalMs" -> d.wearMirrorIntervalMs
+        "companionPresenceEnabled" -> d.companionPresenceEnabled
         else -> null
       }
     }
@@ -462,6 +489,8 @@ fun AppSettings.toMap(): Map<String, Any?> = mapOf(
   "socEstimateWindowSeconds" to socEstimateWindowSeconds,
   "connectionSoundsEnabled" to connectionSoundsEnabled,
   "telemetryPollRateHz" to telemetryPollRateHz,
+  "wearMirrorIntervalMs" to wearMirrorIntervalMs,
+  "companionPresenceEnabled" to companionPresenceEnabled,
 )
 
 internal fun encodeSettingJson(value: Any?): String {

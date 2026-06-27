@@ -695,6 +695,7 @@ export function CenterOverlays({
           icon={ClockCounterClockwiseIcon}
           size="lg"
           onPress={() => void history.enterHistoryMode()}
+          testID="history-button"
           style={[
             styles.historyButton,
             { bottom: aboveStripBottom - (HISTORY_BUTTON_SIZE - RECORD_BUTTON_HEIGHT) / 2 },

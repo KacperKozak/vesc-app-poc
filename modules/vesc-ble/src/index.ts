@@ -426,6 +426,67 @@ export interface HistoryRange {
   exclusions: MetricExclusion[]
 }
 
+/** Float64 lanes per sample in the columnar board payload. Must match the native encoder. */
+const SAMPLE_COLUMN_COUNT = 25
+
+/**
+ * Native `getHistoryRange` shape: board samples arrive as one columnar Float64 ArrayBuffer (25
+ * lanes/sample, row-major) plus a device dictionary, instead of an array of ~25-field objects. This
+ * replaces N×25 per-field JSI conversions with a single buffer transfer; see decodeBoardSamples.
+ */
+interface NativeHistoryRange {
+  boardColumns: ArrayBuffer
+  boardCount: number
+  boardDevices: (string | null)[]
+  boardDeviceNames: string[]
+  gpsSamples: HistoryGpsSample[]
+  markers: HistoryMarker[]
+  exclusions: MetricExclusion[]
+}
+
+const nullableLane = (value: number): number | null => (Number.isNaN(value) ? null : value)
+
+/** Rebuild TelemetrySample objects from the columnar buffer locally (no per-field bridge crossing). */
+function decodeBoardSamples(range: NativeHistoryRange): TelemetrySample[] {
+  const { boardCount, boardDevices, boardDeviceNames } = range
+  if (!boardCount || !range.boardColumns) return []
+  const lanes = new Float64Array(range.boardColumns)
+  const samples = new Array<TelemetrySample>(boardCount)
+  for (let i = 0; i < boardCount; i++) {
+    const o = i * SAMPLE_COLUMN_COUNT
+    const deviceIndex = lanes[o + 2]
+    samples[i] = {
+      id: lanes[o],
+      capturedAtMs: lanes[o + 1],
+      deviceId: boardDevices[deviceIndex] ?? null,
+      deviceName: boardDeviceNames[deviceIndex],
+      speedKmh: lanes[o + 3],
+      batteryVoltage: lanes[o + 4],
+      batteryPercent: nullableLane(lanes[o + 5]),
+      motorCurrent: lanes[o + 6],
+      batteryCurrent: lanes[o + 7],
+      dutyCycle: lanes[o + 8],
+      pitch: lanes[o + 9],
+      roll: lanes[o + 10],
+      balancePitch: lanes[o + 11],
+      balanceCurrent: lanes[o + 12],
+      erpm: lanes[o + 13],
+      state: lanes[o + 14],
+      switchState: lanes[o + 15],
+      adc1: lanes[o + 16],
+      adc2: lanes[o + 17],
+      odometer: nullableLane(lanes[o + 18]),
+      tempMosfet: nullableLane(lanes[o + 19]),
+      tempMotor: nullableLane(lanes[o + 20]),
+      hasFault: lanes[o + 21] !== 0,
+      faultCode: lanes[o + 22],
+      latitude: nullableLane(lanes[o + 23]),
+      longitude: nullableLane(lanes[o + 24]),
+    }
+  }
+  return samples
+}
+
 export interface TelemetrySummary {
   sampleCount: number
   gpsPointCount: number
@@ -524,6 +585,8 @@ export interface AppSettings {
   socEstimateWindowSeconds: number
   /** Play on/off sounds on board connect and involuntary disconnect. */
   connectionSoundsEnabled: boolean
+  /** Android-only: use CompanionDeviceManager presence to connect selected board when nearby. */
+  companionPresenceEnabled: boolean
   /**
    * Max telemetry poll rate in Hz, applied as a minimum spacing floor between
    * requests. Polling stays response-paced (the next request is only sent once
@@ -531,6 +594,12 @@ export interface AppSettings {
    * controller. 0 = unlimited (pure response-paced, the original behaviour).
    */
   telemetryPollRateHz: number
+  /**
+   * Watch Mirror push interval in ms — the cadence of the dedicated watch tick,
+   * independent of the board poll rate. Lower values increase wrist update rate
+   * for stress-testing the link. Floored at 50ms (20Hz), capped at 10s.
+   */
+  wearMirrorIntervalMs: number
 }
 
 export interface DiagnosticStatus {
@@ -644,6 +713,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   getLiveState(): LiveStateEvent
   getRemoteTiltState(): RemoteTiltState | null
   setSelectedBoard(boardId: string | null): void
+  setCompanionPresenceEnabled(enabled: boolean): Promise<void>
   getTelemetryHistory(options: TelemetryHistoryOptions): Promise<TelemetryMinuteBucket[]>
   getTelemetrySamples(options: {
     fromMs: number
@@ -656,7 +726,7 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
     toMs: number
     deviceId?: string
     limit?: number
-  }): Promise<HistoryRange>
+  }): Promise<NativeHistoryRange>
   getTelemetrySummary(): Promise<TelemetrySummary>
   getDiagnosticEvents(options: DiagnosticEventOptions): Promise<LocalDiagnosticEvent[]>
   clearDiagnosticEvents(): Promise<void>
@@ -902,6 +972,9 @@ export function setSelectedBoard(boardId: string | null): void {
 export async function getTelemetryHistory(
   options: TelemetryHistoryOptions = {},
 ): Promise<TelemetryMinuteBucket[]> {
+  if (E2E_ENABLED) {
+    return e2eFake.getTelemetryHistory(options)
+  }
   return native.getTelemetryHistory(options)
 }
 
@@ -911,6 +984,10 @@ export async function getTelemetrySamples(options: {
   deviceId?: string
   limit?: number
 }): Promise<TelemetrySample[]> {
+  if (E2E_ENABLED) {
+    const range = await e2eFake.getHistoryRange(options)
+    return decodeBoardSamples(range)
+  }
   return native.getTelemetrySamples(options)
 }
 
@@ -920,10 +997,21 @@ export async function getHistoryRange(options: {
   deviceId?: string
   limit?: number
 }): Promise<HistoryRange> {
-  return native.getHistoryRange(options)
+  const range = E2E_ENABLED
+    ? e2eFake.getHistoryRange(options)
+    : await native.getHistoryRange(options)
+  return {
+    boardSamples: decodeBoardSamples(range),
+    gpsSamples: range.gpsSamples,
+    markers: range.markers,
+    exclusions: range.exclusions,
+  }
 }
 
 export async function getTelemetrySummary(): Promise<TelemetrySummary> {
+  if (E2E_ENABLED) {
+    return e2eFake.getTelemetrySummary()
+  }
   return native.getTelemetrySummary()
 }
 
@@ -1062,6 +1150,10 @@ export async function deleteTelemetryRange(options: TelemetryDeleteRangeOptions)
 }
 
 export async function clearTelemetryHistory(): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.clearTelemetryHistory()
+    return
+  }
   return native.clearTelemetryHistory()
 }
 
@@ -1101,18 +1193,31 @@ export async function deleteAlertRule(id: string): Promise<void> {
 }
 
 export async function getPrivacyZones(): Promise<PrivacyZone[]> {
+  if (E2E_ENABLED) return e2eFake.getPrivacyZones()
   return native.getPrivacyZones()
 }
 
 export async function upsertPrivacyZone(zone: PrivacyZone): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.upsertPrivacyZone(zone)
+    return
+  }
   return native.upsertPrivacyZone(zone)
 }
 
 export async function setPrivacyZoneEnabled(id: string, enabled: boolean): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.setPrivacyZoneEnabled(id, enabled)
+    return
+  }
   return native.setPrivacyZoneEnabled(id, enabled)
 }
 
 export async function deletePrivacyZone(id: string): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.deletePrivacyZone(id)
+    return
+  }
   return native.deletePrivacyZone(id)
 }
 
@@ -1148,6 +1253,14 @@ export async function updateSetting(
     return
   }
   return native.updateSetting(key, value)
+}
+
+export async function setCompanionPresenceEnabled(enabled: boolean): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.updateSetting('companionPresenceEnabled', enabled)
+    return
+  }
+  return native.setCompanionPresenceEnabled(enabled)
 }
 
 export function seedE2EData(flow: string): void {
