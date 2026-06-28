@@ -38,6 +38,15 @@ internal class GroupRideObserver(
     private var desiredRideId: String? = null
     private var lastPresence: RiderPresence? = null
     private val reconnectRunnable = Runnable { connect() }
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            val ws = webSocket
+            if (!stopped && ws != null && joinedRideId != null) {
+                ws.send(JSONObject().put("type", "heartbeat").toString())
+                handler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
+            }
+        }
+    }
 
     /** True while the observe connection should be kept alive (drives service idle checks). */
     val active: Boolean get() = !stopped
@@ -58,6 +67,7 @@ internal class GroupRideObserver(
         joinedRideId = null
         desiredRideId = null
         lastPresence = null
+        stopHeartbeat()
         emitConnection("idle")
     }
 
@@ -78,6 +88,7 @@ internal class GroupRideObserver(
                 ws.send(JSONObject().put("type", "leave").toString())
                 joinedRideId = null
                 desiredRideId = null
+                stopHeartbeat()
             }
             sendHello(ws, riderId, riderName)
             lastPresence = RiderPresence(lat = lat, lng = lng, heading = null, speed = null, soc = null)
@@ -100,6 +111,7 @@ internal class GroupRideObserver(
             if (previousRideId != null && previousRideId != rideId) {
                 ws.send(JSONObject().put("type", "leave").toString())
                 joinedRideId = null
+                stopHeartbeat()
             }
             sendHello(ws, riderId, riderName)
             desiredRideId = rideId
@@ -118,6 +130,7 @@ internal class GroupRideObserver(
             ws.send(JSONObject().put("type", "leave").toString())
             joinedRideId = null
             desiredRideId = null
+            stopHeartbeat()
             emit("onGroupRideJoined", mapOf("rideId" to null))
             emit("onGroupRideRoster", mapOf("rideId" to null, "riders" to emptyList<Map<String, Any?>>()))
         }
@@ -181,6 +194,7 @@ internal class GroupRideObserver(
         webSocket = null
         if (stopped) return
         joinedRideId = null
+        stopHeartbeat()
         emitConnection("disconnected")
         val delay = RECONNECT_DELAYS_MS[reconnectAttempt.coerceAtMost(RECONNECT_DELAYS_MS.lastIndex)]
         reconnectAttempt++
@@ -217,6 +231,7 @@ internal class GroupRideObserver(
                 if (rideId.isNotEmpty() && rideId == joinedRideId) {
                     joinedRideId = null
                     desiredRideId = null
+                    stopHeartbeat()
                     emit("onGroupRideJoined", mapOf("rideId" to null))
                     emit(
                         "onGroupRideRoster",
@@ -229,6 +244,7 @@ internal class GroupRideObserver(
                 if (rideId.isNotEmpty()) {
                     joinedRideId = rideId
                     desiredRideId = rideId
+                    startHeartbeat()
                     emit("onGroupRideJoined", mapOf("rideId" to rideId))
                 }
             }
@@ -325,10 +341,20 @@ internal class GroupRideObserver(
         emit("onGroupRideConnection", mapOf("state" to state))
     }
 
+    private fun startHeartbeat() {
+        handler.removeCallbacks(heartbeatRunnable)
+        handler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_MS)
+    }
+
+    private fun stopHeartbeat() {
+        handler.removeCallbacks(heartbeatRunnable)
+    }
+
     companion object {
         private const val TAG = "GroupRideObserver"
         private const val NORMAL_CLOSURE = 1000
         private const val PING_INTERVAL_SECONDS = 20L
+        private const val HEARTBEAT_INTERVAL_MS = 10_000L
         private val RECONNECT_DELAYS_MS = longArrayOf(1_000, 2_000, 5_000, 10_000, 30_000)
     }
 }
