@@ -670,6 +670,45 @@ export interface LiveSeriesEvent {
   generation: number
 }
 
+// ---------------------------------------------------------------------------
+// Group Ride (observe) — wire protocol mirror of vescape-server
+// docs/group-ride/PROTOCOL.md. Observing only receives; it sends nothing.
+// ---------------------------------------------------------------------------
+
+/** Globally-broadcast ride view; identical in `snapshot` and `ride-created`. */
+export interface GroupRideSummary {
+  id: string
+  name: string
+  /** Epoch ms when the ride was created. */
+  createdAt: number
+  riderCount: number
+  /** Reference point = creator's latest location, for client-side distance filtering. */
+  location: { lat: number; lng: number }
+  creator: { id: string; name: string }
+}
+
+export type GroupRideConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected'
+
+export interface GroupRideConnectionEvent {
+  state: GroupRideConnectionState
+}
+
+export interface GroupRideSnapshotEvent {
+  rides: GroupRideSummary[]
+}
+
+export interface GroupRideCreatedEvent {
+  ride: GroupRideSummary
+}
+
+export interface GroupRideUpdatedEvent {
+  ride: GroupRideSummary
+}
+
+export interface GroupRideEndedEvent {
+  rideId: string
+}
+
 type VescBleEvents = {
   onDevice: (event: DeviceFoundEvent) => void
   onError: (event: ErrorEvent) => void
@@ -684,6 +723,13 @@ type VescBleEvents = {
   onLocation: (event: LocationEvent) => void
   onTelemetryRebuildProgress: (event: TelemetryRebuildProgressEvent) => void
   onBoardProbeProgress: (event: BoardProbeProgressEvent) => void
+  /** Observe WebSocket connection state to the Group Ride relay. */
+  onGroupRideConnection: (event: GroupRideConnectionEvent) => void
+  /** Full active-ride list, sent once on connect. */
+  onGroupRideSnapshot: (event: GroupRideSnapshotEvent) => void
+  onGroupRideCreated: (event: GroupRideCreatedEvent) => void
+  onGroupRideUpdated: (event: GroupRideUpdatedEvent) => void
+  onGroupRideEnded: (event: GroupRideEndedEvent) => void
 }
 
 interface NativeEventEmitter<TEvents extends Record<string, (...args: never[]) => void>> {
@@ -704,6 +750,8 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   exitApp(): void
   startLocationUpdates(): void
   stopLocationUpdates(): void
+  startGroupRideObserve(serverUrl: string): void
+  stopGroupRideObserve(): void
   setTelemetryRecordingEnabled(enabled: boolean): void
   reloadAlertRules(): void
   getAlertPresets(): AlertPreset[]
@@ -833,6 +881,21 @@ export function startLocationUpdates(): void {
 /** Stop app-level Android location updates. Board sessions manage their own recording location. */
 export function stopLocationUpdates(): void {
   native.stopLocationUpdates()
+}
+
+/**
+ * Start the native Group Ride observe WebSocket (lives in the foreground service).
+ * Observing only receives lifecycle events — it sends no location.
+ */
+export function startGroupRideObserve(serverUrl: string): void {
+  if (E2E_ENABLED) return
+  native.startGroupRideObserve(serverUrl)
+}
+
+/** Stop the native Group Ride observe WebSocket. */
+export function stopGroupRideObserve(): void {
+  if (E2E_ENABLED) return
+  native.stopGroupRideObserve()
 }
 
 /** Enable or disable native SQLite telemetry history writes. */
@@ -1350,4 +1413,34 @@ export function addBoardProbeProgressListener(
   }
 
   return emitter.addListener('onBoardProbeProgress', cb)
+}
+
+export function addGroupRideConnectionListener(
+  cb: (event: GroupRideConnectionEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onGroupRideConnection', cb)
+}
+
+export function addGroupRideSnapshotListener(
+  cb: (event: GroupRideSnapshotEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onGroupRideSnapshot', cb)
+}
+
+export function addGroupRideCreatedListener(
+  cb: (event: GroupRideCreatedEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onGroupRideCreated', cb)
+}
+
+export function addGroupRideUpdatedListener(
+  cb: (event: GroupRideUpdatedEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onGroupRideUpdated', cb)
+}
+
+export function addGroupRideEndedListener(
+  cb: (event: GroupRideEndedEvent) => void,
+): EventSubscription {
+  return emitter.addListener('onGroupRideEnded', cb)
 }

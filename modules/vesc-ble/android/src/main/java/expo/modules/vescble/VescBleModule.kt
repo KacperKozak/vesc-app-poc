@@ -77,6 +77,11 @@ class VescBleModule : Module() {
       "onLocation",
       "onTelemetryRebuildProgress",
       "onBoardProbeProgress",
+      "onGroupRideConnection",
+      "onGroupRideSnapshot",
+      "onGroupRideCreated",
+      "onGroupRideUpdated",
+      "onGroupRideEnded",
     )
 
     OnStartObserving("onDevice") { startObserving("onDevice") }
@@ -99,6 +104,16 @@ class VescBleModule : Module() {
     OnStopObserving("onTelemetryRebuildProgress") { stopObserving("onTelemetryRebuildProgress") }
     OnStartObserving("onBoardProbeProgress") { startObserving("onBoardProbeProgress") }
     OnStopObserving("onBoardProbeProgress") { stopObserving("onBoardProbeProgress") }
+    OnStartObserving("onGroupRideConnection") { startObserving("onGroupRideConnection") }
+    OnStopObserving("onGroupRideConnection") { stopObserving("onGroupRideConnection") }
+    OnStartObserving("onGroupRideSnapshot") { startObserving("onGroupRideSnapshot") }
+    OnStopObserving("onGroupRideSnapshot") { stopObserving("onGroupRideSnapshot") }
+    OnStartObserving("onGroupRideCreated") { startObserving("onGroupRideCreated") }
+    OnStopObserving("onGroupRideCreated") { stopObserving("onGroupRideCreated") }
+    OnStartObserving("onGroupRideUpdated") { startObserving("onGroupRideUpdated") }
+    OnStopObserving("onGroupRideUpdated") { stopObserving("onGroupRideUpdated") }
+    OnStartObserving("onGroupRideEnded") { startObserving("onGroupRideEnded") }
+    OnStopObserving("onGroupRideEnded") { stopObserving("onGroupRideEnded") }
 
     OnActivityEntersForeground {
       frontendActive = true
@@ -124,6 +139,12 @@ class VescBleModule : Module() {
     Function("exitApp") { VescForegroundService.exitApp(context.applicationContext) }
     Function("startLocationUpdates") { startLocationUpdates() }
     Function("stopLocationUpdates") { stopLocationUpdates() }
+    Function("startGroupRideObserve") { serverUrl: String ->
+      VescForegroundService.startGroupRideObserve(context.applicationContext, serverUrl)
+    }
+    Function("stopGroupRideObserve") {
+      VescForegroundService.stopGroupRideObserve(context.applicationContext)
+    }
     Function("setTelemetryRecordingEnabled") { enabled: Boolean -> setTelemetryRecordingEnabled(enabled) }
     Function("reloadAlertRules") {
       VescForegroundService.reloadAlertRules(context.applicationContext)

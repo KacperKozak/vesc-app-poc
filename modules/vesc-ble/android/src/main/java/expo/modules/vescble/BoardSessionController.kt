@@ -208,6 +208,9 @@ internal class BoardSessionController(private val service: VescForegroundService
             onLocation = ::onLocationUpdated,
         )
     }
+    private val groupRideObserver by lazy {
+        GroupRideObserver(handler = mainHandler, emit = ::emitEvent)
+    }
     private val gattClient by lazy {
         VescGattClient(
             context = service,
@@ -535,6 +538,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         }
         alertFeedback.release()
         stopLocationUpdates()
+        groupRideObserver.stop()
         DiagnosticReporter.get(service).flush()
         service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
     }
@@ -542,7 +546,7 @@ internal class BoardSessionController(private val service: VescForegroundService
     val isStopping: Boolean get() = isStoppingService
 
     fun stopIfIdle() {
-        if (boardConfig == null && !gpsMonitor.active) service.stopSelf()
+        if (boardConfig == null && !gpsMonitor.active && !groupRideObserver.active) service.stopSelf()
     }
 
     fun consumePendingStart() {
@@ -562,7 +566,7 @@ internal class BoardSessionController(private val service: VescForegroundService
             return
         }
         stop.onSuccess()
-        if (!gpsMonitor.active) {
+        if (!gpsMonitor.active && !groupRideObserver.active) {
             isStoppingService = true
             service.stopSelf()
         }
@@ -583,6 +587,21 @@ internal class BoardSessionController(private val service: VescForegroundService
     fun consumePendingGpsStart() {
         if (!VescForegroundService.claimPendingGpsStart()) return
         startGpsMonitoring()
+    }
+
+    fun consumePendingGroupRideObserve() {
+        val url = VescForegroundService.claimPendingGroupRideUrl() ?: return
+        isStoppingService = false
+        groupRideObserver.start(url)
+    }
+
+    fun stopGroupRideObserve() {
+        VescForegroundService.pendingGroupRideUrl = null
+        groupRideObserver.stop()
+        if (boardConfig == null && !gpsMonitor.active) {
+            isStoppingService = true
+            service.stopSelf()
+        }
     }
 
     fun exitFromNotification() {
@@ -612,7 +631,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         stopLocationUpdates()
         gpsError = null
         emitState()
-        if (boardConfig == null) {
+        if (boardConfig == null && !groupRideObserver.active) {
             isStoppingService = true
             service.stopSelf()
         }

@@ -24,6 +24,8 @@ internal const val ACTION_CONNECT_FROM_NOTIFICATION = "expo.modules.vescble.ACTI
 internal const val ACTION_DISCONNECT_FROM_NOTIFICATION = "expo.modules.vescble.ACTION_DISCONNECT_FROM_NOTIFICATION"
 private const val ACTION_START_GPS_MONITORING = "expo.modules.vescble.ACTION_START_GPS_MONITORING"
 private const val ACTION_STOP_GPS_MONITORING = "expo.modules.vescble.ACTION_STOP_GPS_MONITORING"
+private const val ACTION_START_GROUP_RIDE_OBSERVE = "expo.modules.vescble.ACTION_START_GROUP_RIDE_OBSERVE"
+private const val ACTION_STOP_GROUP_RIDE_OBSERVE = "expo.modules.vescble.ACTION_STOP_GROUP_RIDE_OBSERVE"
 private const val ACTION_AUTO_CONNECT_SELECTED_BOARD = "expo.modules.vescble.ACTION_AUTO_CONNECT_SELECTED_BOARD"
 private const val ACTION_COMPANION_DEVICE_APPEARED = "expo.modules.vescble.ACTION_COMPANION_DEVICE_APPEARED"
 private const val EXTRA_COMPANION_ADDRESS = "expo.modules.vescble.EXTRA_COMPANION_ADDRESS"
@@ -65,6 +67,7 @@ class VescForegroundService : Service() {
         internal var pendingConfigRead: PendingConfigRead? = null
         internal var pendingConfigWrite: PendingConfigWrite? = null
         internal var pendingGpsStart = false
+        internal var pendingGroupRideUrl: String? = null
         internal val appDataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         // start/stop/gps requests are dispatched twice: synchronously by the caller thread and
@@ -82,6 +85,10 @@ class VescForegroundService : Service() {
 
         internal fun claimPendingGpsStart(): Boolean = synchronized(pendingLock) {
             pendingGpsStart.also { pendingGpsStart = false }
+        }
+
+        internal fun claimPendingGroupRideUrl(): String? = synchronized(pendingLock) {
+            pendingGroupRideUrl.also { pendingGroupRideUrl = null }
         }
 
         fun startBoardSession(
@@ -198,6 +205,24 @@ class VescForegroundService : Service() {
             instance?.controller?.stopGpsMonitoring()
         }
 
+        fun startGroupRideObserve(context: Context, url: String) {
+            pendingGroupRideUrl = url
+            val intent = Intent(context, VescForegroundService::class.java).apply {
+                action = ACTION_START_GROUP_RIDE_OBSERVE
+            }
+            context.startForegroundService(intent)
+            instance?.controller?.consumePendingGroupRideObserve()
+        }
+
+        fun stopGroupRideObserve(context: Context) {
+            pendingGroupRideUrl = null
+            val intent = Intent(context, VescForegroundService::class.java).apply {
+                action = ACTION_STOP_GROUP_RIDE_OBSERVE
+            }
+            context.startService(intent)
+            instance?.controller?.stopGroupRideObserve()
+        }
+
         fun setTelemetryRecordingEnabled(context: Context, enabled: Boolean) {
             RecordingCoordinator.requestTelemetryRecording(enabled)
             instance?.controller?.setTelemetryRecordingEnabled(enabled)
@@ -299,6 +324,8 @@ class VescForegroundService : Service() {
             ACTION_DISCONNECT_FROM_NOTIFICATION -> controller.disconnectFromNotification()
             ACTION_START_GPS_MONITORING -> controller.consumePendingGpsStart()
             ACTION_STOP_GPS_MONITORING -> controller.stopGpsMonitoring()
+            ACTION_START_GROUP_RIDE_OBSERVE -> controller.consumePendingGroupRideObserve()
+            ACTION_STOP_GROUP_RIDE_OBSERVE -> controller.stopGroupRideObserve()
             ACTION_AUTO_CONNECT_SELECTED_BOARD -> controller.autoConnectSelectedBoard()
             ACTION_COMPANION_DEVICE_APPEARED ->
                 intent.getStringExtra(EXTRA_COMPANION_ADDRESS)?.let(controller::connectCompanionDevice)
