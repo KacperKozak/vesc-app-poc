@@ -19,6 +19,8 @@ interface IconButtonProps {
   size?: keyof typeof SIZES
   disabled?: boolean
   destructive?: boolean
+  /** Draw with the brand accent to signal an active/notable state (e.g. nearby Group Rides). */
+  highlighted?: boolean
   loading?: boolean
   style?: StyleProp<ViewStyle>
   testID?: string
@@ -32,6 +34,7 @@ export function IconButton({
   size = 'sm',
   disabled = false,
   destructive = false,
+  highlighted = false,
   loading = false,
   style,
   testID,
@@ -40,8 +43,16 @@ export function IconButton({
   const isDisabled = disabled || loading
   const dim = SIZES[size]
   const iconSize = ICON_SIZES[size]
-  const iconColor = destructive ? theme.status.error.text : theme.palette.slate.textSecondary
-  const borderColor = destructive ? theme.status.error.border : theme.palette.slate.border
+  const iconColor = destructive
+    ? theme.status.error.text
+    : highlighted
+      ? theme.palette.cyan.light
+      : theme.palette.slate.textSecondary
+  const borderColor = destructive
+    ? theme.status.error.border
+    : highlighted
+      ? theme.palette.cyan.color
+      : theme.palette.slate.border
 
   return (
     <Pressable

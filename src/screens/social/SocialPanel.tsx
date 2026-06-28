@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { NearbyRidesSection } from '@/screens/social/NearbyRidesSection'
 import { RideStatsSection } from '@/screens/social/RideStatsSection'
 import { RiderNameField } from '@/screens/social/RiderNameField'
 import { theme } from '@/constants/theme'
@@ -11,10 +12,7 @@ export function SocialPanel() {
       <ScrollView contentContainerStyle={styles.content}>
         <RiderNameField />
 
-        <Placeholder
-          title="Nearby group rides"
-          body="Live group rides near you will show up here."
-        />
+        <NearbyRidesSection />
         <Placeholder
           title="Riders"
           body="When you join a group ride, the riders with you appear here."

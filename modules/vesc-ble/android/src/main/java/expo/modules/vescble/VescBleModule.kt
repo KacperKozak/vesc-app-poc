@@ -145,6 +145,9 @@ class VescBleModule : Module() {
     Function("stopGroupRideObserve") {
       VescForegroundService.stopGroupRideObserve(context.applicationContext)
     }
+    Function("createGroupRide") { riderId: String, riderName: String, name: String?, lat: Double, lng: Double ->
+      VescForegroundService.createGroupRide(context.applicationContext, riderId, riderName, name, lat, lng)
+    }
     Function("setTelemetryRecordingEnabled") { enabled: Boolean -> setTelemetryRecordingEnabled(enabled) }
     Function("reloadAlertRules") {
       VescForegroundService.reloadAlertRules(context.applicationContext)

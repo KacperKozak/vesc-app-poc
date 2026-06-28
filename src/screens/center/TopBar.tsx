@@ -16,6 +16,7 @@ import { WeatherStat } from '@/components/ui/weather/WeatherStat'
 import { isNightAtTime } from '@/lib/weather'
 import { routes } from '@/navigation/routes'
 import type { Board } from '@/store/boardStore'
+import { useGroupRideStore } from '@/store/groupRideStore'
 import { useWeatherStore } from '@/store/weatherStore'
 import { theme } from '@/constants/theme'
 
@@ -44,6 +45,7 @@ export function TopBar({
   const pillRef = useRef<View>(null)
   const [selectorOpen, setSelectorOpen] = useState(false)
 
+  const nearbyBadge = useGroupRideStore((s) => s.badge)
   const weatherCode = useWeatherStore((s) => s.weatherCode)
   const weatherTemp = useWeatherStore((s) => s.temperature)
   const weatherPrecip = useWeatherStore((s) => s.precipitationProbability)
@@ -74,6 +76,7 @@ export function TopBar({
           icon={UsersThreeIcon}
           onPress={() => router.push(routes.profile)}
           accessibilityLabel="Social"
+          highlighted={nearbyBadge}
           style={styles.iconLeft}
         />
         <View ref={pillRef} style={styles.pill}>

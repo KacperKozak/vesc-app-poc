@@ -604,6 +604,10 @@ internal class BoardSessionController(private val service: VescForegroundService
         }
     }
 
+    fun createGroupRide(riderId: String, riderName: String, name: String?, lat: Double, lng: Double) {
+        groupRideObserver.create(riderId, riderName, name, lat, lng)
+    }
+
     fun exitFromNotification() {
         isStoppingService = true
         service.stopForeground(Service.STOP_FOREGROUND_REMOVE)

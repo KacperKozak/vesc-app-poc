@@ -752,6 +752,13 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   stopLocationUpdates(): void
   startGroupRideObserve(serverUrl: string): void
   stopGroupRideObserve(): void
+  createGroupRide(
+    riderId: string,
+    riderName: string,
+    name: string | null,
+    lat: number,
+    lng: number,
+  ): void
   setTelemetryRecordingEnabled(enabled: boolean): void
   reloadAlertRules(): void
   getAlertPresets(): AlertPreset[]
@@ -896,6 +903,33 @@ export function startGroupRideObserve(serverUrl: string): void {
 export function stopGroupRideObserve(): void {
   if (E2E_ENABLED) return
   native.stopGroupRideObserve()
+}
+
+export interface CreateGroupRideParams {
+  /** Persistent device-scoped Rider id. */
+  riderId: string
+  /** Rider display name bound to the connection (used for the auto-name fallback). */
+  riderName: string
+  /** Optional custom ride name; server auto-names `"<name>'s ride"` when blank/null. */
+  name: string | null
+  lat: number
+  lng: number
+}
+
+/**
+ * Create a Group Ride over the live observe socket. Sends the creator's location once — the
+ * only location egress while observing. The new ride arrives back via the `ride-created`
+ * fan-out, so callers update state from that event rather than optimistically.
+ */
+export function createGroupRide({
+  riderId,
+  riderName,
+  name,
+  lat,
+  lng,
+}: CreateGroupRideParams): void {
+  if (E2E_ENABLED) return
+  native.createGroupRide(riderId, riderName, name, lat, lng)
 }
 
 /** Enable or disable native SQLite telemetry history writes. */

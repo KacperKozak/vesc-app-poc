@@ -53,6 +53,34 @@ internal class GroupRideObserver(
         emitConnection("idle")
     }
 
+    /**
+     * Create a Group Ride over the live observe socket: bind this connection's Rider with
+     * `hello`, then send `create` carrying the creator's location and optional name. This is
+     * the only location egress while observing. The server fans the result back as
+     * `ride-created`, so there is no local optimistic insert here. No-op when not connected.
+     */
+    fun create(riderId: String, riderName: String, name: String?, lat: Double, lng: Double) {
+        handler.post {
+            val ws = webSocket
+            if (stopped || ws == null) {
+                Log.w(TAG, "create ignored: observe socket not connected")
+                return@post
+            }
+            ws.send(
+                JSONObject()
+                    .put("type", "hello")
+                    .put("riderId", riderId)
+                    .put("name", riderName)
+                    .toString(),
+            )
+            val create = JSONObject()
+                .put("type", "create")
+                .put("location", JSONObject().put("lat", lat).put("lng", lng))
+            if (!name.isNullOrBlank()) create.put("name", name)
+            ws.send(create.toString())
+        }
+    }
+
     private fun connect() {
         val url = serverUrl ?: return
         if (stopped) return

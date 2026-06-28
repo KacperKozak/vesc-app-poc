@@ -223,6 +223,18 @@ class VescForegroundService : Service() {
             instance?.controller?.stopGroupRideObserve()
         }
 
+        /** Create a Group Ride over the live observe socket. No-op when the service is not running. */
+        fun createGroupRide(
+            @Suppress("UNUSED_PARAMETER") context: Context,
+            riderId: String,
+            riderName: String,
+            name: String?,
+            lat: Double,
+            lng: Double,
+        ) {
+            instance?.controller?.createGroupRide(riderId, riderName, name, lat, lng)
+        }
+
         fun setTelemetryRecordingEnabled(context: Context, enabled: Boolean) {
             RecordingCoordinator.requestTelemetryRecording(enabled)
             instance?.controller?.setTelemetryRecordingEnabled(enabled)
