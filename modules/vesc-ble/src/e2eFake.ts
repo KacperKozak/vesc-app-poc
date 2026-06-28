@@ -65,6 +65,8 @@ const e2eSettings: AppSettings = {
   companionPresenceEnabled: false,
   telemetryPollRateHz: 20,
   wearMirrorIntervalMs: 500,
+  riderId: null,
+  riderName: null,
 }
 
 function emitDevice(event: DeviceFoundEvent): void {

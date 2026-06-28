@@ -177,6 +177,8 @@ class AppDataRepository private constructor(private val context: Context) {
       telemetryPollRateHz = req("telemetryPollRateHz", 20, ::validTelemetryPollRateHz),
       wearMirrorIntervalMs = req("wearMirrorIntervalMs", 500, ::validWearMirrorIntervalMs),
       companionPresenceEnabled = req("companionPresenceEnabled", false) { it as? Boolean },
+      riderId = opt("riderId") { it as? String },
+      riderName = opt("riderName") { it as? String },
     )
 
     if (badKeys.isNotEmpty()) {
@@ -228,6 +230,7 @@ class AppDataRepository private constructor(private val context: Context) {
       "wearMirrorIntervalMs" ->
         validWearMirrorIntervalMs(value) ?: return@withContext
       "companionPresenceEnabled" -> value as? Boolean ?: return@withContext
+      "riderId", "riderName" -> value as? String
       else -> return@withContext
     }
     val normalizedKey = when (key) {
@@ -257,6 +260,8 @@ class AppDataRepository private constructor(private val context: Context) {
         "telemetryPollRateHz" -> d.telemetryPollRateHz
         "wearMirrorIntervalMs" -> d.wearMirrorIntervalMs
         "companionPresenceEnabled" -> d.companionPresenceEnabled
+        "riderId" -> d.riderId
+        "riderName" -> d.riderName
         else -> null
       }
     }
@@ -491,6 +496,8 @@ fun AppSettings.toMap(): Map<String, Any?> = mapOf(
   "telemetryPollRateHz" to telemetryPollRateHz,
   "wearMirrorIntervalMs" to wearMirrorIntervalMs,
   "companionPresenceEnabled" to companionPresenceEnabled,
+  "riderId" to riderId,
+  "riderName" to riderName,
 )
 
 internal fun encodeSettingJson(value: Any?): String {

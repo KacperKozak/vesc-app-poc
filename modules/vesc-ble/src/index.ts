@@ -601,6 +601,14 @@ export interface AppSettings {
    * for stress-testing the link. Floored at 50ms (20Hz), capped at 10s.
    */
   wearMirrorIntervalMs: number
+  /**
+   * Persistent device-scoped anonymous Group Ride Rider id. Generated once on
+   * first use and stored locally; sent to the relay server as the Rider's
+   * identity. See ADR-0020.
+   */
+  riderId: string | null
+  /** Rider-chosen display name shown to other Riders in a Group Ride. */
+  riderName: string | null
 }
 
 export interface DiagnosticStatus {

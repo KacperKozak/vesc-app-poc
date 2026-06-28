@@ -5,7 +5,7 @@ import {
   GearSixIcon,
   PencilSimpleIcon,
   PowerIcon,
-  UserCircleIcon,
+  UsersThreeIcon,
 } from 'phosphor-react-native'
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -71,8 +71,9 @@ export function TopBar({
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) }]} pointerEvents="box-none">
       <View style={styles.row}>
         <IconButton
-          icon={UserCircleIcon}
+          icon={UsersThreeIcon}
           onPress={() => router.push(routes.profile)}
+          accessibilityLabel="Social"
           style={styles.iconLeft}
         />
         <View ref={pillRef} style={styles.pill}>

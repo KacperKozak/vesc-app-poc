@@ -779,6 +779,8 @@ public class VescBleModule: Module {
     "autoRecording": false,
     "companionPresenceEnabled": false,
     "selectedBoardId": NSNull(),
+    "riderId": NSNull(),
+    "riderName": NSNull(),
     "lastGpsLatitude": NSNull(),
     "lastGpsLongitude": NSNull(),
     "movingSpeedThresholdKmh": 3,
