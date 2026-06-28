@@ -6,14 +6,27 @@ export interface RosterRider extends GroupRideRider {
   distanceM: number | null
 }
 
+export const RIDER_STALE_AFTER_MS = 5_000
+export const RIDER_DROP_AFTER_MS = 30_000
+
+export function clientFreshRoster(riders: GroupRideRider[], nowMs: number): GroupRideRider[] {
+  return riders
+    .filter((rider) => nowMs - rider.lastSeen < RIDER_DROP_AFTER_MS)
+    .map((rider) => ({
+      ...rider,
+      stale: rider.stale || nowMs - rider.lastSeen >= RIDER_STALE_AFTER_MS,
+    }))
+}
+
 export function riderRoster(
   riders: GroupRideRider[],
   ownRiderId: string | null,
   ownLocation: { lat: number; lng: number } | null,
+  nowMs = Date.now(),
 ): RosterRider[] {
   const from = ownLocation ? { latitude: ownLocation.lat, longitude: ownLocation.lng } : null
 
-  return riders
+  return clientFreshRoster(riders, nowMs)
     .filter((rider) => rider.id !== ownRiderId)
     .map((rider) => ({
       ...rider,

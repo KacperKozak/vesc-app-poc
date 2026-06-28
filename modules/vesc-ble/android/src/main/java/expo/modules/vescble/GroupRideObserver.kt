@@ -74,6 +74,11 @@ internal class GroupRideObserver(
                 Log.w(TAG, "create ignored: observe socket not connected")
                 return@post
             }
+            if (joinedRideId != null || desiredRideId != null) {
+                ws.send(JSONObject().put("type", "leave").toString())
+                joinedRideId = null
+                desiredRideId = null
+            }
             sendHello(ws, riderId, riderName)
             lastPresence = RiderPresence(lat = lat, lng = lng, heading = null, speed = null, soc = null)
             val create = JSONObject()
@@ -90,6 +95,11 @@ internal class GroupRideObserver(
             if (stopped || ws == null) {
                 Log.w(TAG, "join ignored: observe socket not connected")
                 return@post
+            }
+            val previousRideId = joinedRideId ?: desiredRideId
+            if (previousRideId != null && previousRideId != rideId) {
+                ws.send(JSONObject().put("type", "leave").toString())
+                joinedRideId = null
             }
             sendHello(ws, riderId, riderName)
             desiredRideId = rideId

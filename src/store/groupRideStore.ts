@@ -24,6 +24,8 @@ import { riderRoster, type RosterRider } from '@/lib/groupRide/roster'
 import { useRiderStore } from '@/store/riderStore'
 import { GROUP_RIDE_SERVER_URL } from '@/config/groupRide'
 
+type TimerHandle = ReturnType<typeof setInterval>
+
 interface GroupRideState {
   connection: GroupRideConnectionState
   /** Raw active-ride list from the relay (unfiltered). */
@@ -53,6 +55,7 @@ interface GroupRideState {
 }
 
 let subscriptions: { remove: () => void }[] = []
+let rosterFreshnessTimer: TimerHandle | null = null
 
 export const useGroupRideStore = create<GroupRideState>((set, get) => ({
   connection: 'idle',
@@ -87,10 +90,14 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
         })),
       ),
       addGroupRideJoinedListener(({ rideId }) =>
-        set({ activeRideId: rideId, roster: rideId ? get().roster : [], rosterRows: [] }),
+        set((state) => deriveRoster({ activeRideId: rideId, roster: [] }, state)),
       ),
       addGroupRideRosterListener(({ rideId, riders }) =>
-        set((state) => deriveRoster({ activeRideId: rideId, roster: riders }, state)),
+        set((state) => {
+          if (!rideId) return deriveRoster({ activeRideId: null, roster: [] }, state)
+          if (state.activeRideId && state.activeRideId !== rideId) return state
+          return deriveRoster({ activeRideId: rideId, roster: riders }, state)
+        }),
       ),
       addGroupRideErrorListener(({ message }) => set({ error: message })),
       addLocationListener(({ latitude, longitude }) =>
@@ -100,6 +107,9 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
         })),
       ),
     ]
+    rosterFreshnessTimer = setInterval(() => {
+      set((state) => deriveRoster({}, state))
+    }, 1_000)
     set({ observing: true })
     startGroupRideObserve(GROUP_RIDE_SERVER_URL)
   },
@@ -109,6 +119,10 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
     stopGroupRideObserve()
     subscriptions.forEach((sub) => sub.remove())
     subscriptions = []
+    if (rosterFreshnessTimer) {
+      clearInterval(rosterFreshnessTimer)
+      rosterFreshnessTimer = null
+    }
     set({
       observing: false,
       connection: 'idle',
@@ -129,6 +143,7 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
     if (!ownLocation) return
     const { riderId, riderName } = useRiderStore.getState()
     if (!riderId) return
+    set((state) => deriveRoster({ activeRideId: null, roster: [] }, state))
     createGroupRide({
       riderId,
       riderName: riderName?.trim() || 'Rider',
@@ -141,6 +156,7 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
   joinRide(rideId) {
     const { riderId, riderName } = useRiderStore.getState()
     if (!riderId) return
+    set((state) => deriveRoster({ activeRideId: rideId, roster: [] }, state))
     joinGroupRide({
       riderId,
       riderName: riderName?.trim() || 'Rider',
