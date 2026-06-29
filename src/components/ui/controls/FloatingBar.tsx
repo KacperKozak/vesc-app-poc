@@ -2,7 +2,7 @@ import type { Icon } from 'phosphor-react-native'
 import type { ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { theme } from '@/constants/theme'
+import { interaction, theme } from '@/constants/theme'
 
 interface FloatingBarFrameProps {
   bottomOffset?: number
@@ -57,7 +57,12 @@ export function FloatingStatusPill({ pill }: { pill: FloatingStatusPillModel }) 
         <Text style={[styles.pillText, { color: pill.color }]} numberOfLines={1}>
           {pill.text}
         </Text>
-        <Pressable style={styles.pillButton} onPress={pill.onPress} testID={pill.cancelTestID}>
+        <Pressable
+          style={styles.pillButton}
+          android_ripple={interaction.ripple}
+          onPress={pill.onPress}
+          testID={pill.cancelTestID}
+        >
           <Text style={styles.pillButtonText}>Cancel</Text>
         </Pressable>
       </View>
@@ -67,6 +72,7 @@ export function FloatingStatusPill({ pill }: { pill: FloatingStatusPillModel }) 
   return (
     <Pressable
       style={[styles.pill, { backgroundColor: pill.bg, borderColor: pill.border }]}
+      android_ripple={interaction.ripple}
       onPress={pill.onPress}
       testID={pill.testID}
     >
@@ -91,6 +97,7 @@ export function FloatingActionPill({
   return (
     <Pressable
       style={[styles.actionPill, active && styles.actionPillActive, disabled && styles.disabled]}
+      android_ripple={interaction.ripple}
       disabled={disabled}
       onPress={onPress}
       testID={testID}
@@ -123,6 +130,7 @@ const styles = StyleSheet.create({
     paddingRight: 4,
     borderRadius: 22,
     borderWidth: 1,
+    overflow: 'hidden',
     gap: 10,
     backgroundColor: theme.palette.slate.surfaceDeep,
     shadowColor: theme.palette.mono.black,
@@ -158,6 +166,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: theme.status.error.color,
+    overflow: 'hidden',
     gap: 8,
   },
   actionPillActive: {
