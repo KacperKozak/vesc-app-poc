@@ -286,6 +286,7 @@ export interface LiveStateEvent {
   }
   recording: {
     enabled: boolean
+    paused: boolean
     activeBoardId: string | null
     startedAt: number | null
   }
@@ -972,6 +973,9 @@ export function setSelectedBoard(boardId: string | null): void {
 export async function getTelemetryHistory(
   options: TelemetryHistoryOptions = {},
 ): Promise<TelemetryMinuteBucket[]> {
+  if (E2E_ENABLED) {
+    return e2eFake.getTelemetryHistory(options)
+  }
   return native.getTelemetryHistory(options)
 }
 
@@ -981,6 +985,10 @@ export async function getTelemetrySamples(options: {
   deviceId?: string
   limit?: number
 }): Promise<TelemetrySample[]> {
+  if (E2E_ENABLED) {
+    const range = await e2eFake.getHistoryRange(options)
+    return decodeBoardSamples(range)
+  }
   return native.getTelemetrySamples(options)
 }
 
@@ -990,7 +998,9 @@ export async function getHistoryRange(options: {
   deviceId?: string
   limit?: number
 }): Promise<HistoryRange> {
-  const range = await native.getHistoryRange(options)
+  const range = E2E_ENABLED
+    ? e2eFake.getHistoryRange(options)
+    : await native.getHistoryRange(options)
   return {
     boardSamples: decodeBoardSamples(range),
     gpsSamples: range.gpsSamples,
@@ -1000,6 +1010,9 @@ export async function getHistoryRange(options: {
 }
 
 export async function getTelemetrySummary(): Promise<TelemetrySummary> {
+  if (E2E_ENABLED) {
+    return e2eFake.getTelemetrySummary()
+  }
   return native.getTelemetrySummary()
 }
 
@@ -1138,6 +1151,10 @@ export async function deleteTelemetryRange(options: TelemetryDeleteRangeOptions)
 }
 
 export async function clearTelemetryHistory(): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.clearTelemetryHistory()
+    return
+  }
   return native.clearTelemetryHistory()
 }
 
@@ -1177,18 +1194,31 @@ export async function deleteAlertRule(id: string): Promise<void> {
 }
 
 export async function getPrivacyZones(): Promise<PrivacyZone[]> {
+  if (E2E_ENABLED) return e2eFake.getPrivacyZones()
   return native.getPrivacyZones()
 }
 
 export async function upsertPrivacyZone(zone: PrivacyZone): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.upsertPrivacyZone(zone)
+    return
+  }
   return native.upsertPrivacyZone(zone)
 }
 
 export async function setPrivacyZoneEnabled(id: string, enabled: boolean): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.setPrivacyZoneEnabled(id, enabled)
+    return
+  }
   return native.setPrivacyZoneEnabled(id, enabled)
 }
 
 export async function deletePrivacyZone(id: string): Promise<void> {
+  if (E2E_ENABLED) {
+    e2eFake.deletePrivacyZone(id)
+    return
+  }
   return native.deletePrivacyZone(id)
 }
 

@@ -524,9 +524,12 @@ export function HistoryTelemetryPanel({
           nextDisabled={!canNext}
           onPrevious={onPrevious}
           onNext={onNext}
+          previousTestID="history-previous-ride"
+          nextTestID="history-next-ride"
           style={styles.navSelector}
           selectControl={
             <Pressable
+              testID="history-ride-list-button"
               style={({ pressed }) => [styles.titleButton, pressed && styles.titleButtonPressed]}
               android_ripple={interaction.ripple}
               onPress={onOpenList}
@@ -603,6 +606,7 @@ export function HistoryTelemetryPanel({
               return (
                 <Pressable
                   key={metric.key}
+                  testID={`history-metric-tab-${metric.key}`}
                   style={[
                     styles.metricTab,
                     index < OPTIONAL_CHART_METRICS.length - 1 && styles.metricTabDivider,

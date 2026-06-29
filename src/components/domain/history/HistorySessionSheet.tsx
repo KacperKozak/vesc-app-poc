@@ -86,8 +86,15 @@ export function HistorySessionSheet({
 
   return (
     <>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.panel, { bottom: bottomOffset, maxHeight: panelMaxHeight }]}>
+      <Pressable
+        testID="history-session-sheet-backdrop"
+        style={styles.backdrop}
+        onPress={onClose}
+      />
+      <View
+        testID="history-session-sheet"
+        style={[styles.panel, { bottom: bottomOffset, maxHeight: panelMaxHeight }]}
+      >
         <ScrollView
           ref={scrollRef}
           style={styles.scroll}
@@ -105,6 +112,7 @@ export function HistorySessionSheet({
               return (
                 <Pressable
                   key={session.id}
+                  testID={`history-session-row-${session.id}`}
                   style={({ pressed }) => [
                     styles.row,
                     selected && styles.rowSelected,
