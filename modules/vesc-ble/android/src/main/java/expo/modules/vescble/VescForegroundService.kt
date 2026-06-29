@@ -272,6 +272,13 @@ class VescForegroundService : Service() {
             }
         }
 
+        /** Refresh the Group Ride presence Privacy Zone gate after a zone change (issue #144). */
+        fun reloadPrivacyZones(context: Context) {
+            appDataScope.launch {
+                instance?.controller?.loadPrivacyZones(context.applicationContext)
+            }
+        }
+
         fun reloadBatteryConfig() {
             appDataScope.launch {
                 instance?.controller?.reloadBatteryConfigForActiveBoard()

@@ -39,10 +39,12 @@ import expo.modules.vescble.telemetry.IDLE_PAUSE_POLL_INTERVAL_MS
 import expo.modules.vescble.telemetry.IdlePauseDetector
 import expo.modules.vescble.telemetry.IdlePauseTransition
 import expo.modules.vescble.telemetry.METRIC_MAX_DUTY
+import expo.modules.vescble.telemetry.PrivacyZoneEntity
 import expo.modules.vescble.telemetry.SocMedianWindow
 import expo.modules.vescble.telemetry.TelemetryCapture
 import expo.modules.vescble.telemetry.TelemetryPipeline
 import expo.modules.vescble.telemetry.TelemetryRepository
+import expo.modules.vescble.telemetry.isInsideAnyPrivacyZone
 import expo.modules.vescble.telemetry.toMetricSanitizerConfig
 
 private const val CHANNEL_ID = "vesc_monitoring_v5"
@@ -211,6 +213,14 @@ internal class BoardSessionController(private val service: VescForegroundService
     private val groupRideObserver by lazy {
         GroupRideObserver(handler = mainHandler, emit = ::emitEvent)
     }
+
+    /**
+     * Enabled Privacy Zones cached for the Group Ride presence egress gate (issue #144). Refreshed
+     * when observing starts and on zone CRUD; reuses the same geometry as Ride Recording
+     * suppression (ADR-0009 / ADR-0020). Touched off the main thread, so kept @Volatile.
+     */
+    @Volatile
+    private var groupRidePrivacyZones: List<PrivacyZoneEntity> = emptyList()
     private val gattClient by lazy {
         VescGattClient(
             context = service,
@@ -592,6 +602,7 @@ internal class BoardSessionController(private val service: VescForegroundService
     fun consumePendingGroupRideObserve() {
         val url = VescForegroundService.claimPendingGroupRideUrl() ?: return
         isStoppingService = false
+        VescForegroundService.appDataScope.launch { loadPrivacyZones(service.applicationContext) }
         groupRideObserver.start(url)
         reassertForeground()
     }
@@ -1347,6 +1358,9 @@ internal class BoardSessionController(private val service: VescForegroundService
 
     private fun latestRiderPresence(): RiderPresence? {
         val location = locationTracker.latestPreciseLocation ?: locationTracker.latestLocation ?: return null
+        // Privacy Zone egress gate (issue #144): freeze the group dot while inside a zone. Local GPS
+        // keeps ticking; only the broadcast is suppressed, resuming automatically on exit.
+        if (isInsidePrivacyZone(location)) return null
         val currentTelemetry = telemetry
         val telemetryFresh = currentTelemetry != null && !isTelemetryStale()
         return RiderPresence(
@@ -1356,6 +1370,24 @@ internal class BoardSessionController(private val service: VescForegroundService
             speed = if (telemetryFresh) currentTelemetry?.speed?.let { kotlin.math.abs(it) / 3.6 } else null,
             soc = if (telemetryFresh) latestBatterySoc?.let { (it / 100.0).coerceIn(0.0, 1.0) } else null,
         )
+    }
+
+    private fun isInsidePrivacyZone(location: LocationSnapshot): Boolean {
+        val zones = groupRidePrivacyZones
+        if (zones.isEmpty()) return false
+        val latitudeE7 = (location.latitude * 10_000_000.0).roundToInt()
+        val longitudeE7 = (location.longitude * 10_000_000.0).roundToInt()
+        return isInsideAnyPrivacyZone(latitudeE7, longitudeE7, zones)
+    }
+
+    /** Refresh the Group Ride presence zone gate from native storage (observe start + zone CRUD). */
+    suspend fun loadPrivacyZones(context: Context) {
+        groupRidePrivacyZones = try {
+            AppDataRepository.get(context).getEnabledPrivacyZoneEntities()
+        } catch (e: Exception) {
+            Log.w(VESC_SESSION_TAG, "Failed to load privacy zones for presence gate: ${e.message}")
+            emptyList()
+        }
     }
 
     fun liveStateMap(includeRecent: Boolean = false): Map<String, Any?> {

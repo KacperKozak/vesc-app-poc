@@ -656,6 +656,8 @@ class VescBleModule : Module() {
   private suspend fun reloadPrivacyZonesIntoRecorder(appContext: Context) {
     val zones = AppDataRepository.get(appContext).getEnabledPrivacyZoneEntities()
     TelemetryRepository.get(appContext).reloadPrivacyZones(zones)
+    // Keep the Group Ride presence egress gate (issue #144) in sync with the same zones.
+    VescForegroundService.reloadPrivacyZones(appContext)
   }
 
   private fun setTelemetryRecordingEnabled(enabled: Boolean) {
