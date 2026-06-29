@@ -432,7 +432,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         // startForegroundService() requires startForeground() to be called quickly; satisfy it
         // immediately for every service creation, even when we later decide there's no board to
         // auto-connect. The notification will be refreshed once the idle state/selected board is ready.
-        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        reassertForeground()
     }
 
     /** Caches the selected board name so the idle notification can title it + offer Connect. */
@@ -466,7 +466,7 @@ internal class BoardSessionController(private val service: VescForegroundService
     fun connectCompanionDevice(address: String) {
         if (boardConfig != null) return
         isStoppingService = false
-        startBoardForeground()
+        reassertForeground()
         VescForegroundService.appDataScope.launch {
             val appCtx = service.applicationContext
             val boardId = selectedCompanionBoardId(AppDataRepository.get(appCtx), address)
@@ -593,6 +593,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         val url = VescForegroundService.claimPendingGroupRideUrl() ?: return
         isStoppingService = false
         groupRideObserver.start(url)
+        reassertForeground()
     }
 
     fun stopGroupRideObserve() {
@@ -632,11 +633,7 @@ internal class BoardSessionController(private val service: VescForegroundService
         gpsError = null
         startLocationUpdates()
         emitState()
-        if (boardConfig == null) {
-            startGpsForeground()
-        } else {
-            presenter.show(reportedBoardPhase())
-        }
+        reassertForeground()
     }
 
     fun stopGpsMonitoring() {
@@ -647,6 +644,8 @@ internal class BoardSessionController(private val service: VescForegroundService
         if (boardConfig == null && !groupRideObserver.active) {
             isStoppingService = true
             service.stopSelf()
+        } else {
+            reassertForeground()
         }
     }
 
@@ -690,23 +689,29 @@ internal class BoardSessionController(private val service: VescForegroundService
         recordingCoordinator.beginBoardSession(start.boardConfig)
         startLocationUpdates()
         setStatus(BoardPhase.Connecting)
-        startBoardForeground()
+        reassertForeground()
 
         startBleSession(start)
     }
 
-    private fun startBoardForeground() {
-        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+    /**
+     * Foreground-service type for the *current* live state. Android 14+ withholds background
+     * location from a foreground service whose type omits [ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION],
+     * so the LOCATION bit must be present whenever GPS is running — including during a board
+     * session, where it sits alongside CONNECTED_DEVICE. A single hardcoded type silently starves
+     * GPS recording while the app is backgrounded, so every state change re-asserts this.
+     */
+    private fun foregroundServiceType(): Int {
+        var type = 0
+        if (boardConfig != null) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        if (gpsMonitor.active) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        return if (type != 0) type else ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
     }
 
-    private fun startGpsForeground() {
-        startForeground(ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-    }
-
-    private fun startForeground(type: Int) {
+    private fun reassertForeground() {
         val notification = presenter.build(reportedBoardPhase())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            service.startForeground(NOTIFICATION_ID, notification, type)
+            service.startForeground(NOTIFICATION_ID, notification, foregroundServiceType())
         } else {
             service.startForeground(NOTIFICATION_ID, notification)
         }
