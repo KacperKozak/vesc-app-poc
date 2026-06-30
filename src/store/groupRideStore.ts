@@ -14,6 +14,7 @@ import {
   leaveGroupRide,
   startGroupRideObserve,
   stopGroupRideObserve,
+  updateGroupRideIdentity,
   type GroupRideConnectionState,
   type GroupRideRider,
   type GroupRideSummary,
@@ -124,6 +125,16 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
           ...deriveRoster({ ownLocation: { lat: latitude, lng: longitude } }, state),
         })),
       ),
+      // Push name/color edits to the live socket so peers see them without a rejoin.
+      {
+        remove: useRiderStore.subscribe((rider, previous) => {
+          if (rider.riderName === previous.riderName && rider.riderColor === previous.riderColor)
+            return
+          const { riderId, riderName, riderColor } = currentIdentity()
+          if (!riderId) return
+          updateGroupRideIdentity({ riderId, riderName, riderColor })
+        }),
+      },
     ]
     rosterFreshnessTimer = setInterval(() => {
       set((state) => deriveRoster({}, state))
@@ -159,7 +170,7 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
   createRide(name) {
     const { ownLocation } = get()
     if (!ownLocation) return
-    const { riderId, riderName } = useRiderStore.getState()
+    const { riderId, riderName, riderColor } = currentIdentity()
     if (!riderId) return
     set((state) => ({
       ...deriveRoster({ activeRideId: null, roster: [] }, state),
@@ -167,7 +178,8 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
     }))
     createGroupRide({
       riderId,
-      riderName: riderName?.trim() || 'Rider',
+      riderName,
+      riderColor,
       name: name.trim() || null,
       lat: ownLocation.lat,
       lng: ownLocation.lng,
@@ -175,17 +187,13 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
   },
 
   joinRide(rideId) {
-    const { riderId, riderName } = useRiderStore.getState()
+    const { riderId, riderName, riderColor } = currentIdentity()
     if (!riderId) return
     set((state) => ({
       ...deriveRoster({ activeRideId: rideId, roster: [] }, state),
       error: null,
     }))
-    joinGroupRide({
-      riderId,
-      riderName: riderName?.trim() || 'Rider',
-      rideId,
-    })
+    joinGroupRide({ riderId, riderName, riderColor, rideId })
   },
 
   leaveRide() {
@@ -201,6 +209,19 @@ export const useGroupRideStore = create<GroupRideState>((set, get) => ({
     set({ error: null })
   },
 }))
+
+/**
+ * The device's Group Ride identity, with the same blank-name fallback the relay would
+ * otherwise auto-apply. `riderId` is null until the rider identity has loaded.
+ */
+function currentIdentity(): {
+  riderId: string | null
+  riderName: string
+  riderColor: string | null
+} {
+  const { riderId, riderName, riderColor } = useRiderStore.getState()
+  return { riderId, riderName: riderName?.trim() || 'Rider', riderColor }
+}
 
 /** Merge a `rides`/`ownLocation` change with the current state and recompute the nearby view. */
 function deriveNearby(

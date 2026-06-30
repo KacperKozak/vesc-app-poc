@@ -609,6 +609,8 @@ export interface AppSettings {
   riderId: string | null
   /** Rider-chosen display name shown to other Riders in a Group Ride. */
   riderName: string | null
+  /** Rider-chosen marker color (hex) shown on other Riders' maps. Null when unset. */
+  riderColor: string | null
 }
 
 export interface DiagnosticStatus {
@@ -695,11 +697,15 @@ export interface RiderPresence {
   speed?: number | null
   /** Battery SoC Estimate as a 0-1 fraction. Null/omitted when unavailable. */
   soc?: number | null
+  /** Connected board's display name. Null/omitted when no Board Session is live. */
+  boardName?: string | null
 }
 
 export interface GroupRideRider {
   id: string
   name: string
+  /** Rider-chosen marker color (hex), or null when unset. */
+  color: string | null
   presence: RiderPresence | null
   stale: boolean
   lastSeen: number
@@ -789,12 +795,14 @@ type VescBleNativeModule = NativeEventEmitter<VescBleEvents> & {
   createGroupRide(
     riderId: string,
     riderName: string,
+    riderColor: string | null,
     name: string | null,
     lat: number,
     lng: number,
   ): void
-  joinGroupRide(riderId: string, riderName: string, rideId: string): void
+  joinGroupRide(riderId: string, riderName: string, riderColor: string | null, rideId: string): void
   leaveGroupRide(): void
+  updateGroupRideIdentity(riderId: string, riderName: string, riderColor: string | null): void
   setTelemetryRecordingEnabled(enabled: boolean): void
   reloadAlertRules(): void
   getAlertPresets(): AlertPreset[]
@@ -946,6 +954,8 @@ export interface CreateGroupRideParams {
   riderId: string
   /** Rider display name bound to the connection (used for the auto-name fallback). */
   riderName: string
+  /** Rider-chosen marker color (hex), bound to the connection. Null when unset. */
+  riderColor: string | null
   /** Optional custom ride name; server auto-names `"<name>'s ride"` when blank/null. */
   name: string | null
   lat: number
@@ -960,30 +970,57 @@ export interface CreateGroupRideParams {
 export function createGroupRide({
   riderId,
   riderName,
+  riderColor,
   name,
   lat,
   lng,
 }: CreateGroupRideParams): void {
   if (E2E_ENABLED) return
-  native.createGroupRide(riderId, riderName, name, lat, lng)
+  native.createGroupRide(riderId, riderName, riderColor, name, lat, lng)
 }
 
 export interface JoinGroupRideParams {
   riderId: string
   riderName: string
+  riderColor: string | null
   rideId: string
 }
 
 /** Join a Group Ride by id. Native sends Rider Presence from the foreground GPS stream. */
-export function joinGroupRide({ riderId, riderName, rideId }: JoinGroupRideParams): void {
+export function joinGroupRide({
+  riderId,
+  riderName,
+  riderColor,
+  rideId,
+}: JoinGroupRideParams): void {
   if (E2E_ENABLED) return
-  native.joinGroupRide(riderId, riderName, rideId)
+  native.joinGroupRide(riderId, riderName, riderColor, rideId)
 }
 
 /** Leave the current Group Ride. */
 export function leaveGroupRide(): void {
   if (E2E_ENABLED) return
   native.leaveGroupRide()
+}
+
+export interface UpdateGroupRideIdentityParams {
+  riderId: string
+  riderName: string
+  riderColor: string | null
+}
+
+/**
+ * Push a Rider name/color change to the live observe socket. While joined, the relay
+ * re-emits the roster so peers update without a rejoin; otherwise the new identity is
+ * applied on the next create/join. No-op when the observe socket is not connected.
+ */
+export function updateGroupRideIdentity({
+  riderId,
+  riderName,
+  riderColor,
+}: UpdateGroupRideIdentityParams): void {
+  if (E2E_ENABLED) return
+  native.updateGroupRideIdentity(riderId, riderName, riderColor)
 }
 
 /** Enable or disable native SQLite telemetry history writes. */

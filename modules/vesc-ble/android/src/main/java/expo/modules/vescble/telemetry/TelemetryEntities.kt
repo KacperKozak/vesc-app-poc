@@ -372,6 +372,7 @@ data class AppSettings(
   val companionPresenceEnabled: Boolean = false,
   val riderId: String? = null,
   val riderName: String? = null,
+  val riderColor: String? = null,
 )
 
 @Entity(

@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useState, type ReactNode } from 'react'
 
@@ -8,6 +8,7 @@ import {
   GaugeIcon,
   MapPinIcon,
   StackIcon,
+  XIcon,
 } from 'phosphor-react-native'
 import { Button } from '@/components/ui/base/Button'
 import { Placeholder } from '@/components/ui/base/Placeholder'
@@ -256,9 +257,16 @@ function CanvasWidgetShowcase() {
         accent={theme.palette.groupRide.color}
         active={active}
         height={200}
+        action={
+          active ? null : (
+            <Pressable onPress={() => setActive(true)} hitSlop={10} accessibilityLabel="Dismiss">
+              <XIcon size={18} color={theme.palette.slate.textSecondary} weight="bold" />
+            </Pressable>
+          )
+        }
         footer={
           <Button
-            label={active ? 'Stop' : 'Create'}
+            label={active ? 'Leave' : 'Create'}
             variant={active ? 'secondary' : 'primary'}
             onPress={() => setActive((v) => !v)}
             style={styles.fill}

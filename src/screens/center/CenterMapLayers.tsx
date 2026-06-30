@@ -224,7 +224,7 @@ function RiderPresencePin({
 }) {
   const color = rider.stale
     ? theme.palette.slate.textMuted
-    : RIDER_COLORS[index % RIDER_COLORS.length]
+    : (rider.color ?? RIDER_COLORS[index % RIDER_COLORS.length])
   const heading = rider.presence?.heading ?? null
   if (!rider.presence) return null
 

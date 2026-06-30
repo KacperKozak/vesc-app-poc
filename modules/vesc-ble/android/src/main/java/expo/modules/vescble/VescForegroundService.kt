@@ -228,24 +228,35 @@ class VescForegroundService : Service() {
             @Suppress("UNUSED_PARAMETER") context: Context,
             riderId: String,
             riderName: String,
+            riderColor: String?,
             name: String?,
             lat: Double,
             lng: Double,
         ) {
-            instance?.controller?.createGroupRide(riderId, riderName, name, lat, lng)
+            instance?.controller?.createGroupRide(riderId, riderName, riderColor, name, lat, lng)
         }
 
         fun joinGroupRide(
             @Suppress("UNUSED_PARAMETER") context: Context,
             riderId: String,
             riderName: String,
+            riderColor: String?,
             rideId: String,
         ) {
-            instance?.controller?.joinGroupRide(riderId, riderName, rideId)
+            instance?.controller?.joinGroupRide(riderId, riderName, riderColor, rideId)
         }
 
         fun leaveGroupRide(@Suppress("UNUSED_PARAMETER") context: Context) {
             instance?.controller?.leaveGroupRide()
+        }
+
+        fun updateGroupRideIdentity(
+            @Suppress("UNUSED_PARAMETER") context: Context,
+            riderId: String,
+            riderName: String,
+            riderColor: String?,
+        ) {
+            instance?.controller?.updateGroupRideIdentity(riderId, riderName, riderColor)
         }
 
         fun setTelemetryRecordingEnabled(context: Context, enabled: Boolean) {

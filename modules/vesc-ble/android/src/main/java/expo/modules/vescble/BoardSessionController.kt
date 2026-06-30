@@ -616,17 +616,21 @@ internal class BoardSessionController(private val service: VescForegroundService
         }
     }
 
-    fun createGroupRide(riderId: String, riderName: String, name: String?, lat: Double, lng: Double) {
-        groupRideObserver.create(riderId, riderName, name, lat, lng)
+    fun createGroupRide(riderId: String, riderName: String, riderColor: String?, name: String?, lat: Double, lng: Double) {
+        groupRideObserver.create(riderId, riderName, riderColor, name, lat, lng)
     }
 
-    fun joinGroupRide(riderId: String, riderName: String, rideId: String) {
+    fun joinGroupRide(riderId: String, riderName: String, riderColor: String?, rideId: String) {
         startGpsMonitoring()
-        groupRideObserver.join(riderId, riderName, rideId, latestRiderPresence())
+        groupRideObserver.join(riderId, riderName, riderColor, rideId, latestRiderPresence())
     }
 
     fun leaveGroupRide() {
         groupRideObserver.leave()
+    }
+
+    fun updateGroupRideIdentity(riderId: String, riderName: String, riderColor: String?) {
+        groupRideObserver.updateIdentity(riderId, riderName, riderColor)
     }
 
     fun exitFromNotification() {
@@ -1369,6 +1373,7 @@ internal class BoardSessionController(private val service: VescForegroundService
             heading = location.bearingDeg,
             speed = if (telemetryFresh) currentTelemetry?.speed?.let { kotlin.math.abs(it) / 3.6 } else null,
             soc = if (telemetryFresh) latestBatterySoc?.let { (it / 100.0).coerceIn(0.0, 1.0) } else null,
+            boardName = if (boardConfig != null) (boardConfig?.deviceName ?: selectedBoardName) else null,
         )
     }
 

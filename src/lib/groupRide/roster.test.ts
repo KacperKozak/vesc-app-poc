@@ -9,6 +9,7 @@ function rider(id: string, lat: number | null, stale = false): GroupRideRider {
   return {
     id,
     name: id,
+    color: null,
     stale,
     lastSeen: 0,
     presence: lat == null ? null : { lat, lng: OWN.lng },

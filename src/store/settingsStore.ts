@@ -23,6 +23,7 @@ const DEFAULTS: AppSettings = {
   wearMirrorIntervalMs: 500,
   riderId: null,
   riderName: null,
+  riderColor: null,
 }
 
 interface SettingsState extends AppSettings {

@@ -34,6 +34,7 @@ internal class GroupRideObserver(
     private var stopped = true
     private var riderId: String? = null
     private var riderName: String? = null
+    private var riderColor: String? = null
     private var joinedRideId: String? = null
     private var desiredRideId: String? = null
     private var lastPresence: RiderPresence? = null
@@ -77,7 +78,7 @@ internal class GroupRideObserver(
      * the only location egress while observing. The server fans the result back as
      * `ride-created`, so there is no local optimistic insert here. No-op when not connected.
      */
-    fun create(riderId: String, riderName: String, name: String?, lat: Double, lng: Double) {
+    fun create(riderId: String, riderName: String, riderColor: String?, name: String?, lat: Double, lng: Double) {
         handler.post {
             val ws = webSocket
             if (stopped || ws == null) {
@@ -90,8 +91,8 @@ internal class GroupRideObserver(
                 desiredRideId = null
                 stopHeartbeat()
             }
-            sendHello(ws, riderId, riderName)
-            lastPresence = RiderPresence(lat = lat, lng = lng, heading = null, speed = null, soc = null)
+            sendHello(ws, riderId, riderName, riderColor)
+            lastPresence = RiderPresence(lat = lat, lng = lng, heading = null, speed = null, soc = null, boardName = null)
             val create = JSONObject()
                 .put("type", "create")
                 .put("location", JSONObject().put("lat", lat).put("lng", lng))
@@ -100,7 +101,7 @@ internal class GroupRideObserver(
         }
     }
 
-    fun join(riderId: String, riderName: String, rideId: String, presence: RiderPresence?) {
+    fun join(riderId: String, riderName: String, riderColor: String?, rideId: String, presence: RiderPresence?) {
         handler.post {
             val ws = webSocket
             if (stopped || ws == null) {
@@ -113,7 +114,7 @@ internal class GroupRideObserver(
                 joinedRideId = null
                 stopHeartbeat()
             }
-            sendHello(ws, riderId, riderName)
+            sendHello(ws, riderId, riderName, riderColor)
             desiredRideId = rideId
             presence?.let { lastPresence = it }
             val join = JSONObject()
@@ -133,6 +134,23 @@ internal class GroupRideObserver(
             stopHeartbeat()
             emit("onGroupRideJoined", mapOf("rideId" to null))
             emit("onGroupRideRoster", mapOf("rideId" to null, "riders" to emptyList<Map<String, Any?>>()))
+        }
+    }
+
+    /**
+     * Re-bind this connection's Rider identity after a name/color change. Updates the
+     * remembered identity (so a reconnect re-announces the fresh values) and, while the
+     * socket is live, re-sends `hello` — the server re-emits the roster so peers update
+     * without a rejoin. No-op when the observe socket is not connected.
+     */
+    fun updateIdentity(riderId: String, riderName: String, riderColor: String?) {
+        handler.post {
+            this.riderId = riderId
+            this.riderName = riderName
+            this.riderColor = riderColor
+            val ws = webSocket
+            if (stopped || ws == null) return@post
+            sendHello(ws, riderId, riderName, riderColor)
         }
     }
 
@@ -166,7 +184,7 @@ internal class GroupRideObserver(
                 emitConnection("connected")
                 val id = riderId
                 val name = riderName
-                if (id != null && name != null) sendHello(ws, id, name)
+                if (id != null && name != null) sendHello(ws, id, name, riderColor)
                 val rideId = desiredRideId
                 if (rideId != null && id != null && name != null) sendJoin(ws, rideId, lastPresence)
             }
@@ -284,16 +302,16 @@ internal class GroupRideObserver(
         emit("onGroupRideError", mapOf("message" to message))
     }
 
-    private fun sendHello(ws: WebSocket, riderId: String, riderName: String) {
+    private fun sendHello(ws: WebSocket, riderId: String, riderName: String, riderColor: String?) {
         this.riderId = riderId
         this.riderName = riderName
-        ws.send(
-            JSONObject()
-                .put("type", "hello")
-                .put("riderId", riderId)
-                .put("name", riderName)
-                .toString(),
-        )
+        this.riderColor = riderColor
+        val hello = JSONObject()
+            .put("type", "hello")
+            .put("riderId", riderId)
+            .put("name", riderName)
+        if (!riderColor.isNullOrBlank()) hello.put("color", riderColor)
+        ws.send(hello.toString())
     }
 
     private fun sendJoin(ws: WebSocket, rideId: String, presence: RiderPresence?) {
@@ -334,6 +352,7 @@ internal class GroupRideObserver(
         return mapOf(
             "id" to id,
             "name" to obj.optString("name"),
+            "color" to obj.optString("color").takeIf { it.isNotEmpty() },
             "presence" to presenceMap(obj.optJSONObject("presence")),
             "stale" to obj.optBoolean("stale"),
             "lastSeen" to obj.optLong("lastSeen"),
@@ -348,6 +367,7 @@ internal class GroupRideObserver(
             "heading" to obj.optionalDouble("heading"),
             "speed" to obj.optionalDouble("speed"),
             "soc" to obj.optionalDouble("soc"),
+            "boardName" to obj.optString("boardName").takeIf { it.isNotEmpty() },
         )
     }
 
@@ -380,6 +400,7 @@ internal data class RiderPresence(
     val heading: Double?,
     val speed: Double?,
     val soc: Double?,
+    val boardName: String?,
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -388,6 +409,7 @@ internal data class RiderPresence(
         heading?.let { json.put("heading", it) }
         speed?.let { json.put("speed", it) }
         soc?.let { json.put("soc", it) }
+        boardName?.let { json.put("boardName", it) }
         return json
     }
 }

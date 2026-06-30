@@ -154,14 +154,17 @@ class VescBleModule : Module() {
     Function("stopGroupRideObserve") {
       VescForegroundService.stopGroupRideObserve(context.applicationContext)
     }
-    Function("createGroupRide") { riderId: String, riderName: String, name: String?, lat: Double, lng: Double ->
-      VescForegroundService.createGroupRide(context.applicationContext, riderId, riderName, name, lat, lng)
+    Function("createGroupRide") { riderId: String, riderName: String, riderColor: String?, name: String?, lat: Double, lng: Double ->
+      VescForegroundService.createGroupRide(context.applicationContext, riderId, riderName, riderColor, name, lat, lng)
     }
-    Function("joinGroupRide") { riderId: String, riderName: String, rideId: String ->
-      VescForegroundService.joinGroupRide(context.applicationContext, riderId, riderName, rideId)
+    Function("joinGroupRide") { riderId: String, riderName: String, riderColor: String?, rideId: String ->
+      VescForegroundService.joinGroupRide(context.applicationContext, riderId, riderName, riderColor, rideId)
     }
     Function("leaveGroupRide") {
       VescForegroundService.leaveGroupRide(context.applicationContext)
+    }
+    Function("updateGroupRideIdentity") { riderId: String, riderName: String, riderColor: String? ->
+      VescForegroundService.updateGroupRideIdentity(context.applicationContext, riderId, riderName, riderColor)
     }
     Function("setTelemetryRecordingEnabled") { enabled: Boolean -> setTelemetryRecordingEnabled(enabled) }
     Function("reloadAlertRules") {

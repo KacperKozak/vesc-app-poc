@@ -18,6 +18,9 @@ interface CanvasWidgetProps {
   height?: number
   /** Pinned bottom area, e.g. an action button. */
   footer?: ReactNode
+  /** Trailing header control, e.g. a dismiss button or status badge. Far-right of the title
+   *  row; takes the status dot's place (the dot is hidden whenever an action is present). */
+  action?: ReactNode
   /** Free-form body content, vertically centred. */
   children?: ReactNode
 }
@@ -31,6 +34,7 @@ export function CanvasWidget({
   size = 'full',
   height,
   footer,
+  action,
   children,
 }: CanvasWidgetProps) {
   const square = size === 'square'
@@ -50,7 +54,7 @@ export function CanvasWidget({
             {title}
           </Text>
         )}
-        {active ? <View style={[styles.dot, { backgroundColor: accent }]} /> : null}
+        {action ?? (active ? <View style={[styles.dot, { backgroundColor: accent }]} /> : null)}
       </View>
       <View style={styles.body}>{children}</View>
       {footer ? <View style={styles.footer}>{footer}</View> : null}

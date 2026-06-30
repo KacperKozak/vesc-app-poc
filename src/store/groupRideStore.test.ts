@@ -15,6 +15,7 @@ const locationListeners: Listener<{ latitude: number; longitude: number }>[] = [
 const createGroupRide = mock(() => {})
 const joinGroupRide = mock(() => {})
 const leaveGroupRide = mock(() => {})
+const updateGroupRideIdentity = mock(() => {})
 const startGroupRideObserve = mock(() => {})
 const stopGroupRideObserve = mock(() => {})
 const getSettings = mock(async () => ({ riderId: null, riderName: null }))
@@ -52,6 +53,7 @@ mock.module('vesc-ble', () => ({
   createGroupRide,
   joinGroupRide,
   leaveGroupRide,
+  updateGroupRideIdentity,
   startGroupRideObserve,
   stopGroupRideObserve,
   getSettings,
@@ -86,6 +88,7 @@ beforeEach(async () => {
   createGroupRide.mockClear()
   joinGroupRide.mockClear()
   leaveGroupRide.mockClear()
+  updateGroupRideIdentity.mockClear()
   startGroupRideObserve.mockClear()
   stopGroupRideObserve.mockClear()
   const { useGroupRideStore } = await import('./groupRideStore')
@@ -110,7 +113,9 @@ test('snapshot clears active ride when server no longer has it', async () => {
   useGroupRideStore.getState().startObserving()
   useGroupRideStore.setState({
     activeRideId: 'old-ride',
-    roster: [{ id: 'rider', name: 'Rider', presence: null, stale: false, lastSeen: 1 }],
+    roster: [
+      { id: 'rider', name: 'Rider', color: null, presence: null, stale: false, lastSeen: 1 },
+    ],
     rosterRows: [],
     error: 'no such ride: old-ride',
   })
@@ -146,7 +151,30 @@ test('joining another ride clears stale relay error immediately', async () => {
   expect(joinGroupRide).toHaveBeenCalledWith({
     riderId: 'rider-1',
     riderName: 'Kupa',
+    riderColor: null,
     rideId: 'new-ride',
   })
   expect(useGroupRideStore.getState().error).toBeNull()
+})
+
+test('name/color edits while observing push the new identity to peers', async () => {
+  const { useGroupRideStore } = await import('./groupRideStore')
+  const { useRiderStore } = await import('./riderStore')
+
+  useRiderStore.setState({ riderId: 'rider-1', riderName: 'Old', riderColor: null, loaded: true })
+  useGroupRideStore.getState().startObserving()
+
+  await useRiderStore.getState().setName('  New Name  ')
+  expect(updateGroupRideIdentity).toHaveBeenLastCalledWith({
+    riderId: 'rider-1',
+    riderName: 'New Name',
+    riderColor: null,
+  })
+
+  await useRiderStore.getState().setColor('#38bdf8')
+  expect(updateGroupRideIdentity).toHaveBeenLastCalledWith({
+    riderId: 'rider-1',
+    riderName: 'New Name',
+    riderColor: '#38bdf8',
+  })
 })

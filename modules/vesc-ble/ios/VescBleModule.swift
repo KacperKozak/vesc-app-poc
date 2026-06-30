@@ -98,17 +98,21 @@ public class VescBleModule: Module {
       self.sendEvent("onGroupRideConnection", ["state": "idle"])
     }
 
-    Function("createGroupRide") { (_: String, _: String, _: String?, _: Double, _: Double) in
+    Function("createGroupRide") { (_: String, _: String, _: String?, _: String?, _: Double, _: Double) in
       // no-op in iOS simulator mock
     }
 
-    Function("joinGroupRide") { (_: String, _: String, _: String) in
+    Function("joinGroupRide") { (_: String, _: String, _: String?, _: String) in
       // no-op in iOS simulator mock
     }
 
     Function("leaveGroupRide") {
       self.sendEvent("onGroupRideJoined", ["rideId": nil])
       self.sendEvent("onGroupRideRoster", ["rideId": nil, "riders": []])
+    }
+
+    Function("updateGroupRideIdentity") { (_: String, _: String, _: String?) in
+      // no-op in iOS simulator mock
     }
 
     // MARK: Telemetry recording toggle (no-op on mock)
@@ -805,6 +809,7 @@ public class VescBleModule: Module {
     "selectedBoardId": NSNull(),
     "riderId": NSNull(),
     "riderName": NSNull(),
+    "riderColor": NSNull(),
     "lastGpsLatitude": NSNull(),
     "lastGpsLongitude": NSNull(),
     "movingSpeedThresholdKmh": 3,

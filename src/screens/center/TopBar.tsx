@@ -83,7 +83,7 @@ export function TopBar({
             icon={rideActive ? BroadcastIcon : UsersThreeIcon}
             onPress={() => setSocialOpen(true)}
             accessibilityLabel="Social"
-            highlighted={nearbyBadge}
+            dot={nearbyBadge && !rideActive ? theme.palette.groupRide.color : undefined}
             accent={rideActive ? theme.palette.groupRide.color : undefined}
           />
         </View>

@@ -8,16 +8,21 @@ interface RiderState {
   riderId: string | null
   /** Rider-chosen display name, or null when unset. */
   riderName: string | null
+  /** Rider-chosen marker color (hex), or null when unset. */
+  riderColor: string | null
   loaded: boolean
   /** Load identity from native settings, generating a Rider id on first use. */
   load: () => Promise<void>
   /** Set the display name (trimmed; empty clears it back to null). */
   setName: (name: string) => Promise<void>
+  /** Set the marker color (hex); null clears it. */
+  setColor: (color: string | null) => Promise<void>
 }
 
 export const useRiderStore = create<RiderState>((set) => ({
   riderId: null,
   riderName: null,
+  riderColor: null,
   loaded: false,
 
   async load() {
@@ -28,7 +33,12 @@ export const useRiderStore = create<RiderState>((set) => ({
         riderId = generateId()
         await updateSetting('riderId', riderId)
       }
-      set({ riderId, riderName: settings.riderName ?? null, loaded: true })
+      set({
+        riderId,
+        riderName: settings.riderName ?? null,
+        riderColor: settings.riderColor ?? null,
+        loaded: true,
+      })
     } catch {
       set({ loaded: true })
     }
@@ -39,5 +49,10 @@ export const useRiderStore = create<RiderState>((set) => ({
     const value = trimmed.length ? trimmed : null
     set({ riderName: value })
     await updateSetting('riderName', value)
+  },
+
+  async setColor(color) {
+    set({ riderColor: color })
+    await updateSetting('riderColor', color)
   },
 }))
