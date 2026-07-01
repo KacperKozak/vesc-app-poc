@@ -2,12 +2,20 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   getPaddingForProfile,
+  getPitchForZoom,
   getPitchForProfileZoom,
   getProfileZoomLevel,
   MAP_CAMERA_PROFILES,
 } from './cameraProfiles'
 
 describe('map camera profiles', () => {
+  test('interpolates automatic map pitch continuously across the zoom range', () => {
+    expect(getPitchForZoom(11, true)).toBe(0)
+    expect(getPitchForZoom(13.5, true)).toBe(22.5)
+    expect(getPitchForZoom(16, true)).toBe(45)
+    expect(getPitchForZoom(13.5, false)).toBe(0)
+  })
+
   test('removes tilt at far zoom for every profile', () => {
     for (const profile of Object.keys(MAP_CAMERA_PROFILES) as Array<
       keyof typeof MAP_CAMERA_PROFILES

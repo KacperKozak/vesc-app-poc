@@ -35,6 +35,7 @@ import { isMapPointKindVisible } from '@/lib/mapPointVisibility'
 import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { getNavigationFallbackReason } from '@/lib/map/navigationDiagnostics'
 import { getGpsPuckBearing } from '@/lib/map/gpsPuckHeading'
+import { normalizeHeading, smoothHeadingStep } from '@/lib/map/headingSmoothing'
 import type { HistoryGpsSample, HistoryMarker, TelemetrySample } from '@/store/historyStore'
 import { useGroupRideStore } from '@/store/groupRideStore'
 import { useNavigationDiagnosticsStore } from '@/store/navigationDiagnosticsStore'
@@ -302,7 +303,58 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     : phoneHeadingMode
       ? (phoneCameraHeadingDeg ?? cameraHeading)
       : 0
-  const followHeadingDeg = targetFollowHeadingDeg
+  const [smoothedFollowHeadingDeg, setSmoothedFollowHeadingDeg] = useState(targetFollowHeadingDeg)
+  const smoothingFrameRef = useRef<number | null>(null)
+  const smoothingTimestampRef = useRef<number | null>(null)
+  const smoothingHeadingRef = useRef(targetFollowHeadingDeg)
+  const previousMapNavigationModeRef = useRef(mapNavigationMode)
+  const followHeadingDeg = headingFollowMode ? smoothedFollowHeadingDeg : targetFollowHeadingDeg
+
+  useEffect(() => {
+    const mapNavigationModeChanged = previousMapNavigationModeRef.current !== mapNavigationMode
+    previousMapNavigationModeRef.current = mapNavigationMode
+
+    if (mapNavigationModeChanged) {
+      if (smoothingFrameRef.current != null) cancelAnimationFrame(smoothingFrameRef.current)
+      smoothingFrameRef.current = null
+      smoothingTimestampRef.current = null
+      smoothingHeadingRef.current = targetFollowHeadingDeg
+      setSmoothedFollowHeadingDeg(targetFollowHeadingDeg)
+      return
+    }
+
+    if (!headingFollowMode || historyActive) {
+      smoothingHeadingRef.current = targetFollowHeadingDeg
+      const frame = requestAnimationFrame(() => setSmoothedFollowHeadingDeg(targetFollowHeadingDeg))
+      return () => cancelAnimationFrame(frame)
+    }
+
+    const tick = (timestamp: number) => {
+      const previousTimestamp = smoothingTimestampRef.current ?? timestamp
+      smoothingTimestampRef.current = timestamp
+      const nextHeading = smoothHeadingStep(
+        smoothingHeadingRef.current,
+        targetFollowHeadingDeg,
+        timestamp - previousTimestamp,
+      )
+      smoothingHeadingRef.current = nextHeading
+      setSmoothedFollowHeadingDeg(nextHeading)
+      if (nextHeading === normalizeHeading(targetFollowHeadingDeg)) {
+        smoothingFrameRef.current = null
+        smoothingTimestampRef.current = null
+        return
+      }
+      smoothingFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    smoothingTimestampRef.current = null
+    smoothingFrameRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (smoothingFrameRef.current != null) cancelAnimationFrame(smoothingFrameRef.current)
+      smoothingFrameRef.current = null
+      smoothingTimestampRef.current = null
+    }
+  }, [headingFollowMode, historyActive, mapNavigationMode, targetFollowHeadingDeg])
 
   const rideRoute = useMemo(
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
@@ -730,6 +782,12 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       ) {
         setCameraReady(true)
       }
+      if (mode === 'map' && !(followGps && headingFollowMode)) {
+        const pitch = getPitchForZoom(state.properties.zoom, perspectiveEnabled)
+        if (Math.abs(state.properties.pitch - pitch) > 0.5) {
+          cameraRef.current?.setCameraDirect({ pitch })
+        }
+      }
       if (state.gestures.isGestureActive) {
         onMapInteraction()
         const gestureCenterDistanceM = cameraFix
@@ -755,7 +813,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
             perspectiveEnabled,
           })
           if (Math.abs(state.properties.pitch - followCamera.pitch) > 0.5) {
-            cameraRef.current?.setCamera({ pitch: followCamera.pitch, animationDuration: 0 })
+            cameraRef.current?.setCameraDirect({ pitch: followCamera.pitch })
           }
         } else {
           setFollowGps(false)
@@ -780,6 +838,7 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
       headingFollowMode,
       historyActive,
       mapLayout,
+      mode,
       onHeadingChange,
       onMapInteraction,
       perspectiveEnabled,
