@@ -12,7 +12,7 @@ import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BoardSelectorSheet } from '@/components/domain/board/BoardSelectorSheet'
-import { CornerSheet } from '@/components/ui/overlays/CornerSheet'
+import { CornerSheet } from '@/components/ui/overlays/AnchoredSheet'
 import { IconButton } from '@/components/ui/base/IconButton'
 import { WeatherStat } from '@/components/ui/weather/WeatherStat'
 import { SocialSheet } from '@/screens/social/SocialSheet'

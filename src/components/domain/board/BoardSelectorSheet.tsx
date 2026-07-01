@@ -1,11 +1,11 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { CheckCircleIcon, LightningIcon, PencilSimpleIcon, PlusIcon } from 'phosphor-react-native'
 import { router } from 'expo-router'
 import { routes } from '@/navigation/routes'
 
 import type { Board } from '@/store/boardStore'
 import { interaction, theme } from '@/constants/theme'
-import { Dropdown } from '@/components/ui/forms/Dropdown'
+import { FloatingSheet } from '@/components/ui/overlays/AnchoredSheet'
 
 interface BoardSelectorSheetProps {
   visible: boolean
@@ -27,74 +27,77 @@ export function BoardSelectorSheet({
   onAddBoard,
 }: BoardSelectorSheetProps) {
   return (
-    <Dropdown
+    <FloatingSheet
       visible={visible}
       triggerRef={triggerRef}
       onClose={onClose}
       matchTriggerWidth={false}
       minWidth={280}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>Your Boards</Text>
+      <Text style={styles.sectionTitle}>Your Boards</Text>
 
-        {boards.map((board) => {
-          const isActive = board.id === activeBoardId
-          return (
+      {boards.map((board) => {
+        const isActive = board.id === activeBoardId
+        return (
+          <Pressable
+            key={board.id}
+            style={({ pressed }) => [
+              styles.boardRow,
+              isActive && styles.boardRowActive,
+              pressed && styles.boardRowPressed,
+            ]}
+            onPress={() => onSelectBoard(board.id)}
+          >
+            <View style={[styles.boardIcon, isActive && styles.boardIconActive]}>
+              <LightningIcon
+                size={16}
+                color={isActive ? theme.palette.sky.color : theme.palette.slate.textMuted}
+                weight={isActive ? 'fill' : 'regular'}
+              />
+            </View>
+            <View style={styles.boardInfo}>
+              <Text style={[styles.boardName, isActive && styles.boardNameActive]}>
+                {board.name}
+              </Text>
+            </View>
+            {isActive && (
+              <CheckCircleIcon size={20} color={theme.palette.sky.color} weight="fill" />
+            )}
             <Pressable
-              key={board.id}
-              style={({ pressed }) => [
-                styles.boardRow,
-                isActive && styles.boardRowActive,
-                pressed && styles.boardRowPressed,
-              ]}
-              onPress={() => onSelectBoard(board.id)}
+              onPress={(e) => {
+                e.stopPropagation()
+                onClose()
+                router.push({ pathname: routes.editBoard, params: { boardId: board.id } })
+              }}
+              hitSlop={8}
             >
-              <View style={[styles.boardIcon, isActive && styles.boardIconActive]}>
-                <LightningIcon
-                  size={16}
-                  color={isActive ? theme.palette.sky.color : theme.palette.slate.textMuted}
-                  weight={isActive ? 'fill' : 'regular'}
-                />
-              </View>
-              <View style={styles.boardInfo}>
-                <Text style={[styles.boardName, isActive && styles.boardNameActive]}>
-                  {board.name}
-                </Text>
-              </View>
-              {isActive && (
-                <CheckCircleIcon size={20} color={theme.palette.sky.color} weight="fill" />
-              )}
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation()
-                  onClose()
-                  router.push({ pathname: routes.editBoard, params: { boardId: board.id } })
-                }}
-                hitSlop={8}
-              >
-                <PencilSimpleIcon size={15} color={theme.palette.slate.textDim} weight="bold" />
-              </Pressable>
+              <PencilSimpleIcon size={15} color={theme.palette.slate.textDim} weight="bold" />
             </Pressable>
-          )
-        })}
+          </Pressable>
+        )
+      })}
 
-        <Pressable
-          style={({ pressed }) => [styles.addRow, pressed && styles.boardRowPressed]}
-          onPress={onAddBoard}
-          testID="board-selector-add-board"
-          accessibilityLabel="Add new board"
-        >
-          <View style={styles.addIcon}>
-            <PlusIcon size={16} color={theme.palette.sky.color} weight="bold" />
-          </View>
-          <Text style={styles.addText}>Add new board</Text>
-        </Pressable>
-      </ScrollView>
-    </Dropdown>
+      <Pressable
+        style={({ pressed }) => [styles.addRow, pressed && styles.boardRowPressed]}
+        onPress={onAddBoard}
+        testID="board-selector-add-board"
+        accessibilityLabel="Add new board"
+      >
+        <View style={styles.addIcon}>
+          <PlusIcon size={16} color={theme.palette.sky.color} weight="bold" />
+        </View>
+        <Text style={styles.addText}>Add new board</Text>
+      </Pressable>
+    </FloatingSheet>
   )
 }
 
 const styles = StyleSheet.create({
+  content: {
+    padding: 0,
+    gap: 0,
+  },
   sectionTitle: {
     color: theme.palette.slate.textMuted,
     fontSize: 11,
