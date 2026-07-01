@@ -34,6 +34,7 @@ import type { MediaHistoryAsset } from '@/lib/history/mediaHistory'
 import { isMapPointKindVisible } from '@/lib/mapPointVisibility'
 import type { HistoryMetricKey } from '@/lib/history/metricColorScale'
 import { getNavigationFallbackReason } from '@/lib/map/navigationDiagnostics'
+import { getGpsPuckBearing } from '@/lib/map/gpsPuckHeading'
 import type { HistoryGpsSample, HistoryMarker, TelemetrySample } from '@/store/historyStore'
 import { useGroupRideStore } from '@/store/groupRideStore'
 import { useNavigationDiagnosticsStore } from '@/store/navigationDiagnosticsStore'
@@ -95,26 +96,9 @@ export interface CenterMapHandle {
   getViewfinderCoordinate: () => Promise<{ latitude: number; longitude: number }>
 }
 
-const HEADING_SMOOTHING_TAU_MS = 180
-const HEADING_SNAP_DEG = 0.08
 interface MapLayout {
   width: number
   height: number
-}
-
-function normalizeHeading(degrees: number): number {
-  return ((degrees % 360) + 360) % 360
-}
-
-function headingDeltaDeg(from: number, to: number): number {
-  return ((((to - from) % 360) + 540) % 360) - 180
-}
-
-function smoothHeadingStep(current: number, target: number, elapsedMs: number): number {
-  const delta = headingDeltaDeg(current, target)
-  if (Math.abs(delta) <= HEADING_SNAP_DEG) return normalizeHeading(target)
-  const alpha = 1 - Math.exp(-elapsedMs / HEADING_SMOOTHING_TAU_MS)
-  return normalizeHeading(current + delta * alpha)
 }
 
 function usableCoordinate(location: { longitude: number; latitude: number } | null | undefined) {
@@ -309,68 +293,16 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
   const retainedGpsBearing = gpsPresentation.nextReliableBearing
   const gpsHeadingMode = mapNavigationMode === 'gpsHeading'
   const phoneHeadingMode = mapNavigationMode === 'phoneHeading'
-  const phoneHeading = usePhoneHeading(
-    (phoneHeadingMode || approximateGpsPuckActive) && !historyActive,
-  )
+  const phoneHeading = usePhoneHeading(!historyActive && !gpsHeadingMode)
   const headingFollowMode = gpsHeadingMode || phoneHeadingMode
   const phoneHeadingDeg = phoneHeading.headingDeg
+  const phoneCameraHeadingDeg = phoneHeadingDeg
   const targetFollowHeadingDeg = gpsHeadingMode
     ? (directionBearingDeg ?? 0)
     : phoneHeadingMode
-      ? (phoneHeadingDeg ?? cameraHeading)
+      ? (phoneCameraHeadingDeg ?? cameraHeading)
       : 0
-  const [smoothedFollowHeadingDeg, setSmoothedFollowHeadingDeg] = useState(targetFollowHeadingDeg)
-  const smoothingFrameRef = useRef<number | null>(null)
-  const smoothingTimestampRef = useRef<number | null>(null)
-  const smoothingHeadingRef = useRef(targetFollowHeadingDeg)
-  const previousMapNavigationModeRef = useRef(mapNavigationMode)
-  const followHeadingDeg = headingFollowMode ? smoothedFollowHeadingDeg : targetFollowHeadingDeg
-
-  useEffect(() => {
-    const mapNavigationModeChanged = previousMapNavigationModeRef.current !== mapNavigationMode
-    previousMapNavigationModeRef.current = mapNavigationMode
-
-    if (mapNavigationModeChanged) {
-      if (smoothingFrameRef.current != null) cancelAnimationFrame(smoothingFrameRef.current)
-      smoothingFrameRef.current = null
-      smoothingTimestampRef.current = null
-      smoothingHeadingRef.current = targetFollowHeadingDeg
-      setSmoothedFollowHeadingDeg(targetFollowHeadingDeg)
-      return
-    }
-
-    if (!headingFollowMode || historyActive) {
-      smoothingHeadingRef.current = targetFollowHeadingDeg
-      const frame = requestAnimationFrame(() => setSmoothedFollowHeadingDeg(targetFollowHeadingDeg))
-      return () => cancelAnimationFrame(frame)
-    }
-
-    const tick = (timestamp: number) => {
-      const previousTimestamp = smoothingTimestampRef.current ?? timestamp
-      smoothingTimestampRef.current = timestamp
-      const nextHeading = smoothHeadingStep(
-        smoothingHeadingRef.current,
-        targetFollowHeadingDeg,
-        timestamp - previousTimestamp,
-      )
-      smoothingHeadingRef.current = nextHeading
-      setSmoothedFollowHeadingDeg(nextHeading)
-      if (nextHeading === normalizeHeading(targetFollowHeadingDeg)) {
-        smoothingFrameRef.current = null
-        smoothingTimestampRef.current = null
-        return
-      }
-      smoothingFrameRef.current = requestAnimationFrame(tick)
-    }
-
-    smoothingTimestampRef.current = null
-    smoothingFrameRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (smoothingFrameRef.current != null) cancelAnimationFrame(smoothingFrameRef.current)
-      smoothingFrameRef.current = null
-      smoothingTimestampRef.current = null
-    }
-  }, [headingFollowMode, historyActive, mapNavigationMode, targetFollowHeadingDeg])
+  const followHeadingDeg = targetFollowHeadingDeg
 
   const rideRoute = useMemo(
     () => rideGpsSamples.map((point) => [point.longitude, point.latitude] as [number, number]),
@@ -426,16 +358,14 @@ export const CenterMap = forwardRef<CenterMapHandle, CenterMapProps>(function Ce
     onHeadingChange,
     onPerspectiveChange,
   })
-  const gpsPinBearingDeg =
-    (phoneHeadingMode || approximateGpsPuckActive) && phoneHeadingDeg != null
-      ? phoneHeadingDeg - cameraHeading
-      : directionBearingDeg == null
-        ? null
-        : directionBearingDeg - cameraHeading
-  const gpsPuckBearingDeg =
-    (phoneHeadingMode || approximateGpsPuckActive) && phoneHeadingDeg != null
-      ? phoneHeadingDeg
-      : directionBearingDeg
+  const targetGpsPuckBearingDeg = getGpsPuckBearing({
+    navigationMode: mapNavigationMode,
+    approximateFix: approximateGpsPuckActive,
+    phoneHeadingDeg,
+    gpsBearingDeg: directionBearingDeg,
+  })
+  const gpsPuckBearingDeg = targetGpsPuckBearingDeg
+  const gpsPinBearingDeg = gpsPuckBearingDeg == null ? null : gpsPuckBearingDeg - cameraHeading
   const updateNavigationDiagnostics = useNavigationDiagnosticsStore((s) => s.update)
   const riderFocusRequest = useGroupRideStore((s) => s.focusRequest)
   const riderFocusRows = useGroupRideStore((s) => s.rosterRows)
