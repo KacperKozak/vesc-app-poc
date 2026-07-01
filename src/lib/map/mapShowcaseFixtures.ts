@@ -126,11 +126,13 @@ const MARKER_TYPES: HistoryMarker['type'][] = [
   'error',
   'gap',
   'app_stop',
+  'auto_pause',
 ]
 
 export const FIXTURE_RIDE_MARKERS: HistoryMarker[] = MARKER_TYPES.map((type, index) => ({
   id: index + 1,
-  occurredAtMs: FIXTURE_RIDE_GPS_SAMPLES[2 + index * 2].capturedAtMs,
+  occurredAtMs:
+    FIXTURE_RIDE_GPS_SAMPLES[(2 + index * 2) % FIXTURE_RIDE_GPS_SAMPLES.length].capturedAtMs,
   type,
   deviceId: 'fixture-board',
   deviceName: 'Fixture Board',
